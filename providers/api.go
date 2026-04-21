@@ -34,7 +34,6 @@ func APIOptions() []APIOptionDef {
 		{GoFunc: "WithCaching", SubOptions: []APISubOptionDef{
 			{GoFunc: "CacheTTL", GoParamType: "time.Duration"},
 		}},
-		{GoFunc: "WithMiddleware", SubOptions: []APISubOptionDef{}},
 	}
 }
 
