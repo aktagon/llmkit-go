@@ -1,0 +1,276 @@
+package llmkit
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/aktagon/llmkit-go/providers"
+)
+
+// newMockOpenAI returns a test server that returns a fixed OpenAI-shaped response.
+func newMockOpenAI(inputTokens, outputTokens int) *httptest.Server {
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"choices": []map[string]any{
+				{"message": map[string]any{"content": "Hello!"}},
+			},
+			"usage": map[string]any{
+				"prompt_tokens":     inputTokens,
+				"completion_tokens": outputTokens,
+			},
+		})
+	}))
+}
+
+func TestMiddlewarePrePostFire(t *testing.T) {
+	server := newMockOpenAI(17, 23)
+	defer server.Close()
+
+	var calls []providers.MiddlewarePhase
+	var seenUsage providers.Usage
+	mw := func(ctx context.Context, e providers.Event) error {
+		calls = append(calls, e.Phase)
+		if e.Phase == providers.PhasePost {
+			seenUsage = e.Usage
+			if e.Duration <= 0 {
+				t.Error("post-phase Duration must be > 0")
+			}
+			if e.Provider != providers.OpenAI {
+				t.Errorf("expected provider %q, got %q", providers.OpenAI, e.Provider)
+			}
+			if e.Op != providers.OpLLMRequest {
+				t.Errorf("expected Op=llm_request, got %v", e.Op)
+			}
+		}
+		return nil
+	}
+
+	_, err := Prompt(context.Background(),
+		Provider{Name: providers.OpenAI, APIKey: "test-key", BaseURL: server.URL},
+		Request{User: "Hi"},
+		WithMiddleware(mw),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(calls) != 2 {
+		t.Fatalf("expected 2 middleware calls (pre, post), got %d", len(calls))
+	}
+	if calls[0] != providers.PhasePre || calls[1] != providers.PhasePost {
+		t.Errorf("expected [pre, post], got %v", calls)
+	}
+	if seenUsage.Input != 17 || seenUsage.Output != 23 {
+		t.Errorf("expected Usage{17, 23}, got %+v", seenUsage)
+	}
+}
+
+func TestMiddlewarePreVetoAborts(t *testing.T) {
+	var httpHit bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		httpHit = true
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"choices": []map[string]any{{"message": map[string]any{"content": "nope"}}},
+			"usage":   map[string]any{"prompt_tokens": 1, "completion_tokens": 1},
+		})
+	}))
+	defer server.Close()
+
+	vetoCause := errors.New("budget exceeded")
+	mw := func(ctx context.Context, e providers.Event) error {
+		if e.Phase == providers.PhasePre {
+			return vetoCause
+		}
+		return nil
+	}
+
+	_, err := Prompt(context.Background(),
+		Provider{Name: providers.OpenAI, APIKey: "test-key", BaseURL: server.URL},
+		Request{User: "Hi"},
+		WithMiddleware(mw),
+	)
+	if err == nil {
+		t.Fatal("expected veto error, got nil")
+	}
+
+	var veto *MiddlewareVetoError
+	if !errors.As(err, &veto) {
+		t.Fatalf("expected MiddlewareVetoError, got %T: %v", err, err)
+	}
+	if !errors.Is(veto.Cause, vetoCause) {
+		t.Errorf("expected cause %v, got %v", vetoCause, veto.Cause)
+	}
+	if httpHit {
+		t.Error("HTTP server was hit despite pre-phase veto")
+	}
+}
+
+func TestMiddlewarePostErrorIsSwallowed(t *testing.T) {
+	server := newMockOpenAI(5, 5)
+	defer server.Close()
+
+	mw := func(ctx context.Context, e providers.Event) error {
+		if e.Phase == providers.PhasePost {
+			return errors.New("post-phase explosion")
+		}
+		return nil
+	}
+
+	resp, err := Prompt(context.Background(),
+		Provider{Name: providers.OpenAI, APIKey: "test-key", BaseURL: server.URL},
+		Request{User: "Hi"},
+		WithMiddleware(mw),
+	)
+	if err != nil {
+		t.Fatalf("post-phase error must not propagate: %v", err)
+	}
+	if resp.Text == "" {
+		t.Error("response text should still be returned")
+	}
+}
+
+func TestMiddlewareFiresInRegistrationOrder(t *testing.T) {
+	server := newMockOpenAI(1, 1)
+	defer server.Close()
+
+	var order []string
+	first := func(ctx context.Context, e providers.Event) error {
+		if e.Phase == providers.PhasePre {
+			order = append(order, "first")
+		}
+		return nil
+	}
+	second := func(ctx context.Context, e providers.Event) error {
+		if e.Phase == providers.PhasePre {
+			order = append(order, "second")
+		}
+		return nil
+	}
+
+	_, err := Prompt(context.Background(),
+		Provider{Name: providers.OpenAI, APIKey: "test-key", BaseURL: server.URL},
+		Request{User: "Hi"},
+		WithMiddleware(first, second),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(order) != 2 || order[0] != "first" || order[1] != "second" {
+		t.Errorf("expected [first, second], got %v", order)
+	}
+}
+
+func TestMiddlewareFirstVetoStopsChain(t *testing.T) {
+	server := newMockOpenAI(1, 1)
+	defer server.Close()
+
+	var secondCalled bool
+	first := func(ctx context.Context, e providers.Event) error {
+		if e.Phase == providers.PhasePre {
+			return errors.New("first vetoes")
+		}
+		return nil
+	}
+	second := func(ctx context.Context, e providers.Event) error {
+		if e.Phase == providers.PhasePre {
+			secondCalled = true
+		}
+		return nil
+	}
+
+	_, err := Prompt(context.Background(),
+		Provider{Name: providers.OpenAI, APIKey: "test-key", BaseURL: server.URL},
+		Request{User: "Hi"},
+		WithMiddleware(first, second),
+	)
+	if err == nil {
+		t.Fatal("expected veto error")
+	}
+	if secondCalled {
+		t.Error("second middleware ran despite first's veto")
+	}
+}
+
+func TestMiddlewareCarriesModelAndProvider(t *testing.T) {
+	server := newMockOpenAI(1, 1)
+	defer server.Close()
+
+	var seenModel, seenProvider string
+	mw := func(ctx context.Context, e providers.Event) error {
+		if e.Phase == providers.PhasePre {
+			seenModel = e.Model
+			seenProvider = e.Provider
+		}
+		return nil
+	}
+
+	_, err := Prompt(context.Background(),
+		Provider{Name: providers.OpenAI, APIKey: "test-key", BaseURL: server.URL, Model: "gpt-4o-mini"},
+		Request{User: "Hi"},
+		WithMiddleware(mw),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if seenProvider != providers.OpenAI {
+		t.Errorf("expected provider %q, got %q", providers.OpenAI, seenProvider)
+	}
+	if seenModel != "gpt-4o-mini" {
+		t.Errorf("expected model gpt-4o-mini, got %q", seenModel)
+	}
+}
+
+func TestMiddlewareStreamBracketsEntireStream(t *testing.T) {
+	// Minimal SSE stream: two content deltas then done signal.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		flusher := w.(http.Flusher)
+		writeSSE := func(data string) {
+			_, _ = w.Write([]byte("data: " + data + "\n\n"))
+			flusher.Flush()
+		}
+		writeSSE(`{"choices":[{"delta":{"content":"Hel"}}]}`)
+		writeSSE(`{"choices":[{"delta":{"content":"lo"}}],"usage":{"prompt_tokens":3,"completion_tokens":1}}`)
+		writeSSE("[DONE]")
+	}))
+	defer server.Close()
+
+	var preCount, postCount int
+	var postUsage providers.Usage
+	mw := func(ctx context.Context, e providers.Event) error {
+		switch e.Phase {
+		case providers.PhasePre:
+			preCount++
+		case providers.PhasePost:
+			postCount++
+			postUsage = e.Usage
+		}
+		return nil
+	}
+
+	chunks := []string{}
+	_, err := PromptStream(context.Background(),
+		Provider{Name: providers.OpenAI, APIKey: "test-key", BaseURL: server.URL},
+		Request{User: "Hi"},
+		func(chunk string) { chunks = append(chunks, chunk) },
+		WithMiddleware(mw),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if preCount != 1 || postCount != 1 {
+		t.Errorf("expected 1 pre + 1 post, got pre=%d post=%d", preCount, postCount)
+	}
+	if postUsage.Output != 1 {
+		t.Errorf("expected post-phase Usage.Output=1, got %d", postUsage.Output)
+	}
+	if len(chunks) == 0 {
+		t.Error("stream callback never fired")
+	}
+}
