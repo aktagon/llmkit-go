@@ -50,6 +50,25 @@ func SubmitBatch(ctx context.Context, p Provider, reqs []Request, opts ...Option
 		return BatchHandle{}, &ValidationError{Field: "provider", Message: "async batching not supported: " + p.Name}
 	}
 
+	baseEvent := providers.Event{
+		Op:       providers.OpBatchSubmit,
+		Provider: p.Name,
+		Model:    resolveModel(p, cfg),
+	}
+	start := time.Now()
+	if err := firePre(ctx, o.middleware, baseEvent); err != nil {
+		return BatchHandle{}, err
+	}
+
+	// postWith reports the submit outcome via middleware and returns the same err.
+	postWith := func(err error) error {
+		postEv := baseEvent
+		postEv.Err = err
+		postEv.Duration = time.Since(start)
+		firePost(ctx, o.middleware, postEv)
+		return err
+	}
+
 	// Build URL and headers
 	base := p.BaseURL
 	if base == "" {
@@ -64,7 +83,7 @@ func SubmitBatch(ctx context.Context, p Provider, reqs []Request, opts ...Option
 		jsonl := buildBatchJSONL(reqs, o, p, cfg, bc)
 		fileID, err := uploadBatchFile(ctx, o.httpClient, base, jsonl, bc, headers)
 		if err != nil {
-			return BatchHandle{}, err
+			return BatchHandle{}, postWith(err)
 		}
 		body := map[string]any{
 			bc.InputField:       fileID,
@@ -73,35 +92,36 @@ func SubmitBatch(ctx context.Context, p Provider, reqs []Request, opts ...Option
 		}
 		jsonBody, err = json.Marshal(body)
 		if err != nil {
-			return BatchHandle{}, fmt.Errorf("marshal batch request: %w", err)
+			return BatchHandle{}, postWith(fmt.Errorf("marshal batch request: %w", err))
 		}
 	default:
 		body, err := buildBatchBody(reqs, o, p, cfg, bc)
 		if err != nil {
-			return BatchHandle{}, err
+			return BatchHandle{}, postWith(err)
 		}
 		jsonBody, err = json.Marshal(body)
 		if err != nil {
-			return BatchHandle{}, fmt.Errorf("marshal batch request: %w", err)
+			return BatchHandle{}, postWith(fmt.Errorf("marshal batch request: %w", err))
 		}
 	}
 
 	createURL := base + bc.Lifecycle.CreateEndpoint
 	respBody, err := doPost(ctx, o.httpClient, createURL, jsonBody, headers)
 	if err != nil {
-		return BatchHandle{}, fmt.Errorf("batch create: %w", err)
+		return BatchHandle{}, postWith(fmt.Errorf("batch create: %w", err))
 	}
 
 	var raw map[string]any
 	if err := json.Unmarshal(respBody, &raw); err != nil {
-		return BatchHandle{}, fmt.Errorf("unmarshal batch create response: %w", err)
+		return BatchHandle{}, postWith(fmt.Errorf("unmarshal batch create response: %w", err))
 	}
 
 	batchID := extractPath(raw, bc.Lifecycle.ResponseIdPath)
 	if batchID == "" {
-		return BatchHandle{}, fmt.Errorf("batch create: empty batch ID")
+		return BatchHandle{}, postWith(fmt.Errorf("batch create: empty batch ID"))
 	}
 
+	postWith(nil)
 	return BatchHandle{ID: batchID, Provider: p}, nil
 }
 
