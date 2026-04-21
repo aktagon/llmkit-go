@@ -150,6 +150,55 @@ llmkit.WithReasoningEffort("high")
 | thinking_budget   | x         |        | x      |      |
 | reasoning_effort  |           | x      | x      |      |
 
+## Middleware
+
+Register pre/post hooks around LLM requests, tool calls, cache creation,
+uploads, and batch submits. Pre-phase middleware can veto an operation
+by returning a non-nil error; post-phase runs for observation only.
+
+```go
+import (
+    "context"
+    "fmt"
+
+    "github.com/aktagon/llmkit-go"
+    "github.com/aktagon/llmkit-go/providers"
+)
+
+// Observation: log token usage after every LLM request.
+func logUsage(ctx context.Context, e providers.Event) error {
+    if e.Op == providers.OpLLMRequest && e.Phase == providers.PhasePost {
+        fmt.Printf("%s/%s: %d in, %d out, took %s\n",
+            e.Provider, e.Model,
+            e.Usage.Input, e.Usage.Output, e.Duration)
+    }
+    return nil
+}
+
+// Veto: abort if a daily budget is exceeded (pre-phase).
+func budgetGate(limit float64, spent *float64) providers.MiddlewareFn {
+    return func(ctx context.Context, e providers.Event) error {
+        if e.Op == providers.OpLLMRequest && e.Phase == providers.PhasePre && *spent >= limit {
+            return fmt.Errorf("daily budget $%.2f exceeded", limit)
+        }
+        return nil
+    }
+}
+
+llmkit.Prompt(ctx, p, req,
+    llmkit.WithMiddleware(budgetGate(5.00, &spent), logUsage),
+)
+```
+
+See `examples/middleware/` for a spend-cap implementation with a price
+table and mutex-guarded accumulation. Middlewares fire in registration
+order; the first pre-phase non-nil error aborts.
+
+Streaming uses the same middleware shape: one pre-phase before the
+request, one post-phase after the stream closes. `Event.Usage` reflects
+the accumulated usage at stream close. Per-chunk observation stays on
+your `StreamCallback`.
+
 ## CLI
 
 ```bash

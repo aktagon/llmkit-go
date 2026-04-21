@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/aktagon/llmkit-go/providers"
 )
@@ -34,17 +35,35 @@ func Prompt(ctx context.Context, p Provider, req Request, opts ...Option) (Respo
 		return Response{}, &ValidationError{Field: "provider", Message: "unknown: " + p.Name}
 	}
 
+	baseEvent := providers.Event{
+		Op:       providers.OpLLMRequest,
+		Provider: p.Name,
+		Model:    resolveModel(p, cfg),
+	}
+	start := time.Now()
+	if err := firePre(ctx, o.middleware, baseEvent); err != nil {
+		return Response{}, err
+	}
+
 	body, headers := buildRequest(p, req, o, cfg)
 
 	// Apply caching mutations if enabled
 	if o.caching {
 		if err := applyCaching(ctx, body, p, o, cfg); err != nil {
+			postEv := baseEvent
+			postEv.Err = err
+			postEv.Duration = time.Since(start)
+			firePost(ctx, o.middleware, postEv)
 			return Response{}, err
 		}
 	}
 
 	jsonBody, err := json.Marshal(body)
 	if err != nil {
+		postEv := baseEvent
+		postEv.Err = err
+		postEv.Duration = time.Since(start)
+		firePost(ctx, o.middleware, postEv)
 		return Response{}, fmt.Errorf("marshal request: %w", err)
 	}
 
@@ -60,17 +79,29 @@ func Prompt(ctx context.Context, p Provider, req Request, opts ...Option) (Respo
 		respBody, err = doPost(ctx, o.httpClient, url, jsonBody, headers)
 	}
 	if err != nil {
+		postEv := baseEvent
+		postEv.Err = err
+		postEv.Duration = time.Since(start)
+		firePost(ctx, o.middleware, postEv)
 		if respBody != nil {
 			return Response{}, parseError(p.Name, err.(*APIError).StatusCode, respBody, nil)
 		}
 		return Response{}, err
 	}
 
-	return parseResponse(p.Name, respBody)
+	resp, parseErr := parseResponse(p.Name, respBody)
+	postEv := baseEvent
+	postEv.Usage = resp.Tokens
+	postEv.Err = parseErr
+	postEv.Duration = time.Since(start)
+	firePost(ctx, o.middleware, postEv)
+	return resp, parseErr
 }
 
 // PromptStream sends a streaming request, calling back with each text chunk.
 // Returns the final response with accumulated text and usage.
+// Middleware fires exactly once pre-phase and once post-phase, bracketing the
+// whole stream. Usage in post-phase is the accumulated total at stream close.
 func PromptStream(ctx context.Context, p Provider, req Request, callback StreamCallback, opts ...Option) (Response, error) {
 	o := resolveOptions(opts)
 
@@ -94,11 +125,25 @@ func PromptStream(ctx context.Context, p Provider, req Request, callback StreamC
 		return Response{}, &ValidationError{Field: "provider", Message: "streaming not supported: " + p.Name}
 	}
 
+	baseEvent := providers.Event{
+		Op:       providers.OpLLMRequest,
+		Provider: p.Name,
+		Model:    resolveModel(p, cfg),
+	}
+	start := time.Now()
+	if err := firePre(ctx, o.middleware, baseEvent); err != nil {
+		return Response{}, err
+	}
+
 	body, headers := buildRequest(p, req, o, cfg)
 
 	// Apply caching mutations if enabled
 	if o.caching {
 		if err := applyCaching(ctx, body, p, o, cfg); err != nil {
+			postEv := baseEvent
+			postEv.Err = err
+			postEv.Duration = time.Since(start)
+			firePost(ctx, o.middleware, postEv)
 			return Response{}, err
 		}
 	}
@@ -110,6 +155,10 @@ func PromptStream(ctx context.Context, p Provider, req Request, callback StreamC
 
 	jsonBody, err := json.Marshal(body)
 	if err != nil {
+		postEv := baseEvent
+		postEv.Err = err
+		postEv.Duration = time.Since(start)
+		firePost(ctx, o.middleware, postEv)
 		return Response{}, fmt.Errorf("marshal request: %w", err)
 	}
 
@@ -126,6 +175,11 @@ func PromptStream(ctx context.Context, p Provider, req Request, callback StreamC
 	}
 
 	usage, err := doStreamPost(ctx, o.httpClient, url, jsonBody, headers, streamCfg, wrappedCallback)
+	postEv := baseEvent
+	postEv.Usage = usage
+	postEv.Err = err
+	postEv.Duration = time.Since(start)
+	firePost(ctx, o.middleware, postEv)
 	if err != nil {
 		return Response{}, err
 	}
@@ -179,12 +233,27 @@ func UploadFile(ctx context.Context, p Provider, path string, opts ...Option) (F
 		return File{}, &ValidationError{Field: "provider", Message: "file upload not supported: " + p.Name}
 	}
 
-	data, err := os.ReadFile(path)
-	if err != nil {
+	o := resolveOptions(opts)
+
+	baseEvent := providers.Event{
+		Op:       providers.OpUpload,
+		Provider: p.Name,
+		Model:    resolveModel(p, cfg),
+	}
+	start := time.Now()
+	if err := firePre(ctx, o.middleware, baseEvent); err != nil {
 		return File{}, err
 	}
 
-	o := resolveOptions(opts)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		postEv := baseEvent
+		postEv.Err = err
+		postEv.Duration = time.Since(start)
+		firePost(ctx, o.middleware, postEv)
+		return File{}, err
+	}
+
 	name := filepath.Base(path)
 
 	// Build upload URL
@@ -231,15 +300,28 @@ func UploadFile(ctx context.Context, p Provider, path string, opts ...Option) (F
 
 	respBody, statusCode, err := doMultipartPost(ctx, o.httpClient, uploadURL, fuDef.FieldName, name, data, extraFields, headers)
 	if err != nil {
+		postEv := baseEvent
+		postEv.Err = err
+		postEv.Duration = time.Since(start)
+		firePost(ctx, o.middleware, postEv)
 		return File{}, err
 	}
 	if statusCode >= 400 {
-		return File{}, parseError(p.Name, statusCode, respBody, nil)
+		apiErr := parseError(p.Name, statusCode, respBody, nil)
+		postEv := baseEvent
+		postEv.Err = apiErr
+		postEv.Duration = time.Since(start)
+		firePost(ctx, o.middleware, postEv)
+		return File{}, apiErr
 	}
 
 	// Parse response using configured paths
 	var raw map[string]any
 	if err := json.Unmarshal(respBody, &raw); err != nil {
+		postEv := baseEvent
+		postEv.Err = err
+		postEv.Duration = time.Since(start)
+		firePost(ctx, o.middleware, postEv)
 		return File{}, fmt.Errorf("unmarshal upload response: %w", err)
 	}
 
@@ -259,6 +341,9 @@ func UploadFile(ctx context.Context, p Provider, path string, opts ...Option) (F
 		file.MimeType = extractPath(raw, fuDef.ResponseMimePath)
 	}
 
+	postEv := baseEvent
+	postEv.Duration = time.Since(start)
+	firePost(ctx, o.middleware, postEv)
 	return file, nil
 }
 

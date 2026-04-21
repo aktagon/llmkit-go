@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/aktagon/llmkit-go/providers"
 )
@@ -86,9 +87,24 @@ func (a *Agent) runToolLoop(ctx context.Context) (Response, error) {
 	for i := 0; i < a.opts.maxToolIterations; i++ {
 		body, headers := a.buildAgentRequest(cfg)
 
+		llmEvent := providers.Event{
+			Op:       providers.OpLLMRequest,
+			Provider: a.provider.Name,
+			Model:    resolveModel(a.provider, cfg),
+		}
+		llmStart := time.Now()
+		if err := firePre(ctx, a.opts.middleware, llmEvent); err != nil {
+			return Response{Tokens: totalUsage}, err
+		}
+
 		jsonBody, err := json.Marshal(body)
 		if err != nil {
-			return Response{}, fmt.Errorf("marshal request: %w", err)
+			wrapped := fmt.Errorf("marshal request: %w", err)
+			postEv := llmEvent
+			postEv.Err = wrapped
+			postEv.Duration = time.Since(llmStart)
+			firePost(ctx, a.opts.middleware, postEv)
+			return Response{}, wrapped
 		}
 
 		url := buildURL(a.provider, cfg)
@@ -102,6 +118,10 @@ func (a *Agent) runToolLoop(ctx context.Context) (Response, error) {
 			respBody, err = doPost(ctx, a.opts.httpClient, url, jsonBody, headers)
 		}
 		if err != nil {
+			postEv := llmEvent
+			postEv.Err = err
+			postEv.Duration = time.Since(llmStart)
+			firePost(ctx, a.opts.middleware, postEv)
 			if respBody != nil {
 				return Response{}, parseError(a.provider.Name, err.(*APIError).StatusCode, respBody, nil)
 			}
@@ -110,13 +130,25 @@ func (a *Agent) runToolLoop(ctx context.Context) (Response, error) {
 
 		var raw map[string]any
 		if err := json.Unmarshal(respBody, &raw); err != nil {
-			return Response{}, fmt.Errorf("unmarshal response: %w", err)
+			wrapped := fmt.Errorf("unmarshal response: %w", err)
+			postEv := llmEvent
+			postEv.Err = wrapped
+			postEv.Duration = time.Since(llmStart)
+			firePost(ctx, a.opts.middleware, postEv)
+			return Response{}, wrapped
 		}
 
 		// Accumulate usage
 		inputPath, outputPath := providers.UsagePaths(a.provider.Name)
-		totalUsage.Input += extractIntPath(raw, inputPath)
-		totalUsage.Output += extractIntPath(raw, outputPath)
+		turnInput := extractIntPath(raw, inputPath)
+		turnOutput := extractIntPath(raw, outputPath)
+		totalUsage.Input += turnInput
+		totalUsage.Output += turnOutput
+
+		postEv := llmEvent
+		postEv.Usage = providers.Usage{Input: turnInput, Output: turnOutput}
+		postEv.Duration = time.Since(llmStart)
+		firePost(ctx, a.opts.middleware, postEv)
 
 		// Extract tool calls using selected extractor
 		calls := tcExtractor(raw, tcConfig)
@@ -142,10 +174,29 @@ func (a *Agent) runToolLoop(ctx context.Context) (Response, error) {
 				continue
 			}
 
-			output, err := tool.Run(tc.input)
-			if err != nil {
-				output = fmt.Sprintf("error: %v", err)
+			toolEv := providers.Event{
+				Op:       providers.OpToolCall,
+				Provider: a.provider.Name,
+				Model:    resolveModel(a.provider, cfg),
+				Tool:     tc.name,
+				Args:     tc.input,
 			}
+			toolStart := time.Now()
+			if err := firePre(ctx, a.opts.middleware, toolEv); err != nil {
+				return Response{Tokens: totalUsage}, err
+			}
+
+			output, runErr := tool.Run(tc.input)
+			if runErr != nil {
+				output = fmt.Sprintf("error: %v", runErr)
+			}
+
+			postEv := toolEv
+			postEv.Result = output
+			postEv.Err = runErr
+			postEv.Duration = time.Since(toolStart)
+			firePost(ctx, a.opts.middleware, postEv)
+
 			a.history = append(a.history, internalMessage{
 				role:       "tool_result",
 				toolResult: &toolResult{toolUseID: tc.id, content: output},
