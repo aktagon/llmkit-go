@@ -3,6 +3,8 @@ package llmkit
 import (
 	"net/http"
 	"time"
+
+	"github.com/aktagon/llmkit-go/providers"
 )
 
 // Provider identifies an LLM provider with its API key and optional overrides.
@@ -30,12 +32,9 @@ type Response struct {
 }
 
 // Usage holds token consumption metrics.
-type Usage struct {
-	Input         int
-	Output        int
-	CacheCreation int // tokens written to cache (Anthropic explicit caching)
-	CacheRead     int // tokens read from cache (all caching modes)
-}
+// Aliased to providers.Usage so middleware events and the public API share
+// one type without conversion.
+type Usage = providers.Usage
 
 // Message represents a single conversation turn.
 type Message struct {
@@ -84,8 +83,7 @@ type options struct {
 	maxToolIterations int
 	caching           bool
 	cacheTTL          time.Duration
-	beforeRequest     func(*http.Request)
-	afterResponse     func(*http.Response)
+	middleware        []providers.MiddlewareFn
 }
 
 func defaultOptions() *options {
@@ -175,12 +173,11 @@ func WithMaxToolIterations(n int) Option {
 	return func(o *options) { o.maxToolIterations = n }
 }
 
-// WithBeforeRequest sets a hook called before each HTTP request.
-func WithBeforeRequest(fn func(*http.Request)) Option {
-	return func(o *options) { o.beforeRequest = fn }
-}
-
-// WithAfterResponse sets a hook called after each HTTP response.
-func WithAfterResponse(fn func(*http.Response)) Option {
-	return func(o *options) { o.afterResponse = fn }
+// WithMiddleware registers pre/post hooks that fire around LLM requests,
+// tool calls, cache creation, uploads, and batch submits.
+// Pre-phase middleware can veto an operation by returning a non-nil error.
+// Post-phase return values are ignored (observation only).
+// Middlewares fire in registration order.
+func WithMiddleware(fns ...providers.MiddlewareFn) Option {
+	return func(o *options) { o.middleware = append(o.middleware, fns...) }
 }

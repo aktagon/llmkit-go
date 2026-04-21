@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"time"
 
 	"github.com/aktagon/llmkit-go/providers"
 )
@@ -113,6 +114,16 @@ func applyResourceCaching(ctx context.Context, body map[string]any, p Provider, 
 		model = cfg.DefaultModel
 	}
 
+	baseEvent := providers.Event{
+		Op:       providers.OpCacheCreate,
+		Provider: p.Name,
+		Model:    model,
+	}
+	start := time.Now()
+	if err := firePre(ctx, o.middleware, baseEvent); err != nil {
+		return err
+	}
+
 	// Determine TTL
 	ttl := cc.DefaultTTL
 	if o.cacheTTL > 0 {
@@ -135,7 +146,12 @@ func applyResourceCaching(ctx context.Context, body map[string]any, p Provider, 
 
 	createJSON, err := json.Marshal(createBody)
 	if err != nil {
-		return fmt.Errorf("marshal cache create request: %w", err)
+		wrapped := fmt.Errorf("marshal cache create request: %w", err)
+		postEv := baseEvent
+		postEv.Err = wrapped
+		postEv.Duration = time.Since(start)
+		firePost(ctx, o.middleware, postEv)
+		return wrapped
 	}
 
 	// Build URL
@@ -157,23 +173,41 @@ func applyResourceCaching(ctx context.Context, body map[string]any, p Provider, 
 
 	respBody, err := doPost(ctx, o.httpClient, createURL, createJSON, headers)
 	if err != nil {
-		return fmt.Errorf("cache create request: %w", err)
+		wrapped := fmt.Errorf("cache create request: %w", err)
+		postEv := baseEvent
+		postEv.Err = wrapped
+		postEv.Duration = time.Since(start)
+		firePost(ctx, o.middleware, postEv)
+		return wrapped
 	}
 
 	var raw map[string]any
 	if err := json.Unmarshal(respBody, &raw); err != nil {
-		return fmt.Errorf("unmarshal cache create response: %w", err)
+		wrapped := fmt.Errorf("unmarshal cache create response: %w", err)
+		postEv := baseEvent
+		postEv.Err = wrapped
+		postEv.Duration = time.Since(start)
+		firePost(ctx, o.middleware, postEv)
+		return wrapped
 	}
 
 	resourceID := extractPath(raw, lc.ResponseIdPath)
 	if resourceID == "" {
-		return fmt.Errorf("cache create: empty resource ID")
+		err := fmt.Errorf("cache create: empty resource ID")
+		postEv := baseEvent
+		postEv.Err = err
+		postEv.Duration = time.Since(start)
+		firePost(ctx, o.middleware, postEv)
+		return err
 	}
 
 	// Set reference field and remove system instruction from main body
 	body[lc.ReferenceField] = resourceID
 	delete(body, "system_instruction")
 
+	postEv := baseEvent
+	postEv.Duration = time.Since(start)
+	firePost(ctx, o.middleware, postEv)
 	return nil
 }
 
