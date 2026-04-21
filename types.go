@@ -3,6 +3,8 @@ package llmkit
 import (
 	"net/http"
 	"time"
+
+	"github.com/aktagon/llmkit-go/providers"
 )
 
 //
@@ -30,12 +32,9 @@ type Response struct {
 }
 
 //
-type Usage struct {
-	Input         int
-	Output        int
-	CacheCreation int // tokens written to cache (Anthropic explicit caching)
-	CacheRead     int // tokens read from cache (all caching modes)
-}
+//
+//
+type Usage = providers.Usage
 
 //
 type Message struct {
@@ -84,8 +83,7 @@ type options struct {
 	maxToolIterations int
 	caching           bool
 	cacheTTL          time.Duration
-	beforeRequest     func(*http.Request)
-	afterResponse     func(*http.Response)
+	middleware        []providers.MiddlewareFn
 }
 
 func defaultOptions() *options {
@@ -176,11 +174,10 @@ func WithMaxToolIterations(n int) Option {
 }
 
 //
-func WithBeforeRequest(fn func(*http.Request)) Option {
-	return func(o *options) { o.beforeRequest = fn }
-}
-
 //
-func WithAfterResponse(fn func(*http.Response)) Option {
-	return func(o *options) { o.afterResponse = fn }
+//
+//
+//
+func WithMiddleware(fns ...providers.MiddlewareFn) Option {
+	return func(o *options) { o.middleware = append(o.middleware, fns...) }
 }
