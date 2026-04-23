@@ -9,10 +9,10 @@ import (
 
 //
 type Usage struct {
-	Input         int
-	Output        int
-	CacheCreation int
-	CacheRead     int
+	Input      int
+	Output     int
+	CacheWrite int // tokens written to cache (Anthropic explicit caching)
+	CacheRead  int // tokens read from cache (all caching modes)
 }
 
 //

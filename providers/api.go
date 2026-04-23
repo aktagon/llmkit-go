@@ -48,16 +48,16 @@ func APIEntryPoints() []APIEntryPointDef {
 //
 func CacheResponseFields() []APIResponseFieldDef {
 	return []APIResponseFieldDef{
-		{GoFieldName: "CacheCreation", GoFieldType: "int", SourcePath: "cacheCreationTokensPath"},
 		{GoFieldName: "CacheRead", GoFieldType: "int", SourcePath: "cacheReadTokensPath"},
+		{GoFieldName: "CacheWrite", GoFieldType: "int", SourcePath: "cacheWriteTokensPath"},
 	}
 }
 
 //
-func CacheUsagePaths(provider string) (creationPath, readPath string) {
+func CacheUsagePaths(provider string) (writePath, readPath string) {
 	cc := CachingConfig(provider)
 	if cc == nil {
 		return "", ""
 	}
-	return cc.CreationTokensPath, cc.ReadTokensPath
+	return cc.WriteTokensPath, cc.ReadTokensPath
 }
