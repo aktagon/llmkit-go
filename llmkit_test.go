@@ -635,8 +635,8 @@ func TestWithCachingAnthropic(t *testing.T) {
 	if resp.Text != "cached!" {
 		t.Errorf("expected 'cached!', got %q", resp.Text)
 	}
-	if resp.Tokens.CacheCreation != 100 {
-		t.Errorf("expected 100 cache creation tokens, got %d", resp.Tokens.CacheCreation)
+	if resp.Tokens.CacheWrite != 100 {
+		t.Errorf("expected 100 cache write tokens, got %d", resp.Tokens.CacheWrite)
 	}
 	if resp.Tokens.CacheRead != 0 {
 		t.Errorf("expected 0 cache read tokens, got %d", resp.Tokens.CacheRead)

@@ -25,12 +25,12 @@ type ResourceLifecycleDef struct {
 
 // CachingDef holds provider-specific prompt caching configuration.
 type CachingDef struct {
-	Mode               string // CachingAutomatic, CachingExplicit, or CachingResource
-	ControlType        string // cache_control type (e.g., "ephemeral")
-	CreationTokensPath string // JSON path to cache creation tokens in response
-	ReadTokensPath     string // JSON path to cache read tokens in response
-	DefaultTTL         string // default TTL in seconds
-	Lifecycle          *ResourceLifecycleDef
+	Mode            string // CachingAutomatic, CachingExplicit, or CachingResource
+	ControlType     string // cache_control type (e.g., "ephemeral")
+	WriteTokensPath string // JSON path to cache write (creation) tokens in response
+	ReadTokensPath  string // JSON path to cache read tokens in response
+	DefaultTTL      string // default TTL in seconds
+	Lifecycle       *ResourceLifecycleDef
 }
 
 // CachingConfig returns the caching config for a provider.
@@ -38,19 +38,19 @@ func CachingConfig(provider string) *CachingDef {
 	switch provider {
 	case Anthropic:
 		return &CachingDef{
-			Mode:               "ExplicitCaching",
-			ControlType:        "ephemeral",
-			CreationTokensPath: "usage.cache_creation_input_tokens",
-			ReadTokensPath:     "usage.cache_read_input_tokens",
-			DefaultTTL:         "300",
+			Mode:            "ExplicitCaching",
+			ControlType:     "ephemeral",
+			WriteTokensPath: "usage.cache_creation_input_tokens",
+			ReadTokensPath:  "usage.cache_read_input_tokens",
+			DefaultTTL:      "300",
 		}
 	case Google:
 		return &CachingDef{
-			Mode:               "ResourceCaching",
-			ControlType:        "",
-			CreationTokensPath: "",
-			ReadTokensPath:     "usageMetadata.cachedContentTokenCount",
-			DefaultTTL:         "3600",
+			Mode:            "ResourceCaching",
+			ControlType:     "",
+			WriteTokensPath: "",
+			ReadTokensPath:  "usageMetadata.cachedContentTokenCount",
+			DefaultTTL:      "3600",
 			Lifecycle: &ResourceLifecycleDef{
 				CreateEndpoint:      "/v1beta/cachedContents",
 				ResponseIdPath:      "name",
@@ -66,11 +66,11 @@ func CachingConfig(provider string) *CachingDef {
 		}
 	case OpenAI:
 		return &CachingDef{
-			Mode:               "AutomaticCaching",
-			ControlType:        "",
-			CreationTokensPath: "",
-			ReadTokensPath:     "usage.prompt_tokens_details.cached_tokens",
-			DefaultTTL:         "",
+			Mode:            "AutomaticCaching",
+			ControlType:     "",
+			WriteTokensPath: "",
+			ReadTokensPath:  "usage.prompt_tokens_details.cached_tokens",
+			DefaultTTL:      "",
 		}
 	default:
 		return nil

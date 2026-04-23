@@ -65,8 +65,8 @@ func TestIntegrationGoogleResourceCaching(t *testing.T) {
 	if resp1.Tokens.CacheRead == 0 {
 		t.Errorf("expected cache_read > 0 on first call (explicit cache path); got 0 — applyResourceCaching may not have run or cache reference was not applied")
 	}
-	t.Logf("call1: cache_read=%d cache_creation=%d input=%d output=%d",
-		resp1.Tokens.CacheRead, resp1.Tokens.CacheCreation,
+	t.Logf("call1: cache_read=%d cache_write=%d input=%d output=%d",
+		resp1.Tokens.CacheRead, resp1.Tokens.CacheWrite,
 		resp1.Tokens.Input, resp1.Tokens.Output)
 
 	// Second call with same system prompt: should also hit the cache.
@@ -84,8 +84,8 @@ func TestIntegrationGoogleResourceCaching(t *testing.T) {
 	if resp2.Tokens.CacheRead == 0 {
 		t.Error("expected cache_read > 0 on second call")
 	}
-	t.Logf("call2: cache_read=%d cache_creation=%d input=%d output=%d",
-		resp2.Tokens.CacheRead, resp2.Tokens.CacheCreation,
+	t.Logf("call2: cache_read=%d cache_write=%d input=%d output=%d",
+		resp2.Tokens.CacheRead, resp2.Tokens.CacheWrite,
 		resp2.Tokens.Input, resp2.Tokens.Output)
 }
 

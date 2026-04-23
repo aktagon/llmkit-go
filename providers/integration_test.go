@@ -953,7 +953,7 @@ func TestIntegrationAnthropicCaching(t *testing.T) {
 	if resp.Text == "" {
 		t.Error("empty response text")
 	}
-	t.Logf("cache_read=%d cache_creation=%d", resp.Tokens.CacheRead, resp.Tokens.CacheCreation)
+	t.Logf("cache_read=%d cache_write=%d", resp.Tokens.CacheRead, resp.Tokens.CacheWrite)
 }
 
 func TestIntegrationOpenAICaching(t *testing.T) {
@@ -972,5 +972,5 @@ func TestIntegrationOpenAICaching(t *testing.T) {
 	if resp.Text == "" {
 		t.Error("empty response text")
 	}
-	t.Logf("cache_read=%d cache_creation=%d", resp.Tokens.CacheRead, resp.Tokens.CacheCreation)
+	t.Logf("cache_read=%d cache_write=%d", resp.Tokens.CacheRead, resp.Tokens.CacheWrite)
 }

@@ -731,15 +731,15 @@ func parseResponse(provider string, body []byte) (Response, error) {
 	inputPath, outputPath := providers.UsagePaths(provider)
 	input := extractIntPath(raw, inputPath)
 	output := extractIntPath(raw, outputPath)
-	cacheCreation, cacheRead := extractCacheUsage(raw, provider)
+	cacheWrite, cacheRead := extractCacheUsage(raw, provider)
 
 	return Response{
 		Text: text,
 		Tokens: Usage{
-			Input:         input,
-			Output:        output,
-			CacheCreation: cacheCreation,
-			CacheRead:     cacheRead,
+			Input:      input,
+			Output:     output,
+			CacheWrite: cacheWrite,
+			CacheRead:  cacheRead,
 		},
 	}, nil
 }
