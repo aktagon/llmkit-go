@@ -225,6 +225,73 @@ func TestMiddlewareCarriesModelAndProvider(t *testing.T) {
 	}
 }
 
+// TestReasoningTokensPopulatedForOpenAI verifies that when a provider exposes
+// a reasoning_tokens path (OpenAI o1/o3/o4 models), parseResponse populates
+// Usage.Reasoning. Middleware receives the reasoning count on post-phase.
+func TestReasoningTokensPopulatedForOpenAI(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"choices": []map[string]any{
+				{"message": map[string]any{"content": "reasoned answer"}},
+			},
+			"usage": map[string]any{
+				"prompt_tokens":     40,
+				"completion_tokens": 25,
+				"completion_tokens_details": map[string]any{
+					"reasoning_tokens": 17,
+				},
+			},
+		})
+	}))
+	defer server.Close()
+
+	var postUsage providers.Usage
+	mw := func(ctx context.Context, e providers.Event) error {
+		if e.Phase == providers.PhasePost {
+			postUsage = e.Usage
+		}
+		return nil
+	}
+
+	resp, err := Prompt(context.Background(),
+		Provider{Name: providers.OpenAI, APIKey: "test-key", BaseURL: server.URL},
+		Request{User: "Hi"},
+		WithMiddleware(mw),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Tokens.Reasoning != 17 {
+		t.Errorf("expected Tokens.Reasoning=17, got %d", resp.Tokens.Reasoning)
+	}
+	if postUsage.Reasoning != 17 {
+		t.Errorf("expected middleware post-phase Usage.Reasoning=17, got %d", postUsage.Reasoning)
+	}
+}
+
+// TestReasoningTokensZeroWhenUnreported verifies that providers without a
+// reasoningTokensPath (e.g., Anthropic) leave Usage.Reasoning at zero.
+func TestReasoningTokensZeroWhenUnreported(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"content": []map[string]any{{"type": "text", "text": "hello"}},
+			"usage":   map[string]any{"input_tokens": 5, "output_tokens": 3},
+		})
+	}))
+	defer server.Close()
+
+	resp, err := Prompt(context.Background(),
+		Provider{Name: providers.Anthropic, APIKey: "test-key", BaseURL: server.URL},
+		Request{User: "Hi"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Tokens.Reasoning != 0 {
+		t.Errorf("expected Tokens.Reasoning=0 for unreported provider, got %d", resp.Tokens.Reasoning)
+	}
+}
+
 func TestMiddlewareStreamBracketsEntireStream(t *testing.T) {
 	// Minimal SSE stream: two content deltas then done signal.
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
