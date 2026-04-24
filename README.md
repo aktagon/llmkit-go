@@ -62,9 +62,15 @@ resp, err := llmkit.Prompt(ctx, provider, llmkit.Request{
     User:   "What is 2+2?",
 }, llmkit.WithTemperature(0.7))
 
-fmt.Println(resp.Text)        // "4"
-fmt.Println(resp.Tokens.Input) // token counts
+fmt.Println(resp.Text)               // "4"
+fmt.Println(resp.Tokens.Input)       // prompt tokens
+fmt.Println(resp.Tokens.Output)      // completion tokens
+fmt.Println(resp.Tokens.CacheRead)   // tokens served from cache (all caching modes)
+fmt.Println(resp.Tokens.CacheWrite)  // tokens written to cache (Anthropic explicit caching)
+fmt.Println(resp.Tokens.Reasoning)   // internal reasoning tokens (OpenAI o1/o3/o4, Gemini 2.5+ thinking)
 ```
+
+Capability-scoped fields (`CacheRead`, `CacheWrite`, `Reasoning`) are zero when the provider doesn't report them separately.
 
 ### PromptStream
 
