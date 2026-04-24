@@ -8,11 +8,15 @@ import (
 )
 
 //
+//
+//
+//
 type Usage struct {
-	Input      int
-	Output     int
-	CacheWrite int // tokens written to cache (Anthropic explicit caching)
-	CacheRead  int // tokens read from cache (all caching modes)
+	Input      int // universal
+	Output     int // universal
+	CacheWrite int // scoped to Caching
+	CacheRead  int // scoped to Caching
+	Reasoning  int // scoped to Reasoning
 }
 
 //

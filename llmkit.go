@@ -732,6 +732,7 @@ func parseResponse(provider string, body []byte) (Response, error) {
 	input := extractIntPath(raw, inputPath)
 	output := extractIntPath(raw, outputPath)
 	cacheWrite, cacheRead := extractCacheUsage(raw, provider)
+	reasoning := extractReasoningUsage(raw, provider)
 
 	return Response{
 		Text: text,
@@ -740,8 +741,20 @@ func parseResponse(provider string, body []byte) (Response, error) {
 			Output:     output,
 			CacheWrite: cacheWrite,
 			CacheRead:  cacheRead,
+			Reasoning:  reasoning,
 		},
 	}, nil
+}
+
+//
+//
+//
+func extractReasoningUsage(raw map[string]any, provider string) int {
+	cfg, ok := providers.Providers()[provider]
+	if !ok || cfg.ReasoningTokensPath == "" {
+		return 0
+	}
+	return extractIntPath(raw, cfg.ReasoningTokensPath)
 }
 
 //
