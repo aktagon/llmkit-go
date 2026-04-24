@@ -8,11 +8,15 @@ import (
 )
 
 // Usage tracks token consumption for an LLM call.
+// Fields are driven by llm:TokenDimension instances in the ontology.
+// Capability-scoped dimensions (e.g., CacheWrite, Reasoning) are zero
+// when the corresponding capability is inactive or unreported.
 type Usage struct {
-	Input      int
-	Output     int
-	CacheWrite int // tokens written to cache (Anthropic explicit caching)
-	CacheRead  int // tokens read from cache (all caching modes)
+	Input      int // universal
+	Output     int // universal
+	CacheWrite int // scoped to Caching
+	CacheRead  int // scoped to Caching
+	Reasoning  int // scoped to Reasoning
 }
 
 // MiddlewarePhase indicates when a middleware fires relative to the operation.
