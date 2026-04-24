@@ -732,6 +732,7 @@ func parseResponse(provider string, body []byte) (Response, error) {
 	input := extractIntPath(raw, inputPath)
 	output := extractIntPath(raw, outputPath)
 	cacheWrite, cacheRead := extractCacheUsage(raw, provider)
+	reasoning := extractReasoningUsage(raw, provider)
 
 	return Response{
 		Text: text,
@@ -740,8 +741,20 @@ func parseResponse(provider string, body []byte) (Response, error) {
 			Output:     output,
 			CacheWrite: cacheWrite,
 			CacheRead:  cacheRead,
+			Reasoning:  reasoning,
 		},
 	}, nil
+}
+
+// extractReasoningUsage pulls the reasoning token count if the provider
+// reports it separately (e.g., OpenAI o1/o3, Google Gemini 2.5+ thinking).
+// Returns zero when the provider does not expose a separate field.
+func extractReasoningUsage(raw map[string]any, provider string) int {
+	cfg, ok := providers.Providers()[provider]
+	if !ok || cfg.ReasoningTokensPath == "" {
+		return 0
+	}
+	return extractIntPath(raw, cfg.ReasoningTokensPath)
 }
 
 // extractPath navigates a nested map using dot-notation paths with array index support.
