@@ -506,17 +506,17 @@ func buildRequest(p Provider, req Request, o *options, cfg providers.ProviderCon
 	// Generation options — may be nested under a wrapper key (e.g., generationConfig for Google)
 	if cfg.WrapsOptionsIn != "" {
 		optBody := map[string]any{}
-		addOptions(optBody, o, supported)
+		addOptions(optBody, o, p.Name)
 		// Also move max tokens into the wrapper
 		if key, ok := supported[providers.OptionMaxTokens]; ok {
-			optBody[key] = maxTokens
-			delete(body, key)
+			setNestedField(optBody, key, maxTokens)
+			delete(body, strings.SplitN(key, ".", 2)[0])
 		}
 		if len(optBody) > 0 {
 			body[cfg.WrapsOptionsIn] = optBody
 		}
 	} else {
-		addOptions(body, o, supported)
+		addOptions(body, o, p.Name)
 	}
 
 	// Structured output
@@ -549,51 +549,79 @@ func mapRole(role string, mappings map[string]string) string {
 }
 
 // addOptions adds generation parameters to the request body.
-func addOptions(body map[string]any, o *options, supported map[providers.OptionKey]string) {
-	if o.temperature != nil {
-		if key, ok := supported[providers.OptionTemperature]; ok {
-			body[key] = *o.temperature
+//
+// JSON keys may be dotted (e.g. "thinking.budget_tokens") for providers that
+// require nested objects. Each option's per-provider OptionOverrideDef may
+// also carry ExtraFields — sibling JSON to merge into the same parent path
+// (e.g. {"type":"enabled"} alongside Anthropic's thinking.budget_tokens).
+func addOptions(body map[string]any, o *options, provider string) {
+	supported := providers.SupportedOptions(provider)
+	overrides := providers.OptionOverrides(provider)
+
+	apply := func(key providers.OptionKey, value any) {
+		jsonKey, ok := supported[key]
+		if !ok {
+			return
 		}
+		setNestedField(body, jsonKey, value)
+		if ov, ok := overrides[key]; ok && ov.ExtraFields != "" {
+			var extras map[string]any
+			if json.Unmarshal([]byte(ov.ExtraFields), &extras) == nil {
+				mergeIntoParent(body, jsonKey, extras)
+			}
+		}
+	}
+
+	if o.temperature != nil {
+		apply(providers.OptionTemperature, *o.temperature)
 	}
 	if o.topP != nil {
-		if key, ok := supported[providers.OptionTopP]; ok {
-			body[key] = *o.topP
-		}
+		apply(providers.OptionTopP, *o.topP)
 	}
 	if o.topK != nil {
-		if key, ok := supported[providers.OptionTopK]; ok {
-			body[key] = *o.topK
-		}
+		apply(providers.OptionTopK, *o.topK)
 	}
 	if len(o.stopSequences) > 0 {
-		if key, ok := supported[providers.OptionStopSequences]; ok {
-			body[key] = o.stopSequences
-		}
+		apply(providers.OptionStopSequences, o.stopSequences)
 	}
 	if o.seed != nil {
-		if key, ok := supported[providers.OptionSeed]; ok {
-			body[key] = *o.seed
-		}
+		apply(providers.OptionSeed, *o.seed)
 	}
 	if o.frequencyPenalty != nil {
-		if key, ok := supported[providers.OptionFrequencyPenalty]; ok {
-			body[key] = *o.frequencyPenalty
-		}
+		apply(providers.OptionFrequencyPenalty, *o.frequencyPenalty)
 	}
 	if o.presencePenalty != nil {
-		if key, ok := supported[providers.OptionPresencePenalty]; ok {
-			body[key] = *o.presencePenalty
-		}
+		apply(providers.OptionPresencePenalty, *o.presencePenalty)
 	}
 	if o.thinkingBudget != nil {
-		if key, ok := supported[providers.OptionThinkingBudget]; ok {
-			body[key] = *o.thinkingBudget
-		}
+		apply(providers.OptionThinkingBudget, *o.thinkingBudget)
 	}
 	if o.reasoningEffort != "" {
-		if key, ok := supported[providers.OptionReasoningEffort]; ok {
-			body[key] = o.reasoningEffort
+		apply(providers.OptionReasoningEffort, o.reasoningEffort)
+	}
+}
+
+// mergeIntoParent merges extras into the map containing the leaf of path.
+// For a dotted path "a.b.c", extras land in target["a"]["b"]; for a top-level
+// path "x", they land in target.
+func mergeIntoParent(target map[string]any, path string, extras map[string]any) {
+	parts := strings.Split(path, ".")
+	if len(parts) == 1 {
+		for k, v := range extras {
+			target[k] = v
 		}
+		return
+	}
+	cur := target
+	for i := 0; i < len(parts)-1; i++ {
+		next, ok := cur[parts[i]].(map[string]any)
+		if !ok {
+			return
+		}
+		cur = next
+	}
+	for k, v := range extras {
+		cur[k] = v
 	}
 }
 
