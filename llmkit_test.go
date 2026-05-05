@@ -194,6 +194,45 @@ func TestPromptWithOptions(t *testing.T) {
 	}
 }
 
+// TestPromptWithThinkingBudgetAnthropic verifies the dotted JSON path
+// "thinking.budget_tokens" is correctly nested into {thinking: {budget_tokens: N, type: "enabled"}}.
+// Prior to the option-override fix, this was emitted as a literal top-level key
+// `body["thinking.budget_tokens"]`, which Anthropic silently ignored.
+func TestPromptWithThinkingBudgetAnthropic(t *testing.T) {
+	var captured map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		json.Unmarshal(body, &captured)
+		json.NewEncoder(w).Encode(map[string]any{
+			"content": []map[string]any{{"type": "text", "text": "ok"}},
+			"usage":   map[string]any{"input_tokens": 1, "output_tokens": 1},
+		})
+	}))
+	defer server.Close()
+
+	_, err := Prompt(context.Background(),
+		Provider{Name: providers.Anthropic, APIKey: "k", BaseURL: server.URL},
+		Request{User: "test"},
+		WithThinkingBudget(1024),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, leaked := captured["thinking.budget_tokens"]; leaked {
+		t.Errorf("body has flat 'thinking.budget_tokens' — dotted path not nested")
+	}
+	thinking, ok := captured["thinking"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected thinking object, got %T", captured["thinking"])
+	}
+	if budget, _ := thinking["budget_tokens"].(float64); budget != 1024 {
+		t.Errorf("expected thinking.budget_tokens = 1024, got %v", thinking["budget_tokens"])
+	}
+	if typ, _ := thinking["type"].(string); typ != "enabled" {
+		t.Errorf("expected thinking.type = enabled, got %v", thinking["type"])
+	}
+}
+
 func TestUnsupportedOption(t *testing.T) {
 	// Anthropic doesn't support seed
 	_, err := Prompt(context.Background(),

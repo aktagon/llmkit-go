@@ -259,18 +259,18 @@ func (a *Agent) buildAgentRequest(cfg providers.ProviderConfig) (map[string]any,
 	// Options
 	if cfg.WrapsOptionsIn != "" {
 		optBody := map[string]any{}
-		addOptions(optBody, a.opts, supported)
+		addOptions(optBody, a.opts, a.provider.Name)
 		if key, ok := supported[providers.OptionMaxTokens]; ok {
-			optBody[key] = maxTokens
+			setNestedField(optBody, key, maxTokens)
 		}
 		if len(optBody) > 0 {
 			body[cfg.WrapsOptionsIn] = optBody
 		}
 	} else {
 		if key, ok := supported[providers.OptionMaxTokens]; ok {
-			body[key] = maxTokens
+			setNestedField(body, key, maxTokens)
 		}
-		addOptions(body, a.opts, supported)
+		addOptions(body, a.opts, a.provider.Name)
 	}
 
 	// Auth
