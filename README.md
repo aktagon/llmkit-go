@@ -1,6 +1,6 @@
 # LLMKit
 
-Go library for unified LLM API access. Write OpenAI-shaped requests, hit any provider. The per-provider config in `providers/` is generated; runtime behavior (HTTP, transforms, agent loop) is hand-coded.
+Go library for unified LLM API access. Write OpenAI-shaped requests, hit any provider. The per-provider config in `providers/` is generated; runtime behavior (HTTP, transforms, agent loop) is hand-coded with the help of AI.
 
 ## Install
 
