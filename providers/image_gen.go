@@ -2,7 +2,6 @@
 
 package providers
 
-
 //
 const (
 	ImageInputInlineParts   = "InlineParts"
@@ -15,22 +14,22 @@ const (
 //
 //
 type ImageModelDef struct {
-	ModelID       string
-	Label         string
-	AspectRatios  []string
-	ImageSizes    []string
+	ModelID      string
+	Label        string
+	AspectRatios []string
+	ImageSizes   []string
 }
 
 //
 //
 //
 type ImageGenDef struct {
-	InputMode       string // ImageInputInlineParts | ImageInputMultipartForm
-	OutputMode      string // ImageOutputBase64Inline | ImageOutputURLOrBase64
-	MaxInputCount   int    // max reference images per request
-	GenEndpoint     string // override; empty = use provider main endpoint
-	EditEndpoint    string // override; empty = use GenEndpoint
-	Models          []ImageModelDef
+	InputMode     string // ImageInputInlineParts | ImageInputMultipartForm
+	OutputMode    string // ImageOutputBase64Inline | ImageOutputURLOrBase64
+	MaxInputCount int    // max reference images per request
+	GenEndpoint   string // override; empty = use provider main endpoint
+	EditEndpoint  string // override; empty = use GenEndpoint
+	Models        []ImageModelDef
 }
 
 //
@@ -63,4 +62,3 @@ func ImageGenConfig(provider string) *ImageGenDef {
 		return nil
 	}
 }
-
