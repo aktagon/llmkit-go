@@ -2,21 +2,20 @@
 
 package providers
 
-
 // OptionKey identifies a generation parameter.
 type OptionKey string
 
 const (
 	OptionFrequencyPenalty OptionKey = "frequency_penalty"
-	OptionMaxTokens OptionKey = "max_tokens"
-	OptionPresencePenalty OptionKey = "presence_penalty"
-	OptionReasoningEffort OptionKey = "reasoning_effort"
-	OptionSeed OptionKey = "seed"
-	OptionStopSequences OptionKey = "stop_sequences"
-	OptionTemperature OptionKey = "temperature"
-	OptionThinkingBudget OptionKey = "thinking_budget"
-	OptionTopK OptionKey = "top_k"
-	OptionTopP OptionKey = "top_p"
+	OptionMaxTokens        OptionKey = "max_tokens"
+	OptionPresencePenalty  OptionKey = "presence_penalty"
+	OptionReasoningEffort  OptionKey = "reasoning_effort"
+	OptionSeed             OptionKey = "seed"
+	OptionStopSequences    OptionKey = "stop_sequences"
+	OptionTemperature      OptionKey = "temperature"
+	OptionThinkingBudget   OptionKey = "thinking_budget"
+	OptionTopK             OptionKey = "top_k"
+	OptionTopP             OptionKey = "top_p"
 )
 
 // OptionDef describes a generation parameter.
@@ -55,245 +54,245 @@ func SupportedOptions(provider string) map[OptionKey]string {
 	switch provider {
 	case Ai21:
 		return map[OptionKey]string{
-			OptionMaxTokens: "max_tokens",
+			OptionMaxTokens:     "max_tokens",
 			OptionStopSequences: "stop",
-			OptionTemperature: "temperature",
-			OptionTopP: "top_p",
+			OptionTemperature:   "temperature",
+			OptionTopP:          "top_p",
 		}
 	case Anthropic:
 		return map[OptionKey]string{
-			OptionMaxTokens: "max_tokens",
-			OptionStopSequences: "stop_sequences",
-			OptionTemperature: "temperature",
+			OptionMaxTokens:      "max_tokens",
+			OptionStopSequences:  "stop_sequences",
+			OptionTemperature:    "temperature",
 			OptionThinkingBudget: "thinking.budget_tokens",
-			OptionTopK: "top_k",
-			OptionTopP: "top_p",
+			OptionTopK:           "top_k",
+			OptionTopP:           "top_p",
 		}
 	case Azure:
 		return map[OptionKey]string{
 			OptionFrequencyPenalty: "frequency_penalty",
-			OptionMaxTokens: "max_tokens",
-			OptionPresencePenalty: "presence_penalty",
-			OptionSeed: "seed",
-			OptionStopSequences: "stop",
-			OptionTemperature: "temperature",
-			OptionTopP: "top_p",
+			OptionMaxTokens:        "max_tokens",
+			OptionPresencePenalty:  "presence_penalty",
+			OptionSeed:             "seed",
+			OptionStopSequences:    "stop",
+			OptionTemperature:      "temperature",
+			OptionTopP:             "top_p",
 		}
 	case Bedrock:
 		return map[OptionKey]string{
-			OptionMaxTokens: "maxTokens",
+			OptionMaxTokens:     "maxTokens",
 			OptionStopSequences: "stopSequences",
-			OptionTemperature: "temperature",
-			OptionTopP: "top_p",
+			OptionTemperature:   "temperature",
+			OptionTopP:          "top_p",
 		}
 	case Cerebras:
 		return map[OptionKey]string{
-			OptionMaxTokens: "max_tokens",
-			OptionSeed: "seed",
+			OptionMaxTokens:     "max_tokens",
+			OptionSeed:          "seed",
 			OptionStopSequences: "stop",
-			OptionTemperature: "temperature",
-			OptionTopP: "top_p",
+			OptionTemperature:   "temperature",
+			OptionTopP:          "top_p",
 		}
 	case Cohere:
 		return map[OptionKey]string{
 			OptionFrequencyPenalty: "frequency_penalty",
-			OptionMaxTokens: "max_tokens",
-			OptionPresencePenalty: "presence_penalty",
-			OptionSeed: "seed",
-			OptionStopSequences: "stop",
-			OptionTemperature: "temperature",
-			OptionTopK: "top_k",
-			OptionTopP: "top_p",
+			OptionMaxTokens:        "max_tokens",
+			OptionPresencePenalty:  "presence_penalty",
+			OptionSeed:             "seed",
+			OptionStopSequences:    "stop",
+			OptionTemperature:      "temperature",
+			OptionTopK:             "top_k",
+			OptionTopP:             "top_p",
 		}
 	case Deepseek:
 		return map[OptionKey]string{
 			OptionFrequencyPenalty: "frequency_penalty",
-			OptionMaxTokens: "max_tokens",
-			OptionPresencePenalty: "presence_penalty",
-			OptionStopSequences: "stop",
-			OptionTemperature: "temperature",
-			OptionTopP: "top_p",
+			OptionMaxTokens:        "max_tokens",
+			OptionPresencePenalty:  "presence_penalty",
+			OptionStopSequences:    "stop",
+			OptionTemperature:      "temperature",
+			OptionTopP:             "top_p",
 		}
 	case Doubao:
 		return map[OptionKey]string{
 			OptionFrequencyPenalty: "frequency_penalty",
-			OptionMaxTokens: "max_tokens",
-			OptionPresencePenalty: "presence_penalty",
-			OptionStopSequences: "stop",
-			OptionTemperature: "temperature",
-			OptionTopP: "top_p",
+			OptionMaxTokens:        "max_tokens",
+			OptionPresencePenalty:  "presence_penalty",
+			OptionStopSequences:    "stop",
+			OptionTemperature:      "temperature",
+			OptionTopP:             "top_p",
 		}
 	case Ernie:
 		return map[OptionKey]string{
 			OptionFrequencyPenalty: "frequency_penalty",
-			OptionMaxTokens: "max_tokens",
-			OptionPresencePenalty: "presence_penalty",
-			OptionStopSequences: "stop",
-			OptionTemperature: "temperature",
-			OptionTopP: "top_p",
+			OptionMaxTokens:        "max_tokens",
+			OptionPresencePenalty:  "presence_penalty",
+			OptionStopSequences:    "stop",
+			OptionTemperature:      "temperature",
+			OptionTopP:             "top_p",
 		}
 	case Fireworks:
 		return map[OptionKey]string{
 			OptionFrequencyPenalty: "frequency_penalty",
-			OptionMaxTokens: "max_tokens",
-			OptionPresencePenalty: "presence_penalty",
-			OptionStopSequences: "stop",
-			OptionTemperature: "temperature",
-			OptionTopK: "top_k",
-			OptionTopP: "top_p",
+			OptionMaxTokens:        "max_tokens",
+			OptionPresencePenalty:  "presence_penalty",
+			OptionStopSequences:    "stop",
+			OptionTemperature:      "temperature",
+			OptionTopK:             "top_k",
+			OptionTopP:             "top_p",
 		}
 	case Google:
 		return map[OptionKey]string{
-			OptionMaxTokens: "max_output_tokens",
+			OptionMaxTokens:       "max_output_tokens",
 			OptionReasoningEffort: "reasoning_effort",
-			OptionSeed: "seed",
-			OptionStopSequences: "stop_sequences",
-			OptionTemperature: "temperature",
-			OptionThinkingBudget: "thinkingConfig.thinkingBudget",
-			OptionTopK: "top_k",
-			OptionTopP: "top_p",
+			OptionSeed:            "seed",
+			OptionStopSequences:   "stop_sequences",
+			OptionTemperature:     "temperature",
+			OptionThinkingBudget:  "thinkingConfig.thinkingBudget",
+			OptionTopK:            "top_k",
+			OptionTopP:            "top_p",
 		}
 	case Grok:
 		return map[OptionKey]string{
 			OptionFrequencyPenalty: "frequency_penalty",
-			OptionMaxTokens: "max_tokens",
-			OptionPresencePenalty: "presence_penalty",
-			OptionSeed: "seed",
-			OptionStopSequences: "stop",
-			OptionTemperature: "temperature",
-			OptionTopK: "top_k",
-			OptionTopP: "top_p",
+			OptionMaxTokens:        "max_tokens",
+			OptionPresencePenalty:  "presence_penalty",
+			OptionSeed:             "seed",
+			OptionStopSequences:    "stop",
+			OptionTemperature:      "temperature",
+			OptionTopK:             "top_k",
+			OptionTopP:             "top_p",
 		}
 	case Groq:
 		return map[OptionKey]string{
 			OptionFrequencyPenalty: "frequency_penalty",
-			OptionMaxTokens: "max_tokens",
-			OptionPresencePenalty: "presence_penalty",
-			OptionSeed: "seed",
-			OptionStopSequences: "stop",
-			OptionTemperature: "temperature",
-			OptionTopP: "top_p",
+			OptionMaxTokens:        "max_tokens",
+			OptionPresencePenalty:  "presence_penalty",
+			OptionSeed:             "seed",
+			OptionStopSequences:    "stop",
+			OptionTemperature:      "temperature",
+			OptionTopP:             "top_p",
 		}
 	case Lmstudio:
 		return map[OptionKey]string{
-			OptionMaxTokens: "max_tokens",
-			OptionSeed: "seed",
+			OptionMaxTokens:     "max_tokens",
+			OptionSeed:          "seed",
 			OptionStopSequences: "stop",
-			OptionTemperature: "temperature",
-			OptionTopP: "top_p",
+			OptionTemperature:   "temperature",
+			OptionTopP:          "top_p",
 		}
 	case Minimax:
 		return map[OptionKey]string{
-			OptionMaxTokens: "max_tokens",
+			OptionMaxTokens:     "max_tokens",
 			OptionStopSequences: "stop",
-			OptionTemperature: "temperature",
-			OptionTopP: "top_p",
+			OptionTemperature:   "temperature",
+			OptionTopP:          "top_p",
 		}
 	case Mistral:
 		return map[OptionKey]string{
-			OptionMaxTokens: "max_tokens",
-			OptionSeed: "seed",
+			OptionMaxTokens:     "max_tokens",
+			OptionSeed:          "seed",
 			OptionStopSequences: "stop",
-			OptionTemperature: "temperature",
-			OptionTopP: "top_p",
+			OptionTemperature:   "temperature",
+			OptionTopP:          "top_p",
 		}
 	case Moonshot:
 		return map[OptionKey]string{
-			OptionMaxTokens: "max_tokens",
+			OptionMaxTokens:     "max_tokens",
 			OptionStopSequences: "stop",
-			OptionTemperature: "temperature",
-			OptionTopP: "top_p",
+			OptionTemperature:   "temperature",
+			OptionTopP:          "top_p",
 		}
 	case Ollama:
 		return map[OptionKey]string{
-			OptionMaxTokens: "max_tokens",
-			OptionSeed: "seed",
+			OptionMaxTokens:     "max_tokens",
+			OptionSeed:          "seed",
 			OptionStopSequences: "stop",
-			OptionTemperature: "temperature",
-			OptionTopK: "top_k",
-			OptionTopP: "top_p",
+			OptionTemperature:   "temperature",
+			OptionTopK:          "top_k",
+			OptionTopP:          "top_p",
 		}
 	case OpenAI:
 		return map[OptionKey]string{
 			OptionFrequencyPenalty: "frequency_penalty",
-			OptionMaxTokens: "max_tokens",
-			OptionPresencePenalty: "presence_penalty",
-			OptionReasoningEffort: "reasoning_effort",
-			OptionSeed: "seed",
-			OptionStopSequences: "stop",
-			OptionTemperature: "temperature",
-			OptionTopP: "top_p",
+			OptionMaxTokens:        "max_tokens",
+			OptionPresencePenalty:  "presence_penalty",
+			OptionReasoningEffort:  "reasoning_effort",
+			OptionSeed:             "seed",
+			OptionStopSequences:    "stop",
+			OptionTemperature:      "temperature",
+			OptionTopP:             "top_p",
 		}
 	case Openrouter:
 		return map[OptionKey]string{
 			OptionFrequencyPenalty: "frequency_penalty",
-			OptionMaxTokens: "max_tokens",
-			OptionPresencePenalty: "presence_penalty",
-			OptionSeed: "seed",
-			OptionStopSequences: "stop",
-			OptionTemperature: "temperature",
-			OptionTopK: "top_k",
-			OptionTopP: "top_p",
+			OptionMaxTokens:        "max_tokens",
+			OptionPresencePenalty:  "presence_penalty",
+			OptionSeed:             "seed",
+			OptionStopSequences:    "stop",
+			OptionTemperature:      "temperature",
+			OptionTopK:             "top_k",
+			OptionTopP:             "top_p",
 		}
 	case Perplexity:
 		return map[OptionKey]string{
 			OptionFrequencyPenalty: "frequency_penalty",
-			OptionMaxTokens: "max_tokens",
-			OptionPresencePenalty: "presence_penalty",
-			OptionTemperature: "temperature",
-			OptionTopP: "top_p",
+			OptionMaxTokens:        "max_tokens",
+			OptionPresencePenalty:  "presence_penalty",
+			OptionTemperature:      "temperature",
+			OptionTopP:             "top_p",
 		}
 	case Qwen:
 		return map[OptionKey]string{
-			OptionMaxTokens: "max_tokens",
-			OptionSeed: "seed",
+			OptionMaxTokens:     "max_tokens",
+			OptionSeed:          "seed",
 			OptionStopSequences: "stop",
-			OptionTemperature: "temperature",
-			OptionTopK: "top_k",
-			OptionTopP: "top_p",
+			OptionTemperature:   "temperature",
+			OptionTopK:          "top_k",
+			OptionTopP:          "top_p",
 		}
 	case Sambanova:
 		return map[OptionKey]string{
-			OptionMaxTokens: "max_tokens",
+			OptionMaxTokens:     "max_tokens",
 			OptionStopSequences: "stop",
-			OptionTemperature: "temperature",
-			OptionTopP: "top_p",
+			OptionTemperature:   "temperature",
+			OptionTopP:          "top_p",
 		}
 	case Together:
 		return map[OptionKey]string{
 			OptionFrequencyPenalty: "frequency_penalty",
-			OptionMaxTokens: "max_tokens",
-			OptionPresencePenalty: "presence_penalty",
-			OptionSeed: "seed",
-			OptionStopSequences: "stop",
-			OptionTemperature: "temperature",
-			OptionTopK: "top_k",
-			OptionTopP: "top_p",
+			OptionMaxTokens:        "max_tokens",
+			OptionPresencePenalty:  "presence_penalty",
+			OptionSeed:             "seed",
+			OptionStopSequences:    "stop",
+			OptionTemperature:      "temperature",
+			OptionTopK:             "top_k",
+			OptionTopP:             "top_p",
 		}
 	case Vllm:
 		return map[OptionKey]string{
 			OptionFrequencyPenalty: "frequency_penalty",
-			OptionMaxTokens: "max_tokens",
-			OptionPresencePenalty: "presence_penalty",
-			OptionSeed: "seed",
-			OptionStopSequences: "stop",
-			OptionTemperature: "temperature",
-			OptionTopK: "top_k",
-			OptionTopP: "top_p",
+			OptionMaxTokens:        "max_tokens",
+			OptionPresencePenalty:  "presence_penalty",
+			OptionSeed:             "seed",
+			OptionStopSequences:    "stop",
+			OptionTemperature:      "temperature",
+			OptionTopK:             "top_k",
+			OptionTopP:             "top_p",
 		}
 	case Yi:
 		return map[OptionKey]string{
-			OptionMaxTokens: "max_tokens",
+			OptionMaxTokens:     "max_tokens",
 			OptionStopSequences: "stop",
-			OptionTemperature: "temperature",
-			OptionTopP: "top_p",
+			OptionTemperature:   "temperature",
+			OptionTopP:          "top_p",
 		}
 	case Zhipu:
 		return map[OptionKey]string{
-			OptionMaxTokens: "max_tokens",
+			OptionMaxTokens:     "max_tokens",
 			OptionStopSequences: "stop",
-			OptionTemperature: "temperature",
-			OptionTopP: "top_p",
+			OptionTemperature:   "temperature",
+			OptionTopP:          "top_p",
 		}
 	default:
 		return nil

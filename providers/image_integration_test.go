@@ -4,7 +4,6 @@
 
 package providers_test
 
-
 import (
 	"context"
 	"os"
@@ -66,4 +65,3 @@ func TestIntegrationImageGoogleGemini31FlashImagePreview(t *testing.T) {
 		t.Error("no output tokens reported (image-output tokens should land in candidatesTokenCount)")
 	}
 }
-
