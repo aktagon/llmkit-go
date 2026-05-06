@@ -40,9 +40,14 @@ func APIOptions() []APIOptionDef {
 // APIEntryPoints returns all entry point functions.
 func APIEntryPoints() []APIEntryPointDef {
 	return []APIEntryPointDef{
+		{GoFunc: "Agent", GoParamType: "Provider", Comment: "Constructs a stateful Agent that drives a multi-turn tool-calling loop. Per-language naming: Go NewAgent, TS class Agent, Python class Agent, Rust struct Agent."},
 		{GoFunc: "GenerateImage", GoParamType: "ImageRequest", Comment: "Synchronous text-to-image and image-to-image. Reference images go in ImageRequest.ReferenceImages (slice). Returns ImageResponse{ Images []ImageData, Text string, Usage }."},
+		{GoFunc: "Prompt", GoParamType: "Request", Comment: "One-shot synchronous request. Returns Response with text + Usage tokens."},
 		{GoFunc: "PromptBatch", GoParamType: "[]Request", Comment: "Blocks until all responses ready. Handles async polling internally."},
+		{GoFunc: "PromptStream", GoParamType: "Request", Comment: "Streaming variant. Calls a per-chunk callback as deltas arrive; returns the accumulated Response on stream close."},
 		{GoFunc: "SubmitBatch", GoParamType: "[]Request", Comment: "Returns BatchHandle immediately. Use WaitBatch to get results."},
+		{GoFunc: "UploadFile", GoParamType: "Bytes", Comment: "Uploads a file and returns a File handle suitable for inclusion in a Request.files slice."},
+		{GoFunc: "WaitBatch", GoParamType: "BatchHandle", Comment: "Polls the provider until the batch handle reaches terminal state, then returns the ordered list of Responses."},
 	}
 }
 
