@@ -2,6 +2,7 @@
 
 package providers
 
+
 import (
 	"context"
 	"time"
@@ -43,6 +44,8 @@ const (
 	OpUpload MiddlewareOp = "upload"
 	//
 	OpBatchSubmit MiddlewareOp = "batch_submit"
+	//
+	OpImageGeneration MiddlewareOp = "image_generation"
 )
 
 //

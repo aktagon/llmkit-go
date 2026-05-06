@@ -2,29 +2,30 @@
 
 package providers
 
+
 //
 const (
-	PlacementTopLevelField  = "TopLevelField"
+	PlacementTopLevelField = "TopLevelField"
 	PlacementMessageInArray = "MessageInArray"
-	PlacementSiblingObject  = "SiblingObject"
+	PlacementSiblingObject = "SiblingObject"
 )
 
 //
 const (
-	AuthBearerToken   = "BearerToken"
-	AuthHeaderAPIKey  = "HeaderAPIKey"
+	AuthBearerToken  = "BearerToken"
+	AuthHeaderAPIKey = "HeaderAPIKey"
 	AuthQueryParamKey = "QueryParamKey"
-	AuthSigV4         = "SigV4"
+	AuthSigV4        = "SigV4"
 )
 
 //
 type StructuredOutputDef struct {
-	FormatField           string
-	FormatType            string
-	SchemaPath            string
-	BetaHeader            string
-	EnforceStrict         bool
-	RemoveAdditionalProps bool
+	FormatField             string
+	FormatType              string
+	SchemaPath              string
+	BetaHeader              string
+	EnforceStrict           bool
+	RemoveAdditionalProps   bool
 }
 
 //
@@ -91,9 +92,9 @@ func StructuredOutput(provider string) *StructuredOutputDef {
 
 //
 type ToolCallDef struct {
-	ArgsFormat string // "map" or "json_string"
-	ResultRole string
-	IDSource   string // "id_field" or "function_name"
+	ArgsFormat  string // "map" or "json_string"
+	ResultRole  string
+	IDSource    string // "id_field" or "function_name"
 }
 
 //

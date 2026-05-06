@@ -128,6 +128,51 @@ resp, err := llmkit.Prompt(ctx, provider, llmkit.Request{
 })
 ```
 
+### GenerateImage
+
+Generate images from text, optionally conditioned on reference images for
+editing or composition. Currently supports Google's Nano Banana 2
+(`gemini-3.1-flash-image-preview`) and Pro (`gemini-3-pro-image-preview`).
+
+```go
+resp, err := llmkit.GenerateImage(ctx,
+    llmkit.Provider{Name: providers.Google, APIKey: key},
+    llmkit.ImageRequest{
+        Prompt: "A nano banana dish in a fancy restaurant",
+        Model:  "gemini-3.1-flash-image-preview",
+    },
+    llmkit.WithAspectRatio("16:9"),
+    llmkit.WithImageSize("2K"),
+)
+os.WriteFile("out.png", resp.Images[0].Bytes, 0o644)
+```
+
+Pass reference images to edit or compose:
+
+```go
+resp, err := llmkit.GenerateImage(ctx, provider,
+    llmkit.ImageRequest{
+        Prompt: "Add snow and frost; overcast sky.",
+        Model:  "gemini-3.1-flash-image-preview",
+        ReferenceImages: []llmkit.ImageInput{
+            {MimeType: "image/png", Bytes: pngBytes},
+        },
+    },
+)
+```
+
+Aspect ratios and sizes are validated against a per-model whitelist before
+the HTTP request — `WithImageSize("512")` on Pro returns `*ValidationError`
+without paying for a 4xx round-trip.
+
+| Model                 | Aspect ratios                                                               | Sizes           |
+| --------------------- | --------------------------------------------------------------------------- | --------------- |
+| Nano Banana 2 (Flash) | 1:1, 2:3, 3:2, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9, 21:9, **1:4, 4:1, 1:8, 8:1** | 512, 1K, 2K, 4K |
+| Nano Banana Pro       | 1:1, 2:3, 3:2, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9, 21:9                         | 1K, 2K, 4K      |
+
+Up to 14 reference images per request. See `examples/image-gen` for a
+text-to-image + edit pass.
+
 ## Options
 
 ```go
