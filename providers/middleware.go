@@ -2,6 +2,7 @@
 
 package providers
 
+
 import (
 	"context"
 	"time"
@@ -43,6 +44,8 @@ const (
 	OpUpload MiddlewareOp = "upload"
 	// OpBatchSubmit — Submitting a batch of requests.
 	OpBatchSubmit MiddlewareOp = "batch_submit"
+	// OpImageGeneration — GenerateImage call. Phase=pre fires before the HTTP request; Phase=post after decoding image bytes.
+	OpImageGeneration MiddlewareOp = "image_generation"
 )
 
 // Event carries middleware observation and veto data. Field population is
