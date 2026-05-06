@@ -2,7 +2,6 @@
 
 package providers
 
-
 // APIOptionDef describes a functional option.
 type APIOptionDef struct {
 	GoFunc     string
