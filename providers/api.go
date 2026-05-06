@@ -2,6 +2,7 @@
 
 package providers
 
+
 // APIOptionDef describes a functional option.
 type APIOptionDef struct {
 	GoFunc     string
@@ -40,6 +41,7 @@ func APIOptions() []APIOptionDef {
 // APIEntryPoints returns all entry point functions.
 func APIEntryPoints() []APIEntryPointDef {
 	return []APIEntryPointDef{
+		{GoFunc: "GenerateImage", GoParamType: "ImageRequest", Comment: "Synchronous text-to-image and image-to-image. Reference images go in ImageRequest.ReferenceImages (slice). Returns ImageResponse{ Images []ImageData, Text string, Usage }."},
 		{GoFunc: "PromptBatch", GoParamType: "[]Request", Comment: "Blocks until all responses ready. Handles async polling internally."},
 		{GoFunc: "SubmitBatch", GoParamType: "[]Request", Comment: "Returns BatchHandle immediately. Use WaitBatch to get results."},
 	}
@@ -50,9 +52,11 @@ func CacheResponseFields() []APIResponseFieldDef {
 	return []APIResponseFieldDef{
 		{GoFieldName: "CacheRead", GoFieldType: "int", SourcePath: "cacheReadTokensPath"},
 		{GoFieldName: "CacheWrite", GoFieldType: "int", SourcePath: "cacheWriteTokensPath"},
+		{GoFieldName: "Images", GoFieldType: "[]ImageData", SourcePath: "candidates[0].content.parts[*].inlineData"},
 		{GoFieldName: "Input", GoFieldType: "int", SourcePath: "usageInputPath"},
 		{GoFieldName: "Output", GoFieldType: "int", SourcePath: "usageOutputPath"},
 		{GoFieldName: "Reasoning", GoFieldType: "int", SourcePath: "reasoningTokensPath"},
+		{GoFieldName: "Text", GoFieldType: "string", SourcePath: "candidates[0].content.parts[*].text"},
 	}
 }
 
