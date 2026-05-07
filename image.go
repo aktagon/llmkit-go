@@ -16,18 +16,45 @@ import (
 //
 // Model is required: image-generation models are explicit choices and the
 // text-generation default (e.g., gemini-2.5-flash) does not generate images.
-// Reference images turn this into an editing/composition call; the slice may
-// hold up to providers.ImageGenConfig(provider).MaxInputCount entries.
+//
+// Input is provided in one of two mutually-exclusive forms:
+//
+//   - Prompt: terse sugar for the text-only hot path. Internally desugars
+//     to Parts: []Part{Text(Prompt)} before serialisation.
+//   - Parts: canonical multimodal input. A positionally-ordered sequence
+//     of text and image parts; required for editing and compositional
+//     generation where caller-controlled ordering matters.
+//
+// Pre-flight validation requires exactly one of Prompt or Parts to be
+// non-empty (XOR). Image-typed parts respect ImageGenConfig.MaxInputCount.
 type ImageRequest struct {
-	Prompt          string
-	Model           string
-	ReferenceImages []ImageInput
+	Model  string
+	Prompt string
+	Parts  []Part
 }
 
-// ImageInput is a reference image passed to the model for editing/composition.
-type ImageInput struct {
+// Part is the universal multimodal input atom. Exactly one of Text or
+// Image is set; both empty or both set is invalid (rejected by pre-flight
+// validation). Construct via the package-level Text() and Image() helpers.
+type Part struct {
+	Text  string
+	Image *MediaRef
+}
+
+// MediaRef is an inline media payload (mime type + raw bytes). Reused by
+// every Part variant that carries non-text content.
+type MediaRef struct {
 	MimeType string
 	Bytes    []byte
+}
+
+// Text constructs a text-bearing Part.
+func Text(s string) Part { return Part{Text: s} }
+
+// Image constructs an image-bearing Part. mime is the IANA media type
+// (e.g., "image/png"); b is the raw bytes (not base64-encoded).
+func Image(mime string, b []byte) Part {
+	return Part{Image: &MediaRef{MimeType: mime, Bytes: b}}
 }
 
 // ImageData is one decoded image in an ImageResponse.
@@ -93,20 +120,32 @@ func resolveImageOptions(opts []ImageOption) *imageOptions {
 }
 
 // GenerateImage produces one or more images from a text prompt, optionally
-// conditioned on reference images for editing or composition. Pre-flight
-// validation rejects unsupported aspect ratios, sizes, and reference-image
-// counts before any HTTP call.
+// conditioned on reference images for editing or composition. Input is
+// either Prompt (sugar for the text-only case) or Parts (canonical
+// multimodal sequence) — exactly one must be set. Pre-flight validation
+// rejects unsupported aspect ratios, sizes, and image-part counts before
+// any HTTP call.
 func GenerateImage(ctx context.Context, p Provider, req ImageRequest, opts ...ImageOption) (ImageResponse, error) {
 	o := resolveImageOptions(opts)
 
 	if err := validateProvider(p); err != nil {
 		return ImageResponse{}, err
 	}
-	if req.Prompt == "" {
-		return ImageResponse{}, &ValidationError{Field: "prompt", Message: "required"}
-	}
 	if req.Model == "" {
 		return ImageResponse{}, &ValidationError{Field: "model", Message: "required for image generation"}
+	}
+
+	parts, err := normalizeImageParts(req)
+	if err != nil {
+		return ImageResponse{}, err
+	}
+	for i, part := range parts {
+		if (part.Text != "") == (part.Image != nil) {
+			return ImageResponse{}, &ValidationError{
+				Field:   fmt.Sprintf("parts[%d]", i),
+				Message: "must have exactly one of Text or Image set",
+			}
+		}
 	}
 
 	cfg, ok := providers.Providers()[p.Name]
@@ -127,10 +166,16 @@ func GenerateImage(ctx context.Context, p Provider, req ImageRequest, opts ...Im
 	if o.imageSize != "" && !contains(model.ImageSizes, o.imageSize) {
 		return ImageResponse{}, &ValidationError{Field: "image_size", Message: o.imageSize + " not supported by " + req.Model}
 	}
-	if len(req.ReferenceImages) > imgCfg.MaxInputCount {
+	imageCount := 0
+	for _, part := range parts {
+		if part.Image != nil {
+			imageCount++
+		}
+	}
+	if imageCount > imgCfg.MaxInputCount {
 		return ImageResponse{}, &ValidationError{
-			Field:   "reference_images",
-			Message: fmt.Sprintf("%d exceeds maximum %d for %s", len(req.ReferenceImages), imgCfg.MaxInputCount, p.Name),
+			Field:   "parts",
+			Message: fmt.Sprintf("%d image parts exceeds maximum %d for %s", imageCount, imgCfg.MaxInputCount, p.Name),
 		}
 	}
 
@@ -144,7 +189,7 @@ func GenerateImage(ctx context.Context, p Provider, req ImageRequest, opts ...Im
 		return ImageResponse{}, err
 	}
 
-	body := buildImageBody(req, o)
+	body := buildImageBody(parts, o)
 	jsonBody, err := json.Marshal(body)
 	if err != nil {
 		postEv := baseEvent
@@ -182,6 +227,25 @@ func GenerateImage(ctx context.Context, p Provider, req ImageRequest, opts ...Im
 	return resp, parseErr
 }
 
+// normalizeImageParts enforces the XOR rule and produces the canonical
+// []Part the rest of the pipeline operates on. When only Prompt is set
+// (the text-only sugar path), it synthesises a single-element slice
+// []Part{Text(req.Prompt)}. Both empty or both set is a validation error.
+func normalizeImageParts(req ImageRequest) ([]Part, error) {
+	hasPrompt := req.Prompt != ""
+	hasParts := len(req.Parts) > 0
+	switch {
+	case hasPrompt && hasParts:
+		return nil, &ValidationError{Field: "parts", Message: "set Prompt or Parts, not both"}
+	case !hasPrompt && !hasParts:
+		return nil, &ValidationError{Field: "prompt", Message: "set either Prompt or Parts"}
+	case hasPrompt:
+		return []Part{Text(req.Prompt)}, nil
+	default:
+		return req.Parts, nil
+	}
+}
+
 func findImageModel(cfg *providers.ImageGenDef, modelID string) *providers.ImageModelDef {
 	for i := range cfg.Models {
 		if cfg.Models[i].ModelID == modelID {
@@ -201,17 +265,25 @@ func contains(haystack []string, needle string) bool {
 }
 
 // buildImageBody constructs the Google generateContent request body for image
-// generation. Other providers will diverge — when OpenAI lands in plan 015
-// this function gets a dispatch on cfg.InputMode.
-func buildImageBody(req ImageRequest, o *imageOptions) map[string]any {
-	parts := []map[string]any{{"text": req.Prompt}}
-	for _, img := range req.ReferenceImages {
-		parts = append(parts, map[string]any{
-			"inlineData": map[string]any{
-				"mimeType": img.MimeType,
-				"data":     base64.StdEncoding.EncodeToString(img.Bytes),
-			},
-		})
+// generation. Walks the normalised []Part in order: text parts emit
+// {text}, image parts emit {inlineData}. Caller-controlled ordering is
+// preserved on the wire — required for compositional generation. Other
+// providers will diverge — when OpenAI lands (plan 016) this function
+// gets a dispatch on cfg.InputMode.
+func buildImageBody(parts []Part, o *imageOptions) map[string]any {
+	wire := make([]map[string]any, 0, len(parts))
+	for _, p := range parts {
+		switch {
+		case p.Image != nil:
+			wire = append(wire, map[string]any{
+				"inlineData": map[string]any{
+					"mimeType": p.Image.MimeType,
+					"data":     base64.StdEncoding.EncodeToString(p.Image.Bytes),
+				},
+			})
+		default:
+			wire = append(wire, map[string]any{"text": p.Text})
+		}
 	}
 
 	modalities := []string{"IMAGE"}
@@ -232,7 +304,7 @@ func buildImageBody(req ImageRequest, o *imageOptions) map[string]any {
 	}
 
 	return map[string]any{
-		"contents":         []map[string]any{{"parts": parts}},
+		"contents":         []map[string]any{{"parts": wire}},
 		"generationConfig": genConfig,
 	}
 }

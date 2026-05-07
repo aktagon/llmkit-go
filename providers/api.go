@@ -41,7 +41,7 @@ func APIOptions() []APIOptionDef {
 func APIEntryPoints() []APIEntryPointDef {
 	return []APIEntryPointDef{
 		{GoFunc: "Agent", GoParamType: "Provider", Comment: "Constructs a stateful Agent that drives a multi-turn tool-calling loop. Per-language naming: Go NewAgent, TS class Agent, Python class Agent, Rust struct Agent."},
-		{GoFunc: "GenerateImage", GoParamType: "ImageRequest", Comment: "Synchronous text-to-image and image-to-image. Reference images go in ImageRequest.ReferenceImages (slice). Returns ImageResponse{ Images []ImageData, Text string, Usage }."},
+		{GoFunc: "GenerateImage", GoParamType: "ImageRequest", Comment: "Synchronous text-to-image and image-to-image. Input is ImageRequest{ Model, Prompt, Parts []Part } where Parts is a positionally-ordered sequence of llm:Part (text or image MediaRef). Prompt is a sugar field for the text-only case (XOR with Parts; runtime synthesises []Part{Text(Prompt)} when only Prompt is set). Returns ImageResponse{ Images []ImageData, Text string, Usage }."},
 		{GoFunc: "Prompt", GoParamType: "Request", Comment: "One-shot synchronous request. Returns Response with text + Usage tokens."},
 		{GoFunc: "PromptBatch", GoParamType: "[]Request", Comment: "Blocks until all responses ready. Handles async polling internally."},
 		{GoFunc: "PromptStream", GoParamType: "Request", Comment: "Streaming variant. Calls a per-chunk callback as deltas arrive; returns the accumulated Response on stream close."},
