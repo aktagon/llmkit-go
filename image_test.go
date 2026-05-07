@@ -133,7 +133,13 @@ func TestGenerateImageWithIncludeText(t *testing.T) {
 	}
 }
 
-func TestGenerateImageReferenceImagesEmbedded(t *testing.T) {
+func TestGenerateImagePartsInterleavedCompositional(t *testing.T) {
+	// ADR-008's motivating scenario: caller-controlled positional pairing
+	// of text descriptions and reference images. The wire shape must
+	// preserve the exact ordering supplied in req.Parts so the model
+	// attends to the descriptions and references in the intended pairing.
+	refA := []byte{0x89, 'P', 'N', 'G', 'A'}
+	refB := []byte{0x89, 'P', 'N', 'G', 'B'}
 	encoded := base64.StdEncoding.EncodeToString(fakePNG)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -143,18 +149,30 @@ func TestGenerateImageReferenceImagesEmbedded(t *testing.T) {
 		contents := req["contents"].([]any)
 		first := contents[0].(map[string]any)
 		parts := first["parts"].([]any)
-		if len(parts) != 3 {
-			t.Fatalf("expected 3 parts (text + 2 inlineData), got %d", len(parts))
+		if len(parts) != 5 {
+			t.Fatalf("expected 5 parts (text, image, text, image, text), got %d", len(parts))
 		}
-		inline := parts[1].(map[string]any)["inlineData"].(map[string]any)
-		if inline["mimeType"] != "image/png" {
-			t.Errorf("expected mimeType=image/png, got %v", inline["mimeType"])
+		// Verify the on-wire order matches the input order.
+		if text, ok := parts[0].(map[string]any)["text"].(string); !ok || text != "Person:" {
+			t.Errorf("parts[0]: expected text 'Person:', got %v", parts[0])
 		}
-		// Round-trip: server-side decode should match what we sent.
-		decoded, _ := base64.StdEncoding.DecodeString(inline["data"].(string))
-		if !bytes.Equal(decoded, fakePNG) {
-			t.Errorf("reference image bytes corrupted in transit")
+		inlineA := parts[1].(map[string]any)["inlineData"].(map[string]any)
+		decodedA, _ := base64.StdEncoding.DecodeString(inlineA["data"].(string))
+		if !bytes.Equal(decodedA, refA) {
+			t.Errorf("parts[1]: refA bytes did not round-trip")
 		}
+		if text, ok := parts[2].(map[string]any)["text"].(string); !ok || text != "Outfit:" {
+			t.Errorf("parts[2]: expected text 'Outfit:', got %v", parts[2])
+		}
+		inlineB := parts[3].(map[string]any)["inlineData"].(map[string]any)
+		decodedB, _ := base64.StdEncoding.DecodeString(inlineB["data"].(string))
+		if !bytes.Equal(decodedB, refB) {
+			t.Errorf("parts[3]: refB bytes did not round-trip")
+		}
+		if text, ok := parts[4].(map[string]any)["text"].(string); !ok || text != "Generate the person wearing the outfit." {
+			t.Errorf("parts[4]: expected closing instruction text, got %v", parts[4])
+		}
+
 		json.NewEncoder(w).Encode(map[string]any{
 			"candidates": []map[string]any{{
 				"content": map[string]any{"parts": []map[string]any{
@@ -168,11 +186,13 @@ func TestGenerateImageReferenceImagesEmbedded(t *testing.T) {
 	_, err := GenerateImage(context.Background(),
 		Provider{Name: providers.Google, APIKey: "k", BaseURL: server.URL},
 		ImageRequest{
-			Prompt: "Add snow",
-			Model:  flashModel,
-			ReferenceImages: []ImageInput{
-				{MimeType: "image/png", Bytes: fakePNG},
-				{MimeType: "image/png", Bytes: fakePNG},
+			Model: flashModel,
+			Parts: []Part{
+				Text("Person:"),
+				Image("image/png", refA),
+				Text("Outfit:"),
+				Image("image/png", refB),
+				Text("Generate the person wearing the outfit."),
 			},
 		},
 	)
@@ -213,21 +233,90 @@ func TestGenerateImageRejects512OnPro(t *testing.T) {
 	}
 }
 
-func TestGenerateImageRejectsTooManyReferenceImages(t *testing.T) {
-	tooMany := make([]ImageInput, 15) // Google MaxInputCount = 14.
-	for i := range tooMany {
-		tooMany[i] = ImageInput{MimeType: "image/png", Bytes: fakePNG}
+func TestGenerateImageRejectsTooManyImageParts(t *testing.T) {
+	// Google MaxInputCount = 14 image parts. Build a Parts slice with
+	// 15 image parts (interleaved with one text part for shape realism)
+	// and assert pre-flight rejection.
+	parts := []Part{Text("describe and edit:")}
+	for i := 0; i < 15; i++ {
+		parts = append(parts, Image("image/png", fakePNG))
 	}
 	_, err := GenerateImage(context.Background(),
 		Provider{Name: providers.Google, APIKey: "k", BaseURL: "http://unused"},
-		ImageRequest{Prompt: "x", Model: flashModel, ReferenceImages: tooMany},
+		ImageRequest{Model: flashModel, Parts: parts},
 	)
 	var verr *ValidationError
 	if !errors.As(err, &verr) {
 		t.Fatalf("expected ValidationError, got %v", err)
 	}
-	if verr.Field != "reference_images" {
-		t.Errorf("expected Field=reference_images, got %q", verr.Field)
+	if verr.Field != "parts" {
+		t.Errorf("expected Field=parts, got %q", verr.Field)
+	}
+}
+
+func TestGenerateImageRejectsBothPromptAndParts(t *testing.T) {
+	_, err := GenerateImage(context.Background(),
+		Provider{Name: providers.Google, APIKey: "k", BaseURL: "http://unused"},
+		ImageRequest{
+			Model:  flashModel,
+			Prompt: "x",
+			Parts:  []Part{Text("y")},
+		},
+	)
+	var verr *ValidationError
+	if !errors.As(err, &verr) {
+		t.Fatalf("expected ValidationError, got %v", err)
+	}
+	if verr.Field != "parts" {
+		t.Errorf("expected Field=parts (XOR violation), got %q", verr.Field)
+	}
+}
+
+func TestGenerateImageRejectsBothEmpty(t *testing.T) {
+	_, err := GenerateImage(context.Background(),
+		Provider{Name: providers.Google, APIKey: "k", BaseURL: "http://unused"},
+		ImageRequest{Model: flashModel},
+	)
+	var verr *ValidationError
+	if !errors.As(err, &verr) {
+		t.Fatalf("expected ValidationError, got %v", err)
+	}
+	if verr.Field != "prompt" {
+		t.Errorf("expected Field=prompt (input required), got %q", verr.Field)
+	}
+}
+
+func TestGenerateImagePartsOnlySingleText(t *testing.T) {
+	// The canonical equivalent of the Prompt sugar form: Parts: []Part{Text(...)}.
+	// Verifies the desugaring path produces the same wire shape as the sugar.
+	encoded := base64.StdEncoding.EncodeToString(fakePNG)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var req map[string]any
+		json.Unmarshal(body, &req)
+		parts := req["contents"].([]any)[0].(map[string]any)["parts"].([]any)
+		if len(parts) != 1 {
+			t.Fatalf("expected 1 part, got %d", len(parts))
+		}
+		if parts[0].(map[string]any)["text"] != "canonical text" {
+			t.Errorf("parts[0]: expected text 'canonical text', got %v", parts[0])
+		}
+		json.NewEncoder(w).Encode(map[string]any{
+			"candidates": []map[string]any{{
+				"content": map[string]any{"parts": []map[string]any{
+					{"inlineData": map[string]any{"mimeType": "image/png", "data": encoded}},
+				}},
+			}},
+		})
+	}))
+	defer server.Close()
+
+	_, err := GenerateImage(context.Background(),
+		Provider{Name: providers.Google, APIKey: "k", BaseURL: server.URL},
+		ImageRequest{Model: flashModel, Parts: []Part{Text("canonical text")}},
+	)
+	if err != nil {
+		t.Fatal(err)
 	}
 }
 
