@@ -1,6 +1,8 @@
 // Example: text-to-image generation against Google's Nano Banana 2 (Gemini
 // 3.1 Flash Image), with a follow-up edit pass that uses the first output as
-// a reference image. Writes PNGs to the working directory.
+// a reference image. Demonstrates both the terse `Prompt:` sugar form and
+// the canonical `Parts: []Part{...}` form for editing. Writes PNGs to the
+// working directory.
 //
 // Run with: GOOGLE_API_KEY=... go run ./examples/image-gen
 package main
@@ -47,12 +49,14 @@ func main() {
 		len(resp.Images[0].Bytes), resp.Tokens.Input, resp.Tokens.Output)
 
 	// Image-to-image: feed the output back in as a reference and edit it.
+	// The canonical multimodal form uses Parts so text and reference images
+	// can interleave in caller-controlled order.
 	edited, err := llmkit.GenerateImage(ctx, p,
 		llmkit.ImageRequest{
-			Prompt: "Add snow and frost to this scene; make the sky overcast.",
-			Model:  flashModel,
-			ReferenceImages: []llmkit.ImageInput{
-				{MimeType: resp.Images[0].MimeType, Bytes: resp.Images[0].Bytes},
+			Model: flashModel,
+			Parts: []llmkit.Part{
+				llmkit.Text("Add snow and frost to this scene; make the sky overcast."),
+				llmkit.Image(resp.Images[0].MimeType, resp.Images[0].Bytes),
 			},
 		},
 		llmkit.WithAspectRatio("16:9"),

@@ -17,12 +17,12 @@ type Provider struct {
 
 // Request is the canonical request format (OpenAI-compatible shape).
 type Request struct {
-	System   string    // system prompt
-	User     string    // user message (for single-turn)
-	Messages []Message // conversation history (for multi-turn)
-	Schema   string    // JSON schema for structured output (optional)
-	Files    []File    // file attachments (optional)
-	Images   []Image   // image inputs (optional)
+	System   string       // system prompt
+	User     string       // user message (for single-turn)
+	Messages []Message    // conversation history (for multi-turn)
+	Schema   string       // JSON schema for structured output (optional)
+	Files    []File       // file attachments (optional)
+	Images   []InputImage // image inputs (optional)
 }
 
 // Response is the canonical response format.
@@ -50,8 +50,12 @@ type File struct {
 	Name     string
 }
 
-// Image references an image input.
-type Image struct {
+// InputImage references an image attached to a text-generation request
+// (vision input). Distinct from Part's Image() constructor used for
+// image-generation calls; the two concepts target different capabilities
+// and the migration to a unified Part-based vocabulary for text generation
+// is tracked separately (see ADR-008 OQ-2).
+type InputImage struct {
 	URL      string // URL or base64 data URI
 	MimeType string
 	Detail   string // "auto", "low", "high" (provider-specific)
