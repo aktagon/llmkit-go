@@ -17,12 +17,12 @@ type Provider struct {
 
 //
 type Request struct {
-	System   string    // system prompt
-	User     string    // user message (for single-turn)
-	Messages []Message // conversation history (for multi-turn)
-	Schema   string    // JSON schema for structured output (optional)
-	Files    []File    // file attachments (optional)
-	Images   []Image   // image inputs (optional)
+	System   string       // system prompt
+	User     string       // user message (for single-turn)
+	Messages []Message    // conversation history (for multi-turn)
+	Schema   string       // JSON schema for structured output (optional)
+	Files    []File       // file attachments (optional)
+	Images   []InputImage // image inputs (optional)
 }
 
 //
@@ -51,7 +51,11 @@ type File struct {
 }
 
 //
-type Image struct {
+//
+//
+//
+//
+type InputImage struct {
 	URL      string // URL or base64 data URI
 	MimeType string
 	Detail   string // "auto", "low", "high" (provider-specific)

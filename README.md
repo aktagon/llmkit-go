@@ -134,12 +134,14 @@ Generate images from text, optionally conditioned on reference images for
 editing or composition. Currently supports Google's Nano Banana 2
 (`gemini-3.1-flash-image-preview`) and Pro (`gemini-3-pro-image-preview`).
 
+Text-to-image — pass `Prompt` for the terse hot path:
+
 ```go
 resp, err := llmkit.GenerateImage(ctx,
     llmkit.Provider{Name: providers.Google, APIKey: key},
     llmkit.ImageRequest{
-        Prompt: "A nano banana dish in a fancy restaurant",
         Model:  "gemini-3.1-flash-image-preview",
+        Prompt: "A nano banana dish in a fancy restaurant",
     },
     llmkit.WithAspectRatio("16:9"),
     llmkit.WithImageSize("2K"),
@@ -147,19 +149,29 @@ resp, err := llmkit.GenerateImage(ctx,
 os.WriteFile("out.png", resp.Images[0].Bytes, 0o644)
 ```
 
-Pass reference images to edit or compose:
+For editing or compositional generation, pass `Parts` — an ordered
+sequence of text and image parts. The `Text(...)` and `Image(...)`
+constructors build each part; the on-wire ordering matches the slice
+order, so the model attends to descriptions and references in the
+pairing you intend:
 
 ```go
 resp, err := llmkit.GenerateImage(ctx, provider,
     llmkit.ImageRequest{
-        Prompt: "Add snow and frost; overcast sky.",
-        Model:  "gemini-3.1-flash-image-preview",
-        ReferenceImages: []llmkit.ImageInput{
-            {MimeType: "image/png", Bytes: pngBytes},
+        Model: "gemini-3.1-flash-image-preview",
+        Parts: []llmkit.Part{
+            llmkit.Text("Person:"),
+            llmkit.Image("image/png", personBytes),
+            llmkit.Text("Outfit:"),
+            llmkit.Image("image/png", outfitBytes),
+            llmkit.Text("Generate the person wearing the outfit."),
         },
     },
 )
 ```
+
+Set exactly one of `Prompt` or `Parts` — both empty or both set returns
+a `*ValidationError`.
 
 Aspect ratios and sizes are validated against a per-model whitelist before
 the HTTP request — `WithImageSize("512")` on Pro returns `*ValidationError`

@@ -18,16 +18,43 @@ import (
 //
 //
 //
+//
+//
+//
+//
+//
+//
+//
+//
+//
 type ImageRequest struct {
-	Prompt          string
-	Model           string
-	ReferenceImages []ImageInput
+	Model  string
+	Prompt string
+	Parts  []Part
 }
 
 //
-type ImageInput struct {
+//
+//
+type Part struct {
+	Text  string
+	Image *MediaRef
+}
+
+//
+//
+type MediaRef struct {
 	MimeType string
 	Bytes    []byte
+}
+
+//
+func Text(s string) Part { return Part{Text: s} }
+
+//
+//
+func Image(mime string, b []byte) Part {
+	return Part{Image: &MediaRef{MimeType: mime, Bytes: b}}
 }
 
 //
@@ -96,17 +123,29 @@ func resolveImageOptions(opts []ImageOption) *imageOptions {
 //
 //
 //
+//
+//
 func GenerateImage(ctx context.Context, p Provider, req ImageRequest, opts ...ImageOption) (ImageResponse, error) {
 	o := resolveImageOptions(opts)
 
 	if err := validateProvider(p); err != nil {
 		return ImageResponse{}, err
 	}
-	if req.Prompt == "" {
-		return ImageResponse{}, &ValidationError{Field: "prompt", Message: "required"}
-	}
 	if req.Model == "" {
 		return ImageResponse{}, &ValidationError{Field: "model", Message: "required for image generation"}
+	}
+
+	parts, err := normalizeImageParts(req)
+	if err != nil {
+		return ImageResponse{}, err
+	}
+	for i, part := range parts {
+		if (part.Text != "") == (part.Image != nil) {
+			return ImageResponse{}, &ValidationError{
+				Field:   fmt.Sprintf("parts[%d]", i),
+				Message: "must have exactly one of Text or Image set",
+			}
+		}
 	}
 
 	cfg, ok := providers.Providers()[p.Name]
@@ -127,10 +166,16 @@ func GenerateImage(ctx context.Context, p Provider, req ImageRequest, opts ...Im
 	if o.imageSize != "" && !contains(model.ImageSizes, o.imageSize) {
 		return ImageResponse{}, &ValidationError{Field: "image_size", Message: o.imageSize + " not supported by " + req.Model}
 	}
-	if len(req.ReferenceImages) > imgCfg.MaxInputCount {
+	imageCount := 0
+	for _, part := range parts {
+		if part.Image != nil {
+			imageCount++
+		}
+	}
+	if imageCount > imgCfg.MaxInputCount {
 		return ImageResponse{}, &ValidationError{
-			Field:   "reference_images",
-			Message: fmt.Sprintf("%d exceeds maximum %d for %s", len(req.ReferenceImages), imgCfg.MaxInputCount, p.Name),
+			Field:   "parts",
+			Message: fmt.Sprintf("%d image parts exceeds maximum %d for %s", imageCount, imgCfg.MaxInputCount, p.Name),
 		}
 	}
 
@@ -144,7 +189,7 @@ func GenerateImage(ctx context.Context, p Provider, req ImageRequest, opts ...Im
 		return ImageResponse{}, err
 	}
 
-	body := buildImageBody(req, o)
+	body := buildImageBody(parts, o)
 	jsonBody, err := json.Marshal(body)
 	if err != nil {
 		postEv := baseEvent
@@ -182,6 +227,25 @@ func GenerateImage(ctx context.Context, p Provider, req ImageRequest, opts ...Im
 	return resp, parseErr
 }
 
+//
+//
+//
+//
+func normalizeImageParts(req ImageRequest) ([]Part, error) {
+	hasPrompt := req.Prompt != ""
+	hasParts := len(req.Parts) > 0
+	switch {
+	case hasPrompt && hasParts:
+		return nil, &ValidationError{Field: "parts", Message: "set Prompt or Parts, not both"}
+	case !hasPrompt && !hasParts:
+		return nil, &ValidationError{Field: "prompt", Message: "set either Prompt or Parts"}
+	case hasPrompt:
+		return []Part{Text(req.Prompt)}, nil
+	default:
+		return req.Parts, nil
+	}
+}
+
 func findImageModel(cfg *providers.ImageGenDef, modelID string) *providers.ImageModelDef {
 	for i := range cfg.Models {
 		if cfg.Models[i].ModelID == modelID {
@@ -203,15 +267,23 @@ func contains(haystack []string, needle string) bool {
 //
 //
 //
-func buildImageBody(req ImageRequest, o *imageOptions) map[string]any {
-	parts := []map[string]any{{"text": req.Prompt}}
-	for _, img := range req.ReferenceImages {
-		parts = append(parts, map[string]any{
-			"inlineData": map[string]any{
-				"mimeType": img.MimeType,
-				"data":     base64.StdEncoding.EncodeToString(img.Bytes),
-			},
-		})
+//
+//
+//
+func buildImageBody(parts []Part, o *imageOptions) map[string]any {
+	wire := make([]map[string]any, 0, len(parts))
+	for _, p := range parts {
+		switch {
+		case p.Image != nil:
+			wire = append(wire, map[string]any{
+				"inlineData": map[string]any{
+					"mimeType": p.Image.MimeType,
+					"data":     base64.StdEncoding.EncodeToString(p.Image.Bytes),
+				},
+			})
+		default:
+			wire = append(wire, map[string]any{"text": p.Text})
+		}
 	}
 
 	modalities := []string{"IMAGE"}
@@ -232,7 +304,7 @@ func buildImageBody(req ImageRequest, o *imageOptions) map[string]any {
 	}
 
 	return map[string]any{
-		"contents":         []map[string]any{{"parts": parts}},
+		"contents":         []map[string]any{{"parts": wire}},
 		"generationConfig": genConfig,
 	}
 }

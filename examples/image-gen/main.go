@@ -3,6 +3,8 @@
 //
 //
 //
+//
+//
 package main
 
 import (
@@ -47,12 +49,14 @@ func main() {
 		len(resp.Images[0].Bytes), resp.Tokens.Input, resp.Tokens.Output)
 
 	//
+	//
+	//
 	edited, err := llmkit.GenerateImage(ctx, p,
 		llmkit.ImageRequest{
-			Prompt: "Add snow and frost to this scene; make the sky overcast.",
-			Model:  flashModel,
-			ReferenceImages: []llmkit.ImageInput{
-				{MimeType: resp.Images[0].MimeType, Bytes: resp.Images[0].Bytes},
+			Model: flashModel,
+			Parts: []llmkit.Part{
+				llmkit.Text("Add snow and frost to this scene; make the sky overcast."),
+				llmkit.Image(resp.Images[0].MimeType, resp.Images[0].Bytes),
 			},
 		},
 		llmkit.WithAspectRatio("16:9"),
