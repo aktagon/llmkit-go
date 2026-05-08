@@ -17,16 +17,16 @@ import (
 
 //
 //
-func PromptBatch(ctx context.Context, p Provider, reqs []Request, opts ...Option) ([]Response, error) {
-	handle, err := SubmitBatch(ctx, p, reqs, opts...)
+//
+func promptBatch(ctx context.Context, p Provider, reqs []Request, opts ...Option) ([]Response, error) {
+	handle, err := submitBatch(ctx, p, reqs, opts...)
 	if err != nil {
 		return nil, err
 	}
-	return WaitBatch(ctx, handle, opts...)
+	return waitBatch(ctx, handle, opts...)
 }
 
-//
-func SubmitBatch(ctx context.Context, p Provider, reqs []Request, opts ...Option) (BatchHandle, error) {
+func submitBatch(ctx context.Context, p Provider, reqs []Request, opts ...Option) (BatchHandle, error) {
 	o := resolveOptions(opts)
 
 	if err := validateProvider(p); err != nil {
@@ -122,8 +122,7 @@ func SubmitBatch(ctx context.Context, p Provider, reqs []Request, opts ...Option
 	return BatchHandle{ID: batchID, Provider: p}, nil
 }
 
-//
-func WaitBatch(ctx context.Context, handle BatchHandle, opts ...Option) ([]Response, error) {
+func waitBatch(ctx context.Context, handle BatchHandle, opts ...Option) ([]Response, error) {
 	o := resolveOptions(opts)
 	p := handle.Provider
 
