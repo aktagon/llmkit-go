@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	llmkit "github.com/aktagon/llmkit-go"
 	"github.com/aktagon/llmkit-go/providers"
@@ -320,6 +321,53 @@ func TestStream_RealBridge(t *testing.T) {
 		t.Errorf("chunks: got %v want %v", got, want)
 	}
 	_ = strings.Join // keep import alive when other tests evolve
+}
+
+// TestStream_BoundedBuffer pushes more chunks than the channel
+// capacity (64) with a fast SSE producer and a slow consumer
+// (1ms sleep per chunk). Asserts every chunk arrives in order
+// and none are lost — i.e. the channel applies backpressure on
+// the producer rather than dropping or scrambling.
+func TestStream_BoundedBuffer(t *testing.T) {
+	const total = 200
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(200)
+		flusher := w.(http.Flusher)
+		for i := 0; i < total; i++ {
+			fmt.Fprintf(w, `data: {"choices":[{"delta":{"content":"%d "}}]}`+"\n\n", i)
+			flusher.Flush()
+		}
+		fmt.Fprintln(w, `data: {"choices":[{"delta":{}}],"usage":{"prompt_tokens":1,"completion_tokens":1}}`)
+		fmt.Fprintln(w)
+		flusher.Flush()
+		fmt.Fprintln(w, `data: [DONE]`)
+		fmt.Fprintln(w)
+		flusher.Flush()
+	}))
+	defer server.Close()
+
+	c := Openai("k")
+	c.provider.baseURL = server.URL
+
+	var got []string
+	for chunk, err := range c.Text.Stream(context.Background(), "hi") {
+		if err != nil {
+			t.Fatalf("stream error: %v", err)
+		}
+		got = append(got, chunk)
+		time.Sleep(1 * time.Millisecond)
+	}
+
+	if len(got) != total {
+		t.Fatalf("chunks: got %d, want %d", len(got), total)
+	}
+	for i, c := range got {
+		want := fmt.Sprintf("%d ", i)
+		if c != want {
+			t.Errorf("chunk %d: got %q, want %q", i, c, want)
+		}
+	}
 }
 
 func TestUpload_Coverage(t *testing.T) {
