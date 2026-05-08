@@ -25,7 +25,7 @@ func (b *Agent) Prompt(ctx context.Context, msg string) (Response, error) {
 	if b.state == nil {
 		b.initAgent()
 	}
-	return b.state.agent.Chat(ctx, msg)
+	return b.state.agent.chat(ctx, msg)
 }
 
 // Reset wipes the conversation history. Chain config (system, tools,
@@ -60,10 +60,10 @@ func (b *Agent) initAgent() {
 	provider := b.client.provider.toProvider(b.model)
 	a := newLegacyAgent(provider, opts...)
 	if b.system != "" {
-		a.SetSystem(b.system)
+		a.setSystem(b.system)
 	}
 	for _, t := range b.tools {
-		a.AddTool(t)
+		a.addTool(t)
 	}
 	b.state = &agentState{agent: a}
 }

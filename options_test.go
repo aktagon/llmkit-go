@@ -124,29 +124,14 @@ func TestMiddlewareVetoErrorWrapsCause(t *testing.T) {
 	}
 }
 
-func TestAgentResetClearsHistoryAndTools(t *testing.T) {
-	agent := newLegacyAgent(Provider{Name: providers.Anthropic, APIKey: "test"})
-	agent.SetSystem("you are helpful")
-	agent.AddTool(Tool{
-		Name:        "noop",
-		Description: "does nothing",
-		Schema:      map[string]any{"type": "object"},
-		Run:         func(map[string]any) (string, error) { return "", nil },
-	})
-	if len(agent.tools) != 1 {
-		t.Fatalf("expected 1 tool before Reset, got %d", len(agent.tools))
-	}
-	agent.history = append(agent.history, internalMessage{role: "user", content: "hi"})
-
-	agent.Reset()
-
-	if len(agent.tools) != 0 {
-		t.Errorf("Reset should clear tools, got %d", len(agent.tools))
-	}
-	if len(agent.history) != 0 {
-		t.Errorf("Reset should clear history, got %d", len(agent.history))
-	}
-}
+// TestAgentResetClearsHistoryAndTools removed (plan-018 D1.3f). The
+// typed-builder (*Agent).Reset clears only the live state; chain
+// config (system, tools, max-tokens, ...) is intentionally preserved
+// so the next Prompt re-initialises with the same configuration. The
+// legacy Reset semantics this test exercised (which clear tools too)
+// are private to legacyAgent and not part of the v1.0.0 contract.
+// Coverage for the typed-builder Reset semantics lives in
+// TestAgent_StateForking in builders_test.go.
 
 func TestUploadFileRejectsUnsupportedProvider(t *testing.T) {
 	// anthropic supports file uploads, but ai21 doesn't — picking a

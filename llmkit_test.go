@@ -462,9 +462,9 @@ func TestAgentWithTools(t *testing.T) {
 	}))
 	defer server.Close()
 
-	agent := newLegacyAgent(Provider{Name: providers.OpenAI, APIKey: "key", BaseURL: server.URL})
-	agent.SetSystem("You are a calculator")
-	agent.AddTool(Tool{
+	c := New(providers.OpenAI, "key")
+	c.provider.baseURL = server.URL
+	addTool := Tool{
 		Name:        "add",
 		Description: "Add two numbers",
 		Schema: map[string]any{
@@ -479,9 +479,9 @@ func TestAgentWithTools(t *testing.T) {
 			b := args["b"].(float64)
 			return fmt.Sprintf("%g", a+b), nil
 		},
-	})
+	}
 
-	resp, err := agent.Chat(context.Background(), "What is 2+3?")
+	resp, err := c.Agent.System("You are a calculator").Tool(addTool).Prompt(context.Background(), "What is 2+3?")
 	if err != nil {
 		t.Fatal(err)
 	}
