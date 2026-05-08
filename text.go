@@ -3,22 +3,97 @@ package llmkit
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
+	"fmt"
+	"os"
+	"time"
+
+	"github.com/aktagon/llmkit-go/providers"
 )
 
 //
 //
 //
-//
-//
-//
-//
-//
-//
-//
 func (b *Text) Prompt(ctx context.Context, finalText string) (Response, error) {
 	req, opts := b.buildRequest(finalText)
-	provider := b.client.provider.toProvider(b.model)
-	return Prompt(ctx, provider, req, opts...)
+	p := b.client.provider.toProvider(b.model)
+	o := resolveOptions(opts)
+
+	if err := validateProvider(p); err != nil {
+		return Response{}, err
+	}
+	if err := validateRequest(req); err != nil {
+		return Response{}, err
+	}
+	if err := validateOptions(p, o); err != nil {
+		return Response{}, err
+	}
+
+	cfg, ok := providers.Providers()[p.Name]
+	if !ok {
+		return Response{}, &ValidationError{Field: "provider", Message: "unknown: " + p.Name}
+	}
+
+	baseEvent := providers.Event{
+		Op:       providers.OpLLMRequest,
+		Provider: p.Name,
+		Model:    resolveModel(p, cfg),
+	}
+	start := time.Now()
+	if err := firePre(ctx, o.middleware, baseEvent); err != nil {
+		return Response{}, err
+	}
+
+	body, headers := buildRequest(p, req, o, cfg)
+
+	if o.caching {
+		if err := applyCaching(ctx, body, p, o, cfg); err != nil {
+			postEv := baseEvent
+			postEv.Err = err
+			postEv.Duration = time.Since(start)
+			firePost(ctx, o.middleware, postEv)
+			return Response{}, err
+		}
+	}
+
+	jsonBody, err := json.Marshal(body)
+	if err != nil {
+		postEv := baseEvent
+		postEv.Err = err
+		postEv.Duration = time.Since(start)
+		firePost(ctx, o.middleware, postEv)
+		return Response{}, fmt.Errorf("marshal request: %w", err)
+	}
+
+	url := buildURL(p, cfg)
+
+	var respBody []byte
+	if cfg.AuthScheme == providers.AuthSigV4 {
+		region := os.Getenv(cfg.RegionEnvVar)
+		secretKey := os.Getenv(cfg.SecretKeyEnvVar)
+		sessionToken := os.Getenv(cfg.SessionTokenEnvVar)
+		respBody, err = doSigV4Post(ctx, o.httpClient, url, jsonBody, p.APIKey, secretKey, sessionToken, region, cfg.ServiceName)
+	} else {
+		respBody, err = doPost(ctx, o.httpClient, url, jsonBody, headers)
+	}
+	if err != nil {
+		postEv := baseEvent
+		postEv.Err = err
+		postEv.Duration = time.Since(start)
+		firePost(ctx, o.middleware, postEv)
+		if respBody != nil {
+			return Response{}, parseError(p.Name, err.(*APIError).StatusCode, respBody, nil)
+		}
+		return Response{}, err
+	}
+
+	resp, parseErr := parseResponse(p.Name, respBody)
+	postEv := baseEvent
+	postEv.Usage = resp.Tokens
+	postEv.Err = parseErr
+	postEv.Duration = time.Since(start)
+	firePost(ctx, o.middleware, postEv)
+	return resp, parseErr
 }
 
 //
