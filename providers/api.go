@@ -31,9 +31,26 @@ type APIResponseFieldDef struct {
 // APIOptions returns all functional options.
 func APIOptions() []APIOptionDef {
 	return []APIOptionDef{
+		{GoFunc: "WithAspectRatio", SubOptions: []APISubOptionDef{}},
+		{GoFunc: "WithBytes", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithCaching", SubOptions: []APISubOptionDef{
 			{GoFunc: "CacheTTL", GoParamType: "time.Duration"},
 		}},
+		{GoFunc: "WithFile", SubOptions: []APISubOptionDef{}},
+		{GoFunc: "WithFilename", SubOptions: []APISubOptionDef{}},
+		{GoFunc: "WithHistory", SubOptions: []APISubOptionDef{}},
+		{GoFunc: "WithImage", SubOptions: []APISubOptionDef{}},
+		{GoFunc: "WithImageSize", SubOptions: []APISubOptionDef{}},
+		{GoFunc: "WithIncludeText", SubOptions: []APISubOptionDef{}},
+		{GoFunc: "WithMaxTokens", SubOptions: []APISubOptionDef{}},
+		{GoFunc: "WithMimeType", SubOptions: []APISubOptionDef{}},
+		{GoFunc: "WithModel", SubOptions: []APISubOptionDef{}},
+		{GoFunc: "WithPath", SubOptions: []APISubOptionDef{}},
+		{GoFunc: "WithSchema", SubOptions: []APISubOptionDef{}},
+		{GoFunc: "WithSystem", SubOptions: []APISubOptionDef{}},
+		{GoFunc: "WithTemperature", SubOptions: []APISubOptionDef{}},
+		{GoFunc: "WithText", SubOptions: []APISubOptionDef{}},
+		{GoFunc: "WithTool", SubOptions: []APISubOptionDef{}},
 	}
 }
 
