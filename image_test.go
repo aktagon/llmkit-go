@@ -69,11 +69,9 @@ func TestGenerateImageGoogleFlash(t *testing.T) {
 	}))
 	defer server.Close()
 
-	resp, err := GenerateImage(context.Background(),
-		Provider{Name: providers.Google, APIKey: "test-key", BaseURL: server.URL},
-		ImageRequest{Prompt: "A nano banana dish", Model: flashModel},
-		WithAspectRatio("16:9"), WithImageSize("2K"),
-	)
+	c := New(providers.Google, "test-key")
+	c.provider.baseURL = server.URL
+	resp, err := c.Image.Model(flashModel).AspectRatio("16:9").ImageSize("2K").Generate(context.Background(), "A nano banana dish")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,11 +118,9 @@ func TestGenerateImageWithIncludeText(t *testing.T) {
 	}))
 	defer server.Close()
 
-	resp, err := GenerateImage(context.Background(),
-		Provider{Name: providers.Google, APIKey: "k", BaseURL: server.URL},
-		ImageRequest{Prompt: "x", Model: flashModel},
-		WithIncludeText(),
-	)
+	c := New(providers.Google, "k")
+	c.provider.baseURL = server.URL
+	resp, err := c.Image.Model(flashModel).IncludeText().Generate(context.Background(), "x")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -183,19 +179,14 @@ func TestGenerateImagePartsInterleavedCompositional(t *testing.T) {
 	}))
 	defer server.Close()
 
-	_, err := GenerateImage(context.Background(),
-		Provider{Name: providers.Google, APIKey: "k", BaseURL: server.URL},
-		ImageRequest{
-			Model: flashModel,
-			Parts: []Part{
-				Part{Text: "Person:"},
-				Part{Image: &MediaRef{MimeType: "image/png", Bytes: refA}},
-				Part{Text: "Outfit:"},
-				Part{Image: &MediaRef{MimeType: "image/png", Bytes: refB}},
-				Part{Text: "Generate the person wearing the outfit."},
-			},
-		},
-	)
+	c := New(providers.Google, "k")
+	c.provider.baseURL = server.URL
+	_, err := c.Image.Model(flashModel).
+		Text("Person:").
+		Image("image/png", refA).
+		Text("Outfit:").
+		Image("image/png", refB).
+		Generate(context.Background(), "Generate the person wearing the outfit.")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -203,11 +194,9 @@ func TestGenerateImagePartsInterleavedCompositional(t *testing.T) {
 
 func TestGenerateImageRejectsUnsupportedAspectOnPro(t *testing.T) {
 	// 8:1 is Flash-only; Pro must reject pre-flight.
-	_, err := GenerateImage(context.Background(),
-		Provider{Name: providers.Google, APIKey: "k", BaseURL: "http://unused"},
-		ImageRequest{Prompt: "x", Model: proModel},
-		WithAspectRatio("8:1"),
-	)
+	c := New(providers.Google, "k")
+	c.provider.baseURL = "http://unused"
+	_, err := c.Image.Model(proModel).AspectRatio("8:1").Generate(context.Background(), "x")
 	var verr *ValidationError
 	if !errors.As(err, &verr) {
 		t.Fatalf("expected ValidationError, got %v", err)
@@ -219,11 +208,9 @@ func TestGenerateImageRejectsUnsupportedAspectOnPro(t *testing.T) {
 
 func TestGenerateImageRejects512OnPro(t *testing.T) {
 	// Size_512 is Flash-only.
-	_, err := GenerateImage(context.Background(),
-		Provider{Name: providers.Google, APIKey: "k", BaseURL: "http://unused"},
-		ImageRequest{Prompt: "x", Model: proModel},
-		WithImageSize("512"),
-	)
+	c := New(providers.Google, "k")
+	c.provider.baseURL = "http://unused"
+	_, err := c.Image.Model(proModel).ImageSize("512").Generate(context.Background(), "x")
 	var verr *ValidationError
 	if !errors.As(err, &verr) {
 		t.Fatalf("expected ValidationError, got %v", err)
@@ -237,14 +224,13 @@ func TestGenerateImageRejectsTooManyImageParts(t *testing.T) {
 	// Google MaxInputCount = 14 image parts. Build a Parts slice with
 	// 15 image parts (interleaved with one text part for shape realism)
 	// and assert pre-flight rejection.
-	parts := []Part{Part{Text: "describe and edit:"}}
+	c := New(providers.Google, "k")
+	c.provider.baseURL = "http://unused"
+	chain := c.Image.Model(flashModel).Text("describe and edit:")
 	for i := 0; i < 15; i++ {
-		parts = append(parts, Part{Image: &MediaRef{MimeType: "image/png", Bytes: fakePNG}})
+		chain = chain.Image("image/png", fakePNG)
 	}
-	_, err := GenerateImage(context.Background(),
-		Provider{Name: providers.Google, APIKey: "k", BaseURL: "http://unused"},
-		ImageRequest{Model: flashModel, Parts: parts},
-	)
+	_, err := chain.Generate(context.Background(), "")
 	var verr *ValidationError
 	if !errors.As(err, &verr) {
 		t.Fatalf("expected ValidationError, got %v", err)
@@ -254,29 +240,15 @@ func TestGenerateImageRejectsTooManyImageParts(t *testing.T) {
 	}
 }
 
-func TestGenerateImageRejectsBothPromptAndParts(t *testing.T) {
-	_, err := GenerateImage(context.Background(),
-		Provider{Name: providers.Google, APIKey: "k", BaseURL: "http://unused"},
-		ImageRequest{
-			Model:  flashModel,
-			Prompt: "x",
-			Parts:  []Part{Part{Text: "y"}},
-		},
-	)
-	var verr *ValidationError
-	if !errors.As(err, &verr) {
-		t.Fatalf("expected ValidationError, got %v", err)
-	}
-	if verr.Field != "parts" {
-		t.Errorf("expected Field=parts (XOR violation), got %q", verr.Field)
-	}
-}
+// TestGenerateImageRejectsBothPromptAndParts removed: the typed-builder
+// (*Image).Generate has no Prompt sugar field — finalText is a separate
+// terminal arg, not a Request field. The XOR violation it tested cannot
+// be expressed through the typed-builder surface.
 
 func TestGenerateImageRejectsBothEmpty(t *testing.T) {
-	_, err := GenerateImage(context.Background(),
-		Provider{Name: providers.Google, APIKey: "k", BaseURL: "http://unused"},
-		ImageRequest{Model: flashModel},
-	)
+	c := New(providers.Google, "k")
+	c.provider.baseURL = "http://unused"
+	_, err := c.Image.Model(flashModel).Generate(context.Background(), "")
 	var verr *ValidationError
 	if !errors.As(err, &verr) {
 		t.Fatalf("expected ValidationError, got %v", err)
@@ -311,20 +283,16 @@ func TestGenerateImagePartsOnlySingleText(t *testing.T) {
 	}))
 	defer server.Close()
 
-	_, err := GenerateImage(context.Background(),
-		Provider{Name: providers.Google, APIKey: "k", BaseURL: server.URL},
-		ImageRequest{Model: flashModel, Parts: []Part{Part{Text: "canonical text"}}},
-	)
+	c := New(providers.Google, "k")
+	c.provider.baseURL = server.URL
+	_, err := c.Image.Model(flashModel).Text("canonical text").Generate(context.Background(), "")
 	if err != nil {
 		t.Fatal(err)
 	}
 }
 
 func TestGenerateImageRequiresModel(t *testing.T) {
-	_, err := GenerateImage(context.Background(),
-		Provider{Name: providers.Google, APIKey: "k"},
-		ImageRequest{Prompt: "x"},
-	)
+	_, err := New(providers.Google, "k").Image.Generate(context.Background(), "x")
 	var verr *ValidationError
 	if !errors.As(err, &verr) {
 		t.Fatalf("expected ValidationError, got %v", err)
@@ -356,11 +324,9 @@ func TestGenerateImageMiddlewareFires(t *testing.T) {
 		return nil
 	}
 
-	_, err := GenerateImage(context.Background(),
-		Provider{Name: providers.Google, APIKey: "k", BaseURL: server.URL},
-		ImageRequest{Prompt: "x", Model: flashModel},
-		WithImageMiddleware(mw),
-	)
+	c := New(providers.Google, "k")
+	c.provider.baseURL = server.URL
+	_, err := c.Image.Model(flashModel).Middleware(mw).Generate(context.Background(), "x")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -385,11 +351,9 @@ func TestGenerateImageMiddlewareCanVeto(t *testing.T) {
 		return nil
 	}
 
-	_, err := GenerateImage(context.Background(),
-		Provider{Name: providers.Google, APIKey: "k", BaseURL: "http://unused"},
-		ImageRequest{Prompt: "x", Model: flashModel},
-		WithImageMiddleware(mw),
-	)
+	c := New(providers.Google, "k")
+	c.provider.baseURL = "http://unused"
+	_, err := c.Image.Model(flashModel).Middleware(mw).Generate(context.Background(), "x")
 	var veto *MiddlewareVetoError
 	if !errors.As(err, &veto) {
 		t.Fatalf("expected MiddlewareVetoError, got %v", err)
