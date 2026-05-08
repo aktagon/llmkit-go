@@ -148,31 +148,67 @@ func TestSurface_Constructors(t *testing.T) {
 	}
 }
 
-// TestSurface_TerminalsPanic confirms the still-unimplemented terminals
-// remain panic stubs (phase-3 punch list). Only Agent.* remain after
-// slice 2b — Stream wired in this commit.
-func TestSurface_TerminalsPanic(t *testing.T) {
-	ctx := context.Background()
+// All phase-3 terminals are wired. The legacy panic-stub assertion is
+// retired; remaining work for v1.0.0 is the *Upload Bytes path
+// (slice 2d, deferred — needs main-package change to llmkit.UploadFile)
+// and the TS / Python / Rust mirrors of phases 2b + 3.
+
+// TestAgent_StateForking is the load-bearing immutability test for
+// the stateful builder. After Prompt initialises *Agent's internal
+// state, forking via a chain method (System) MUST produce a clone
+// with FRESH state — otherwise both builders would mutate the same
+// underlying llmkit.Agent and successive Prompt calls would see
+// each other's history. The post-mutation hook in codegen sets
+// out.state = nil after every chain method body to enforce this.
+func TestAgent_StateForking(t *testing.T) {
 	c := Google("k")
-
-	cases := []struct {
-		name string
-		fn   func()
-	}{
-		{"Agent.Prompt", func() { _, _ = c.Agent.Prompt(ctx, "x") }},
-		{"Agent.Reset", func() { c.Agent.Reset() }},
+	bot := c.Agent.System("a")
+	bot.initAgent()
+	if bot.state == nil {
+		t.Fatal("initAgent did not populate state")
 	}
 
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			defer func() {
-				if r := recover(); r == nil {
-					t.Errorf("%s: expected panic stub, got none", tc.name)
-				}
-			}()
-			tc.fn()
-		})
+	fork := bot.System("different")
+	if fork.state != nil {
+		t.Errorf("fork carried over parent's state — chain method must zero it")
 	}
+	if bot.state == nil {
+		t.Errorf("parent state cleared by fork — chain method must clone, not mutate parent")
+	}
+}
+
+// TestAgent_Reset confirms Reset clears state so the next Prompt
+// reinitialises a fresh llmkit.Agent.
+func TestAgent_Reset(t *testing.T) {
+	c := Google("k")
+	bot := c.Agent.System("a")
+	bot.initAgent()
+	if bot.state == nil {
+		t.Fatal("initAgent did not populate state")
+	}
+	bot.Reset()
+	if bot.state != nil {
+		t.Errorf("Reset did not clear state")
+	}
+}
+
+// TestAgent_Prompt_Coverage exercises the wired terminal under a
+// cancelled context — the goroutine inside llmkit.Agent.Chat
+// short-circuits and returns an error; we don't care about the
+// specific error, only that the line ran.
+func TestAgent_Prompt_Coverage(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	c := Anthropic("k")
+	_, _ = c.Agent.
+		System("you are helpful").
+		Tool(llmkit.Tool{Name: "calc"}).
+		MaxTokens(50).
+		Temperature(0.5).
+		Caching().
+		Middleware(noopMiddleware).
+		Model("claude").
+		Prompt(ctx, "hello")
 }
 
 // TestBatch_Coverage / TestSubmitBatch_Coverage / TestWait_Coverage /
