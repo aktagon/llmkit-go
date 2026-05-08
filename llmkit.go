@@ -17,6 +17,14 @@ import (
 type StreamCallback func(chunk string)
 
 // Prompt sends a one-shot request to an LLM provider.
+//
+// NOTE: kept as the underlying implementation that the typed-builder
+// (*Text).Prompt delegates to, while typed-builder chain methods are
+// extended to cover all functional options (Seed, StopSequences,
+// ThinkingBudget, ReasoningEffort, TopP, TopK, FrequencyPenalty,
+// PresencePenalty, MaxToolIterations, HTTPClient, Tools varargs).
+// Once the typed-builder is feature-complete, this body absorbs into
+// (*Text).Prompt and the export is removed.
 func Prompt(ctx context.Context, p Provider, req Request, opts ...Option) (Response, error) {
 	o := resolveOptions(opts)
 
@@ -47,7 +55,6 @@ func Prompt(ctx context.Context, p Provider, req Request, opts ...Option) (Respo
 
 	body, headers := buildRequest(p, req, o, cfg)
 
-	// Apply caching mutations if enabled
 	if o.caching {
 		if err := applyCaching(ctx, body, p, o, cfg); err != nil {
 			postEv := baseEvent
