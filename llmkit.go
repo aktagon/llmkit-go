@@ -17,6 +17,14 @@ import (
 type StreamCallback func(chunk string)
 
 //
+//
+//
+//
+//
+//
+//
+//
+//
 func Prompt(ctx context.Context, p Provider, req Request, opts ...Option) (Response, error) {
 	o := resolveOptions(opts)
 
@@ -47,7 +55,6 @@ func Prompt(ctx context.Context, p Provider, req Request, opts ...Option) (Respo
 
 	body, headers := buildRequest(p, req, o, cfg)
 
-	//
 	if o.caching {
 		if err := applyCaching(ctx, body, p, o, cfg); err != nil {
 			postEv := baseEvent
