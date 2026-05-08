@@ -14,7 +14,6 @@ import (
 	"os"
 
 	"github.com/aktagon/llmkit-go"
-	"github.com/aktagon/llmkit-go/parts"
 	"github.com/aktagon/llmkit-go/providers"
 )
 
@@ -26,17 +25,11 @@ func main() {
 		log.Fatal("GOOGLE_API_KEY must be set")
 	}
 	ctx := context.Background()
-	p := llmkit.Provider{Name: providers.Google, APIKey: key}
+	c := llmkit.New(providers.Google, key)
 
 	// Text-to-image.
-	resp, err := llmkit.GenerateImage(ctx, p,
-		llmkit.ImageRequest{
-			Prompt: "A nano banana dish in a fancy restaurant with a Gemini theme",
-			Model:  flashModel,
-		},
-		llmkit.WithAspectRatio("16:9"),
-		llmkit.WithImageSize("2K"),
-	)
+	resp, err := c.Image.Model(flashModel).AspectRatio("16:9").ImageSize("2K").Generate(
+		ctx, "A nano banana dish in a fancy restaurant with a Gemini theme")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -50,19 +43,9 @@ func main() {
 		len(resp.Images[0].Bytes), resp.Tokens.Input, resp.Tokens.Output)
 
 	// Image-to-image: feed the output back in as a reference and edit it.
-	// The canonical multimodal form uses Parts so text and reference images
-	// can interleave in caller-controlled order.
-	edited, err := llmkit.GenerateImage(ctx, p,
-		llmkit.ImageRequest{
-			Model: flashModel,
-			Parts: []llmkit.Part{
-				parts.Text("Add snow and frost to this scene; make the sky overcast."),
-				parts.Image(resp.Images[0].MimeType, resp.Images[0].Bytes),
-			},
-		},
-		llmkit.WithAspectRatio("16:9"),
-		llmkit.WithImageSize("2K"),
-	)
+	edited, err := c.Image.Model(flashModel).AspectRatio("16:9").ImageSize("2K").
+		Image(resp.Images[0].MimeType, resp.Images[0].Bytes).
+		Generate(ctx, "Add snow and frost to this scene; make the sky overcast.")
 	if err != nil {
 		log.Fatal(err)
 	}
