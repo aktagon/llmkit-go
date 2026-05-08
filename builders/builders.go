@@ -10,8 +10,6 @@
 package builders
 
 import (
-	"context"
-
 	llmkit "github.com/aktagon/llmkit-go"
 )
 
@@ -206,25 +204,37 @@ type Agent struct {
 	system      string
 	temperature *float64
 	tools       []llmkit.Tool
+	state       *agentState
 }
 
-func (b *Agent) Caching() *Agent        { out := *b; out.caching = true; return &out }
-func (b *Agent) MaxTokens(n int) *Agent { out := *b; v := n; out.maxTokens = &v; return &out }
+func (b *Agent) Caching() *Agent { out := *b; out.caching = true; out.state = nil; return &out }
+func (b *Agent) MaxTokens(n int) *Agent {
+	out := *b
+	v := n
+	out.maxTokens = &v
+	out.state = nil
+	return &out
+}
 func (b *Agent) Middleware(fns ...llmkit.MiddlewareFn) *Agent {
 	out := *b
 	out.middleware = append(out.middleware, fns...)
+	out.state = nil
 	return &out
 }
-func (b *Agent) Model(name string) *Agent     { out := *b; out.model = name; return &out }
-func (b *Agent) System(s string) *Agent       { out := *b; out.system = s; return &out }
-func (b *Agent) Temperature(t float64) *Agent { out := *b; v := t; out.temperature = &v; return &out }
-func (b *Agent) Tool(t llmkit.Tool) *Agent    { out := *b; out.tools = append(out.tools, t); return &out }
-
-func (b *Agent) Prompt(ctx context.Context, msg string) (Response, error) {
-	panic("plan 016 phase 3: *Agent.Prompt not yet implemented")
+func (b *Agent) Model(name string) *Agent { out := *b; out.model = name; out.state = nil; return &out }
+func (b *Agent) System(s string) *Agent   { out := *b; out.system = s; out.state = nil; return &out }
+func (b *Agent) Temperature(t float64) *Agent {
+	out := *b
+	v := t
+	out.temperature = &v
+	out.state = nil
+	return &out
 }
-func (b *Agent) Reset() {
-	panic("plan 016 phase 3: *Agent.Reset not yet implemented")
+func (b *Agent) Tool(t llmkit.Tool) *Agent {
+	out := *b
+	out.tools = append(out.tools, t)
+	out.state = nil
+	return &out
 }
 
 // === *Upload — FileUpload builder ===
