@@ -1,10 +1,8 @@
-package builders
+package llmkit
 
 import (
 	"context"
 	"iter"
-
-	llmkit "github.com/aktagon/llmkit-go"
 )
 
 // Stream executes the chained ChatCompletion request as a streaming
@@ -19,7 +17,7 @@ import (
 //	}
 //
 // Errors land at the END of iteration (one final yield) — the
-// underlying llmkit.PromptStream returns the accumulated Response and
+// underlying PromptStream returns the accumulated Response and
 // any error only after the stream closes. To stop early, break the
 // range loop; the producer goroutine is cancelled via the inner
 // context and any pending chunks are drained so the goroutine exits.
@@ -32,7 +30,7 @@ import (
 // 016's signature.
 func (b *Text) Stream(ctx context.Context, finalText string) iter.Seq2[string, error] {
 	req, opts := b.buildRequest(finalText)
-	provider := b.client.provider.toLlmkit(b.model)
+	provider := b.client.provider.toProvider(b.model)
 
 	return func(yield func(string, error) bool) {
 		innerCtx, cancel := context.WithCancel(ctx)
@@ -48,7 +46,7 @@ func (b *Text) Stream(ctx context.Context, finalText string) iter.Seq2[string, e
 
 		go func() {
 			defer close(done)
-			_, err := llmkit.PromptStream(innerCtx, provider, req, func(chunk string) {
+			_, err := PromptStream(innerCtx, provider, req, func(chunk string) {
 				select {
 				case chunks <- chunk:
 				case <-innerCtx.Done():

@@ -14,6 +14,7 @@ import (
 	"os"
 
 	"github.com/aktagon/llmkit-go"
+	"github.com/aktagon/llmkit-go/parts"
 	"github.com/aktagon/llmkit-go/providers"
 )
 
@@ -55,8 +56,8 @@ func main() {
 		llmkit.ImageRequest{
 			Model: flashModel,
 			Parts: []llmkit.Part{
-				llmkit.Text("Add snow and frost to this scene; make the sky overcast."),
-				llmkit.Image(resp.Images[0].MimeType, resp.Images[0].Bytes),
+				parts.Text("Add snow and frost to this scene; make the sky overcast."),
+				parts.Image(resp.Images[0].MimeType, resp.Images[0].Bytes),
 			},
 		},
 		llmkit.WithAspectRatio("16:9"),
