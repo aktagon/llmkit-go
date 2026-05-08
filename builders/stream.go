@@ -40,7 +40,9 @@ func (b *Text) Stream(ctx context.Context, finalText string) iter.Seq2[string, e
 
 		//
 		//
-		chunks := make(chan string, 4)
+		//
+		//
+		chunks := make(chan string, 64)
 		var finalErr error
 		done := make(chan struct{})
 
