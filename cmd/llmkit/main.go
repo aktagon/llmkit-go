@@ -59,13 +59,11 @@ func main() {
 	}
 
 	if stream {
-		p := llmkit.Provider{Name: provider, APIKey: apiKey, Model: model}
-		req := llmkit.Request{System: systemPrompt, User: userPrompt, Schema: jsonSchema}
-		_, err := llmkit.PromptStream(context.Background(), p, req, func(chunk string) {
+		for chunk, err := range t.Stream(context.Background(), userPrompt) {
+			if err != nil {
+				log.Fatalf("Error streaming from %s API: %v", provider, err)
+			}
 			fmt.Print(chunk)
-		})
-		if err != nil {
-			log.Fatalf("Error streaming from %s API: %v", provider, err)
 		}
 		fmt.Println()
 	} else {
