@@ -26,13 +26,16 @@ type ImageResponse = llmkit.ImageResponse
 type ImageData = llmkit.ImageData
 type File = llmkit.File
 type Part = llmkit.Part
+type Provider = llmkit.Provider
 
+//
+//
 //
 //
 //
 type BatchHandle struct {
 	ID       string
-	Provider string
+	Provider Provider
 }
 
 //
@@ -152,12 +155,6 @@ func (b *Text) Text(s string) *Text {
 func (b *Text) Stream(ctx context.Context, finalText string) iter.Seq2[string, error] {
 	panic("plan 016 phase 3: *Text.Stream not yet implemented")
 }
-func (b *Text) Batch(ctx context.Context, prompts ...string) ([]Response, error) {
-	panic("plan 016 phase 3: *Text.Batch not yet implemented")
-}
-func (b *Text) SubmitBatch(ctx context.Context, prompts ...string) (BatchHandle, error) {
-	panic("plan 016 phase 3: *Text.SubmitBatch not yet implemented")
-}
 
 //
 
@@ -254,13 +251,3 @@ func (b *Upload) Middleware(fns ...llmkit.MiddlewareFn) *Upload {
 }
 func (b *Upload) MimeType(mime string) *Upload { out := *b; out.mimeType = mime; return &out }
 func (b *Upload) Path(p string) *Upload        { out := *b; out.path = p; return &out }
-
-func (b *Upload) Run(ctx context.Context) (File, error) {
-	panic("plan 016 phase 3: *Upload.Run not yet implemented")
-}
-
-//
-
-func (h *BatchHandle) Wait(ctx context.Context) ([]Response, error) {
-	panic("plan 016 phase 3: BatchHandle.Wait not yet implemented")
-}
