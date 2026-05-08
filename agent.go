@@ -56,12 +56,6 @@ func (a *legacyAgent) addTool(tool Tool) {
 	a.tools = append(a.tools, tool)
 }
 
-// Reset clears conversation history and tools.
-func (a *legacyAgent) reset() {
-	a.history = nil
-	a.tools = nil
-}
-
 // Chat sends a message and returns the response, executing tool calls if needed.
 func (a *legacyAgent) chat(ctx context.Context, msg string) (Response, error) {
 	a.history = append(a.history, internalMessage{role: "user", content: msg})
