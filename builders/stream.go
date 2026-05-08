@@ -38,9 +38,11 @@ func (b *Text) Stream(ctx context.Context, finalText string) iter.Seq2[string, e
 		innerCtx, cancel := context.WithCancel(ctx)
 		defer cancel()
 
-		// Buffered so the producer can hand off a chunk without
-		// blocking when the consumer is mid-yield.
-		chunks := make(chan string, 4)
+		// Buffered so the producer can hand off chunks without
+		// blocking when the consumer is mid-yield. Capacity 64
+		// matches TS/Python and bounds memory if a hostile or
+		// buggy provider streams faster than the consumer drains.
+		chunks := make(chan string, 64)
 		var finalErr error
 		done := make(chan struct{})
 
