@@ -11,7 +11,6 @@ package builders
 
 import (
 	"context"
-	"iter"
 
 	llmkit "github.com/aktagon/llmkit-go"
 )
@@ -40,15 +39,19 @@ type BatchHandle struct {
 
 // providerConfig holds per-provider auth + endpoint details. Phase 4
 // promotes it to a public type aligned with llmkit.Provider.
+// baseURL is an internal override mainly used by tests pointing at
+// httptest.Server URLs; per-provider constructors leave it empty so
+// the legacy provider config supplies the canonical endpoint.
 type providerConfig struct {
-	name   string
-	apiKey string
+	name    string
+	apiKey  string
+	baseURL string
 }
 
 // toLlmkit converts the internal config to the legacy llmkit.Provider
 // shape consumed by the existing free-function runtime.
 func (pc providerConfig) toLlmkit(model string) llmkit.Provider {
-	return llmkit.Provider{Name: pc.name, APIKey: pc.apiKey, Model: model}
+	return llmkit.Provider{Name: pc.name, APIKey: pc.apiKey, Model: model, BaseURL: pc.baseURL}
 }
 
 // Client is the entry point for the typed-builder API. Each
@@ -151,10 +154,6 @@ func (b *Text) Text(s string) *Text {
 	out.parts = append(out.parts, llmkit.Text(s))
 	return &out
 } // ordered
-
-func (b *Text) Stream(ctx context.Context, finalText string) iter.Seq2[string, error] {
-	panic("plan 016 phase 3: *Text.Stream not yet implemented")
-}
 
 // === *Image — ImageGeneration builder ===
 

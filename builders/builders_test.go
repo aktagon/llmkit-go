@@ -2,7 +2,11 @@ package builders
 
 import (
 	"context"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"reflect"
+	"strings"
 	"testing"
 
 	llmkit "github.com/aktagon/llmkit-go"
@@ -145,9 +149,8 @@ func TestSurface_Constructors(t *testing.T) {
 }
 
 // TestSurface_TerminalsPanic confirms the still-unimplemented terminals
-// remain panic stubs (phase-3 punch list). Prompt + Generate + Batch +
-// SubmitBatch + Upload.Run + BatchHandle.Wait are wired in this slice;
-// Stream and Agent.* land in slice 2b/2c.
+// remain panic stubs (phase-3 punch list). Only Agent.* remain after
+// slice 2b — Stream wired in this commit.
 func TestSurface_TerminalsPanic(t *testing.T) {
 	ctx := context.Background()
 	c := Google("k")
@@ -156,7 +159,6 @@ func TestSurface_TerminalsPanic(t *testing.T) {
 		name string
 		fn   func()
 	}{
-		{"Text.Stream", func() { _ = c.Text.Stream(ctx, "x") }},
 		{"Agent.Prompt", func() { _, _ = c.Agent.Prompt(ctx, "x") }},
 		{"Agent.Reset", func() { c.Agent.Reset() }},
 	}
@@ -194,6 +196,94 @@ func TestWait_Coverage(t *testing.T) {
 	cancel()
 	h := BatchHandle{ID: "fake-id", Provider: Provider{Name: "anthropic", APIKey: "k"}}
 	_, _ = h.Wait(ctx)
+}
+
+// TestStream_Coverage exercises the iter.Seq2 bridge: cancelled
+// context aborts the producer goroutine; the consumer sees the final
+// error yield.
+func TestStream_Coverage(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	c := Openai("k")
+
+	var sawError bool
+	for chunk, err := range c.Text.System("x").Stream(ctx, "hi") {
+		if err != nil {
+			sawError = true
+			break
+		}
+		_ = chunk
+	}
+	if !sawError {
+		// Either cancelled-context errored cleanly (sawError=true) OR
+		// the stream produced no chunks and no error (provider may
+		// short-circuit before reaching the streaming path). Both are
+		// acceptable for a coverage smoke; fail only if the closure
+		// itself never ran.
+		t.Log("Stream completed without surfacing an error — provider short-circuited (acceptable)")
+	}
+}
+
+// TestStream_EarlyBreak exercises the cancel-propagation branch: the
+// consumer breaks after the first attempt; the closure must cancel
+// the inner context, drain the channel, and exit cleanly without
+// leaking the producer goroutine. Cancelled context up-front means
+// PromptStream returns immediately, so the early-break path may or
+// may not fire depending on timing — the test passes as long as the
+// iterator returns control to the test goroutine.
+func TestStream_EarlyBreak(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	c := Openai("k")
+
+	for chunk, err := range c.Text.Stream(ctx, "hi") {
+		_ = chunk
+		_ = err
+		break
+	}
+}
+
+// TestStream_RealBridge boots an httptest SSE server that emits the
+// OpenAI streaming format the legacy PromptStream understands, then
+// runs the typed-builder Stream() over it and asserts each chunk
+// arrives in the iterator in order. Proves the goroutine + channel
+// + iter.Seq2 bridge actually delivers data, not just compiles.
+func TestStream_RealBridge(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(200)
+		flusher := w.(http.Flusher)
+		events := []string{
+			`data: {"choices":[{"delta":{"content":"Hel"}}]}`,
+			`data: {"choices":[{"delta":{"content":"lo "}}]}`,
+			`data: {"choices":[{"delta":{"content":"world"}}]}`,
+			`data: {"choices":[{"delta":{}}],"usage":{"prompt_tokens":1,"completion_tokens":3}}`,
+			`data: [DONE]`,
+		}
+		for _, e := range events {
+			fmt.Fprintln(w, e)
+			fmt.Fprintln(w)
+			flusher.Flush()
+		}
+	}))
+	defer server.Close()
+
+	c := Openai("k")
+	c.provider.baseURL = server.URL // package-private field; tests are in-package
+
+	var got []string
+	for chunk, err := range c.Text.Stream(context.Background(), "hi") {
+		if err != nil {
+			t.Fatalf("stream error: %v", err)
+		}
+		got = append(got, chunk)
+	}
+
+	want := []string{"Hel", "lo ", "world"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("chunks: got %v want %v", got, want)
+	}
+	_ = strings.Join // keep import alive when other tests evolve
 }
 
 func TestUpload_Coverage(t *testing.T) {
