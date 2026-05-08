@@ -26,13 +26,16 @@ type ImageResponse = llmkit.ImageResponse
 type ImageData = llmkit.ImageData
 type File = llmkit.File
 type Part = llmkit.Part
+type Provider = llmkit.Provider
 
-// BatchHandle is a value struct identifying a submitted batch. Phase 3
-// will replace this with an alias once the main package has an
-// equivalent shape; for now keep it local so Wait() can be a method.
+// BatchHandle is a value struct identifying a submitted batch.
+// Faithful migration of the legacy llmkit.BatchHandle shape; the
+// Wait method (in batch.go) calls llmkit.WaitBatch internally.
+// Cross-process resume works by persisting {ID, Provider} and
+// reconstructing the struct.
 type BatchHandle struct {
 	ID       string
-	Provider string
+	Provider Provider
 }
 
 // providerConfig holds per-provider auth + endpoint details. Phase 4
@@ -152,12 +155,6 @@ func (b *Text) Text(s string) *Text {
 func (b *Text) Stream(ctx context.Context, finalText string) iter.Seq2[string, error] {
 	panic("plan 016 phase 3: *Text.Stream not yet implemented")
 }
-func (b *Text) Batch(ctx context.Context, prompts ...string) ([]Response, error) {
-	panic("plan 016 phase 3: *Text.Batch not yet implemented")
-}
-func (b *Text) SubmitBatch(ctx context.Context, prompts ...string) (BatchHandle, error) {
-	panic("plan 016 phase 3: *Text.SubmitBatch not yet implemented")
-}
 
 // === *Image — ImageGeneration builder ===
 
@@ -254,13 +251,3 @@ func (b *Upload) Middleware(fns ...llmkit.MiddlewareFn) *Upload {
 }
 func (b *Upload) MimeType(mime string) *Upload { out := *b; out.mimeType = mime; return &out }
 func (b *Upload) Path(p string) *Upload        { out := *b; out.path = p; return &out }
-
-func (b *Upload) Run(ctx context.Context) (File, error) {
-	panic("plan 016 phase 3: *Upload.Run not yet implemented")
-}
-
-// === BatchHandle terminal ===
-
-func (h *BatchHandle) Wait(ctx context.Context) ([]Response, error) {
-	panic("plan 016 phase 3: BatchHandle.Wait not yet implemented")
-}
