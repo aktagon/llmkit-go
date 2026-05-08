@@ -14,7 +14,7 @@ import (
 func (b *Text) Batch(ctx context.Context, prompts ...string) ([]Response, error) {
 	reqs, opts := b.batchInputs(prompts)
 	provider := b.client.provider.toProvider(b.model)
-	return PromptBatch(ctx, provider, reqs, opts...)
+	return promptBatch(ctx, provider, reqs, opts...)
 }
 
 // SubmitBatch queues a batch and returns a handle without blocking.
@@ -22,7 +22,7 @@ func (b *Text) Batch(ctx context.Context, prompts ...string) ([]Response, error)
 func (b *Text) SubmitBatch(ctx context.Context, prompts ...string) (BatchHandle, error) {
 	reqs, opts := b.batchInputs(prompts)
 	provider := b.client.provider.toProvider(b.model)
-	legacy, err := SubmitBatch(ctx, provider, reqs, opts...)
+	legacy, err := submitBatch(ctx, provider, reqs, opts...)
 	if err != nil {
 		return BatchHandle{}, err
 	}
@@ -49,5 +49,5 @@ func (b *Text) batchInputs(prompts []string) ([]Request, []Option) {
 // reconstructing a BatchHandle{ID, Provider} from persisted state and
 // calling Wait on it.
 func (h BatchHandle) Wait(ctx context.Context, opts ...Option) ([]Response, error) {
-	return WaitBatch(ctx, BatchHandle{ID: h.ID, Provider: h.Provider}, opts...)
+	return waitBatch(ctx, BatchHandle{ID: h.ID, Provider: h.Provider}, opts...)
 }
