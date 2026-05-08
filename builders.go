@@ -89,17 +89,25 @@ func Zhipu(apiKey string) *Client      { return newClient("zhipu", apiKey) }
 // call. Chain methods return new instances (immutable); skipped
 // terminals live in hand-written text.go / image.go.
 type Text struct {
-	client      *Client
-	caching     bool
-	files       []File
-	history     []Message
-	parts       []Part
-	maxTokens   *int
-	middleware  []MiddlewareFn
-	model       string
-	schema      string
-	system      string
-	temperature *float64
+	client           *Client
+	caching          bool
+	files            []File
+	frequencyPenalty *float64
+	history          []Message
+	parts            []Part
+	maxTokens        *int
+	middleware       []MiddlewareFn
+	model            string
+	presencePenalty  *float64
+	reasoningEffort  string
+	schema           string
+	seed             *int64
+	stopSequences    []string
+	system           string
+	temperature      *float64
+	thinkingBudget   *int
+	topK             *int
+	topP             *float64
 }
 
 func (b *Text) Caching() *Text { out := *b; out.caching = true; return &out }
@@ -107,7 +115,13 @@ func (b *Text) File(id string) *Text {
 	out := *b
 	out.files = append(out.files, File{ID: id})
 	return &out
-}                                             // ordered
+} // ordered
+func (b *Text) FrequencyPenalty(v float64) *Text {
+	out := *b
+	x := v
+	out.frequencyPenalty = &x
+	return &out
+}
 func (b *Text) History(msgs ...Message) *Text { out := *b; out.history = msgs; return &out }
 func (b *Text) Image(mime string, data []byte) *Text {
 	out := *b
@@ -120,15 +134,31 @@ func (b *Text) Middleware(fns ...MiddlewareFn) *Text {
 	out.middleware = append(out.middleware, fns...)
 	return &out
 }
-func (b *Text) Model(name string) *Text     { out := *b; out.model = name; return &out }
-func (b *Text) Schema(s string) *Text       { out := *b; out.schema = s; return &out }
-func (b *Text) System(s string) *Text       { out := *b; out.system = s; return &out }
-func (b *Text) Temperature(t float64) *Text { out := *b; v := t; out.temperature = &v; return &out }
+func (b *Text) Model(name string) *Text { out := *b; out.model = name; return &out }
+func (b *Text) PresencePenalty(v float64) *Text {
+	out := *b
+	x := v
+	out.presencePenalty = &x
+	return &out
+}
+func (b *Text) ReasoningEffort(level string) *Text {
+	out := *b
+	out.reasoningEffort = level
+	return &out
+}
+func (b *Text) Schema(s string) *Text              { out := *b; out.schema = s; return &out }
+func (b *Text) Seed(n int64) *Text                 { out := *b; v := n; out.seed = &v; return &out }
+func (b *Text) StopSequences(seqs ...string) *Text { out := *b; out.stopSequences = seqs; return &out }
+func (b *Text) System(s string) *Text              { out := *b; out.system = s; return &out }
+func (b *Text) Temperature(t float64) *Text        { out := *b; v := t; out.temperature = &v; return &out }
 func (b *Text) Text(s string) *Text {
 	out := *b
 	out.parts = append(out.parts, Part{Text: s})
 	return &out
-} // ordered
+}                                          // ordered
+func (b *Text) ThinkingBudget(n int) *Text { out := *b; v := n; out.thinkingBudget = &v; return &out }
+func (b *Text) TopK(n int) *Text           { out := *b; v := n; out.topK = &v; return &out }
+func (b *Text) TopP(v float64) *Text       { out := *b; x := v; out.topP = &x; return &out }
 
 // === *Image — ImageGeneration builder ===
 
@@ -173,18 +203,33 @@ func (b *Image) Text(s string) *Image {
 // call. Chain methods return new instances (immutable); skipped
 // terminals live in hand-written text.go / image.go.
 type Agent struct {
-	client      *Client
-	caching     bool
-	maxTokens   *int
-	middleware  []MiddlewareFn
-	model       string
-	system      string
-	temperature *float64
-	tools       []Tool
-	state       *agentState
+	client           *Client
+	caching          bool
+	frequencyPenalty *float64
+	maxTokens        *int
+	middleware       []MiddlewareFn
+	model            string
+	presencePenalty  *float64
+	reasoningEffort  string
+	seed             *int64
+	stopSequences    []string
+	system           string
+	temperature      *float64
+	thinkingBudget   *int
+	tools            []Tool
+	topK             *int
+	topP             *float64
+	state            *agentState
 }
 
 func (b *Agent) Caching() *Agent { out := *b; out.caching = true; out.state = nil; return &out }
+func (b *Agent) FrequencyPenalty(v float64) *Agent {
+	out := *b
+	x := v
+	out.frequencyPenalty = &x
+	out.state = nil
+	return &out
+}
 func (b *Agent) MaxTokens(n int) *Agent {
 	out := *b
 	v := n
@@ -199,7 +244,27 @@ func (b *Agent) Middleware(fns ...MiddlewareFn) *Agent {
 	return &out
 }
 func (b *Agent) Model(name string) *Agent { out := *b; out.model = name; out.state = nil; return &out }
-func (b *Agent) System(s string) *Agent   { out := *b; out.system = s; out.state = nil; return &out }
+func (b *Agent) PresencePenalty(v float64) *Agent {
+	out := *b
+	x := v
+	out.presencePenalty = &x
+	out.state = nil
+	return &out
+}
+func (b *Agent) ReasoningEffort(level string) *Agent {
+	out := *b
+	out.reasoningEffort = level
+	out.state = nil
+	return &out
+}
+func (b *Agent) Seed(n int64) *Agent { out := *b; v := n; out.seed = &v; out.state = nil; return &out }
+func (b *Agent) StopSequences(seqs ...string) *Agent {
+	out := *b
+	out.stopSequences = seqs
+	out.state = nil
+	return &out
+}
+func (b *Agent) System(s string) *Agent { out := *b; out.system = s; out.state = nil; return &out }
 func (b *Agent) Temperature(t float64) *Agent {
 	out := *b
 	v := t
@@ -207,9 +272,24 @@ func (b *Agent) Temperature(t float64) *Agent {
 	out.state = nil
 	return &out
 }
+func (b *Agent) ThinkingBudget(n int) *Agent {
+	out := *b
+	v := n
+	out.thinkingBudget = &v
+	out.state = nil
+	return &out
+}
 func (b *Agent) Tool(t Tool) *Agent {
 	out := *b
 	out.tools = append(out.tools, t)
+	out.state = nil
+	return &out
+}
+func (b *Agent) TopK(n int) *Agent { out := *b; v := n; out.topK = &v; out.state = nil; return &out }
+func (b *Agent) TopP(v float64) *Agent {
+	out := *b
+	x := v
+	out.topP = &x
 	out.state = nil
 	return &out
 }
