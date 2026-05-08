@@ -52,19 +52,15 @@ func main() {
 
 	apiKey := getAPIKey(provider)
 
-	p := llmkit.Provider{
-		Name:   provider,
-		APIKey: apiKey,
-		Model:  model,
-	}
-
-	req := llmkit.Request{
-		System: systemPrompt,
-		User:   userPrompt,
-		Schema: jsonSchema,
+	c := llmkit.New(provider, apiKey)
+	t := c.Text.System(systemPrompt).Model(model)
+	if jsonSchema != "" {
+		t = t.Schema(jsonSchema)
 	}
 
 	if stream {
+		p := llmkit.Provider{Name: provider, APIKey: apiKey, Model: model}
+		req := llmkit.Request{System: systemPrompt, User: userPrompt, Schema: jsonSchema}
 		_, err := llmkit.PromptStream(context.Background(), p, req, func(chunk string) {
 			fmt.Print(chunk)
 		})
@@ -73,7 +69,7 @@ func main() {
 		}
 		fmt.Println()
 	} else {
-		resp, err := llmkit.Prompt(context.Background(), p, req)
+		resp, err := t.Prompt(context.Background(), userPrompt)
 		if err != nil {
 			log.Fatalf("Error calling %s API: %v", provider, err)
 		}
