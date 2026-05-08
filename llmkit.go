@@ -18,9 +18,7 @@ type StreamCallback func(chunk string)
 
 //
 //
-//
-//
-func PromptStream(ctx context.Context, p Provider, req Request, callback StreamCallback, opts ...Option) (Response, error) {
+func promptStream(ctx context.Context, p Provider, req Request, callback StreamCallback, opts ...Option) (Response, error) {
 	o := resolveOptions(opts)
 
 	if err := validateProvider(p); err != nil {
