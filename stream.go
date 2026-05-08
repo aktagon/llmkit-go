@@ -46,7 +46,7 @@ func (b *Text) Stream(ctx context.Context, finalText string) iter.Seq2[string, e
 
 		go func() {
 			defer close(done)
-			_, err := PromptStream(innerCtx, provider, req, func(chunk string) {
+			_, err := promptStream(innerCtx, provider, req, func(chunk string) {
 				select {
 				case chunks <- chunk:
 				case <-innerCtx.Done():

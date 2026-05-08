@@ -305,15 +305,14 @@ func TestMiddlewareStreamBracketsEntireStream(t *testing.T) {
 		return nil
 	}
 
+	c := New(providers.OpenAI, "test-key")
+	c.provider.baseURL = server.URL
 	chunks := []string{}
-	_, err := PromptStream(context.Background(),
-		Provider{Name: providers.OpenAI, APIKey: "test-key", BaseURL: server.URL},
-		Request{User: "Hi"},
-		func(chunk string) { chunks = append(chunks, chunk) },
-		WithMiddleware(mw),
-	)
-	if err != nil {
-		t.Fatal(err)
+	for chunk, err := range c.Text.Middleware(mw).Stream(context.Background(), "Hi") {
+		if err != nil {
+			t.Fatal(err)
+		}
+		chunks = append(chunks, chunk)
 	}
 
 	if preCount != 1 || postCount != 1 {
