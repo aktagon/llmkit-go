@@ -188,11 +188,11 @@ func TestGenerateImagePartsInterleavedCompositional(t *testing.T) {
 		ImageRequest{
 			Model: flashModel,
 			Parts: []Part{
-				Text("Person:"),
-				Image("image/png", refA),
-				Text("Outfit:"),
-				Image("image/png", refB),
-				Text("Generate the person wearing the outfit."),
+				Part{Text: "Person:"},
+				Part{Image: &MediaRef{MimeType: "image/png", Bytes: refA}},
+				Part{Text: "Outfit:"},
+				Part{Image: &MediaRef{MimeType: "image/png", Bytes: refB}},
+				Part{Text: "Generate the person wearing the outfit."},
 			},
 		},
 	)
@@ -237,9 +237,9 @@ func TestGenerateImageRejectsTooManyImageParts(t *testing.T) {
 	// Google MaxInputCount = 14 image parts. Build a Parts slice with
 	// 15 image parts (interleaved with one text part for shape realism)
 	// and assert pre-flight rejection.
-	parts := []Part{Text("describe and edit:")}
+	parts := []Part{Part{Text: "describe and edit:"}}
 	for i := 0; i < 15; i++ {
-		parts = append(parts, Image("image/png", fakePNG))
+		parts = append(parts, Part{Image: &MediaRef{MimeType: "image/png", Bytes: fakePNG}})
 	}
 	_, err := GenerateImage(context.Background(),
 		Provider{Name: providers.Google, APIKey: "k", BaseURL: "http://unused"},
@@ -260,7 +260,7 @@ func TestGenerateImageRejectsBothPromptAndParts(t *testing.T) {
 		ImageRequest{
 			Model:  flashModel,
 			Prompt: "x",
-			Parts:  []Part{Text("y")},
+			Parts:  []Part{Part{Text: "y"}},
 		},
 	)
 	var verr *ValidationError
@@ -313,7 +313,7 @@ func TestGenerateImagePartsOnlySingleText(t *testing.T) {
 
 	_, err := GenerateImage(context.Background(),
 		Provider{Name: providers.Google, APIKey: "k", BaseURL: server.URL},
-		ImageRequest{Model: flashModel, Parts: []Part{Text("canonical text")}},
+		ImageRequest{Model: flashModel, Parts: []Part{Part{Text: "canonical text"}}},
 	)
 	if err != nil {
 		t.Fatal(err)

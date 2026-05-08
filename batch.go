@@ -12,11 +12,8 @@ import (
 	"github.com/aktagon/llmkit-go/providers"
 )
 
-// BatchHandle represents an in-progress batch job.
-type BatchHandle struct {
-	ID       string
-	Provider Provider
-}
+// BatchHandle is defined in builders.go (typed-builder API surface);
+// the legacy free-functions below operate on the same struct.
 
 // PromptBatch sends multiple requests as a batch and blocks until all results are ready.
 // Uses the provider's batch config from the ontology to determine input mode and lifecycle.

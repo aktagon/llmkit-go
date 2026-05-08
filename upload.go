@@ -1,10 +1,8 @@
-package builders
+package llmkit
 
 import (
 	"context"
 	"errors"
-
-	llmkit "github.com/aktagon/llmkit-go"
 )
 
 // Run uploads the configured file to the client's provider and
@@ -13,7 +11,7 @@ import (
 // exactly one is set.
 //
 // Phase 3 slice: only Path is supported. Bytes upload requires a
-// main-package change (llmkit.UploadFile currently takes a path,
+// main-package change (UploadFile currently takes a path,
 // not raw bytes); deferred to a follow-up slice. MimeType and
 // Filename are accepted on the chain but not yet propagated to the
 // upload — main-package work needed there too.
@@ -28,11 +26,11 @@ func (b *Upload) Run(ctx context.Context) (File, error) {
 		return File{}, errors.New("Upload: Bytes path not yet wired (phase 3 follow-up); use Path for now")
 	}
 
-	var opts []llmkit.Option
+	var opts []Option
 	if len(b.middleware) > 0 {
-		opts = append(opts, llmkit.WithMiddleware(b.middleware...))
+		opts = append(opts, WithMiddleware(b.middleware...))
 	}
 
-	provider := b.client.provider.toLlmkit("")
-	return llmkit.UploadFile(ctx, provider, b.path, opts...)
+	provider := b.client.provider.toProvider("")
+	return UploadFile(ctx, provider, b.path, opts...)
 }
