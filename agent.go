@@ -47,23 +47,23 @@ func newLegacyAgent(p Provider, opts ...Option) *legacyAgent {
 }
 
 // SetSystem sets the system prompt.
-func (a *legacyAgent) SetSystem(system string) {
+func (a *legacyAgent) setSystem(system string) {
 	a.system = system
 }
 
 // AddTool registers a tool the LLM can call.
-func (a *legacyAgent) AddTool(tool Tool) {
+func (a *legacyAgent) addTool(tool Tool) {
 	a.tools = append(a.tools, tool)
 }
 
 // Reset clears conversation history and tools.
-func (a *legacyAgent) Reset() {
+func (a *legacyAgent) reset() {
 	a.history = nil
 	a.tools = nil
 }
 
 // Chat sends a message and returns the response, executing tool calls if needed.
-func (a *legacyAgent) Chat(ctx context.Context, msg string) (Response, error) {
+func (a *legacyAgent) chat(ctx context.Context, msg string) (Response, error) {
 	a.history = append(a.history, internalMessage{role: "user", content: msg})
 	return a.runToolLoop(ctx)
 }
