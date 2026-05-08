@@ -254,17 +254,17 @@ func TestPromptStreamOpenAI(t *testing.T) {
 	}))
 	defer server.Close()
 
+	c := New(providers.OpenAI, "key")
+	c.provider.baseURL = server.URL
 	var chunks []string
-	resp, err := PromptStream(context.Background(),
-		Provider{Name: providers.OpenAI, APIKey: "key", BaseURL: server.URL},
-		Request{User: "Hi"},
-		func(chunk string) { chunks = append(chunks, chunk) },
-	)
-	if err != nil {
-		t.Fatal(err)
+	for chunk, err := range c.Text.Stream(context.Background(), "Hi") {
+		if err != nil {
+			t.Fatal(err)
+		}
+		chunks = append(chunks, chunk)
 	}
-	if resp.Text != "Hello!" {
-		t.Errorf("expected 'Hello!', got %q", resp.Text)
+	if got := strings.Join(chunks, ""); got != "Hello!" {
+		t.Errorf("expected 'Hello!', got %q", got)
 	}
 	if len(chunks) != 2 {
 		t.Errorf("expected 2 chunks, got %d: %v", len(chunks), chunks)
@@ -297,24 +297,24 @@ func TestPromptStreamAnthropic(t *testing.T) {
 	}))
 	defer server.Close()
 
+	c := New(providers.Anthropic, "key")
+	c.provider.baseURL = server.URL
 	var chunks []string
-	resp, err := PromptStream(context.Background(),
-		Provider{Name: providers.Anthropic, APIKey: "key", BaseURL: server.URL},
-		Request{User: "Hi"},
-		func(chunk string) { chunks = append(chunks, chunk) },
-	)
-	if err != nil {
-		t.Fatal(err)
+	for chunk, err := range c.Text.Stream(context.Background(), "Hi") {
+		if err != nil {
+			t.Fatal(err)
+		}
+		chunks = append(chunks, chunk)
 	}
-	if resp.Text != "Hi there" {
-		t.Errorf("expected 'Hi there', got %q", resp.Text)
+	if got := strings.Join(chunks, ""); got != "Hi there" {
+		t.Errorf("expected 'Hi there', got %q", got)
 	}
 	if len(chunks) != 2 {
 		t.Errorf("expected 2 chunks, got %d: %v", len(chunks), chunks)
 	}
-	if resp.Tokens.Output != 3 {
-		t.Errorf("expected 3 output tokens, got %d", resp.Tokens.Output)
-	}
+	// Token assertion dropped: typed-builder Stream returns iter.Seq2[string,
+	// error] which has no slot for final Usage. A StreamWithUsage variant is
+	// deferred (see go/stream.go top-of-file note).
 }
 
 func TestPromptStreamWithCachingAnthropic(t *testing.T) {
@@ -366,18 +366,17 @@ func TestPromptStreamWithCachingAnthropic(t *testing.T) {
 	}))
 	defer server.Close()
 
+	c := New(providers.Anthropic, "key")
+	c.provider.baseURL = server.URL
 	var chunks []string
-	resp, err := PromptStream(context.Background(),
-		Provider{Name: providers.Anthropic, APIKey: "key", BaseURL: server.URL},
-		Request{System: "You are helpful", User: "Hi"},
-		func(chunk string) { chunks = append(chunks, chunk) },
-		WithCaching(),
-	)
-	if err != nil {
-		t.Fatal(err)
+	for chunk, err := range c.Text.System("You are helpful").Caching().Stream(context.Background(), "Hi") {
+		if err != nil {
+			t.Fatal(err)
+		}
+		chunks = append(chunks, chunk)
 	}
-	if resp.Text != "cached stream" {
-		t.Errorf("expected 'cached stream', got %q", resp.Text)
+	if got := strings.Join(chunks, ""); got != "cached stream" {
+		t.Errorf("expected 'cached stream', got %q", got)
 	}
 	if len(chunks) != 1 {
 		t.Errorf("expected 1 chunk, got %d: %v", len(chunks), chunks)
@@ -385,13 +384,14 @@ func TestPromptStreamWithCachingAnthropic(t *testing.T) {
 }
 
 func TestPromptStreamWithCachingUnsupported(t *testing.T) {
-	_, err := PromptStream(context.Background(),
-		Provider{Name: providers.Groq, APIKey: "key"},
-		Request{User: "Hi"},
-		func(chunk string) {},
-		WithCaching(),
-	)
-	if err == nil {
+	var got error
+	for _, err := range New(providers.Groq, "key").Text.Caching().Stream(context.Background(), "Hi") {
+		if err != nil {
+			got = err
+			break
+		}
+	}
+	if got == nil {
 		t.Error("expected error for unsupported caching on streaming")
 	}
 }

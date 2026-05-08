@@ -18,10 +18,8 @@ func TestIntegrationAi21(t *testing.T) {
 	if key == "" {
 		t.Skip("AI21_API_KEY not set")
 	}
-	resp, err := llmkit.Prompt(context.Background(),
-		llmkit.Provider{Name: providers.Ai21, APIKey: key},
-		llmkit.Request{System: "Reply with only the word pong", User: "ping"},
-	)
+	c := llmkit.New(providers.Ai21, key)
+	resp, err := c.Text.System("Reply with only the word pong").Prompt(context.Background(), "ping")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,15 +37,16 @@ func TestIntegrationAi21Stream(t *testing.T) {
 		t.Skip("AI21_API_KEY not set")
 	}
 	var chunks int
-	resp, err := llmkit.PromptStream(context.Background(),
-		llmkit.Provider{Name: providers.Ai21, APIKey: key},
-		llmkit.Request{System: "Reply with only the word pong", User: "ping"},
-		func(chunk string) { chunks++ },
-	)
-	if err != nil {
-		t.Fatal(err)
+	var text string
+	c := llmkit.New(providers.Ai21, key)
+	for chunk, err := range c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping") {
+		if err != nil {
+			t.Fatal(err)
+		}
+		chunks++
+		text += chunk
 	}
-	if resp.Text == "" {
+	if text == "" {
 		t.Error("empty response text")
 	}
 	if chunks == 0 {
@@ -60,10 +59,8 @@ func TestIntegrationAnthropic(t *testing.T) {
 	if key == "" {
 		t.Skip("ANTHROPIC_API_KEY not set")
 	}
-	resp, err := llmkit.Prompt(context.Background(),
-		llmkit.Provider{Name: providers.Anthropic, APIKey: key},
-		llmkit.Request{System: "Reply with only the word pong", User: "ping"},
-	)
+	c := llmkit.New(providers.Anthropic, key)
+	resp, err := c.Text.System("Reply with only the word pong").Prompt(context.Background(), "ping")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,15 +78,16 @@ func TestIntegrationAnthropicStream(t *testing.T) {
 		t.Skip("ANTHROPIC_API_KEY not set")
 	}
 	var chunks int
-	resp, err := llmkit.PromptStream(context.Background(),
-		llmkit.Provider{Name: providers.Anthropic, APIKey: key},
-		llmkit.Request{System: "Reply with only the word pong", User: "ping"},
-		func(chunk string) { chunks++ },
-	)
-	if err != nil {
-		t.Fatal(err)
+	var text string
+	c := llmkit.New(providers.Anthropic, key)
+	for chunk, err := range c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping") {
+		if err != nil {
+			t.Fatal(err)
+		}
+		chunks++
+		text += chunk
 	}
-	if resp.Text == "" {
+	if text == "" {
 		t.Error("empty response text")
 	}
 	if chunks == 0 {
@@ -102,10 +100,8 @@ func TestIntegrationCerebras(t *testing.T) {
 	if key == "" {
 		t.Skip("CEREBRAS_API_KEY not set")
 	}
-	resp, err := llmkit.Prompt(context.Background(),
-		llmkit.Provider{Name: providers.Cerebras, APIKey: key},
-		llmkit.Request{System: "Reply with only the word pong", User: "ping"},
-	)
+	c := llmkit.New(providers.Cerebras, key)
+	resp, err := c.Text.System("Reply with only the word pong").Prompt(context.Background(), "ping")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,15 +119,16 @@ func TestIntegrationCerebrasStream(t *testing.T) {
 		t.Skip("CEREBRAS_API_KEY not set")
 	}
 	var chunks int
-	resp, err := llmkit.PromptStream(context.Background(),
-		llmkit.Provider{Name: providers.Cerebras, APIKey: key},
-		llmkit.Request{System: "Reply with only the word pong", User: "ping"},
-		func(chunk string) { chunks++ },
-	)
-	if err != nil {
-		t.Fatal(err)
+	var text string
+	c := llmkit.New(providers.Cerebras, key)
+	for chunk, err := range c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping") {
+		if err != nil {
+			t.Fatal(err)
+		}
+		chunks++
+		text += chunk
 	}
-	if resp.Text == "" {
+	if text == "" {
 		t.Error("empty response text")
 	}
 	if chunks == 0 {
@@ -144,10 +141,8 @@ func TestIntegrationCohere(t *testing.T) {
 	if key == "" {
 		t.Skip("COHERE_API_KEY not set")
 	}
-	resp, err := llmkit.Prompt(context.Background(),
-		llmkit.Provider{Name: providers.Cohere, APIKey: key},
-		llmkit.Request{System: "Reply with only the word pong", User: "ping"},
-	)
+	c := llmkit.New(providers.Cohere, key)
+	resp, err := c.Text.System("Reply with only the word pong").Prompt(context.Background(), "ping")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -165,15 +160,16 @@ func TestIntegrationCohereStream(t *testing.T) {
 		t.Skip("COHERE_API_KEY not set")
 	}
 	var chunks int
-	resp, err := llmkit.PromptStream(context.Background(),
-		llmkit.Provider{Name: providers.Cohere, APIKey: key},
-		llmkit.Request{System: "Reply with only the word pong", User: "ping"},
-		func(chunk string) { chunks++ },
-	)
-	if err != nil {
-		t.Fatal(err)
+	var text string
+	c := llmkit.New(providers.Cohere, key)
+	for chunk, err := range c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping") {
+		if err != nil {
+			t.Fatal(err)
+		}
+		chunks++
+		text += chunk
 	}
-	if resp.Text == "" {
+	if text == "" {
 		t.Error("empty response text")
 	}
 	if chunks == 0 {
@@ -186,10 +182,8 @@ func TestIntegrationDeepseek(t *testing.T) {
 	if key == "" {
 		t.Skip("DEEPSEEK_API_KEY not set")
 	}
-	resp, err := llmkit.Prompt(context.Background(),
-		llmkit.Provider{Name: providers.Deepseek, APIKey: key},
-		llmkit.Request{System: "Reply with only the word pong", User: "ping"},
-	)
+	c := llmkit.New(providers.Deepseek, key)
+	resp, err := c.Text.System("Reply with only the word pong").Prompt(context.Background(), "ping")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -207,15 +201,16 @@ func TestIntegrationDeepseekStream(t *testing.T) {
 		t.Skip("DEEPSEEK_API_KEY not set")
 	}
 	var chunks int
-	resp, err := llmkit.PromptStream(context.Background(),
-		llmkit.Provider{Name: providers.Deepseek, APIKey: key},
-		llmkit.Request{System: "Reply with only the word pong", User: "ping"},
-		func(chunk string) { chunks++ },
-	)
-	if err != nil {
-		t.Fatal(err)
+	var text string
+	c := llmkit.New(providers.Deepseek, key)
+	for chunk, err := range c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping") {
+		if err != nil {
+			t.Fatal(err)
+		}
+		chunks++
+		text += chunk
 	}
-	if resp.Text == "" {
+	if text == "" {
 		t.Error("empty response text")
 	}
 	if chunks == 0 {
@@ -228,10 +223,8 @@ func TestIntegrationDoubao(t *testing.T) {
 	if key == "" {
 		t.Skip("ARK_API_KEY not set")
 	}
-	resp, err := llmkit.Prompt(context.Background(),
-		llmkit.Provider{Name: providers.Doubao, APIKey: key},
-		llmkit.Request{System: "Reply with only the word pong", User: "ping"},
-	)
+	c := llmkit.New(providers.Doubao, key)
+	resp, err := c.Text.System("Reply with only the word pong").Prompt(context.Background(), "ping")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -249,15 +242,16 @@ func TestIntegrationDoubaoStream(t *testing.T) {
 		t.Skip("ARK_API_KEY not set")
 	}
 	var chunks int
-	resp, err := llmkit.PromptStream(context.Background(),
-		llmkit.Provider{Name: providers.Doubao, APIKey: key},
-		llmkit.Request{System: "Reply with only the word pong", User: "ping"},
-		func(chunk string) { chunks++ },
-	)
-	if err != nil {
-		t.Fatal(err)
+	var text string
+	c := llmkit.New(providers.Doubao, key)
+	for chunk, err := range c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping") {
+		if err != nil {
+			t.Fatal(err)
+		}
+		chunks++
+		text += chunk
 	}
-	if resp.Text == "" {
+	if text == "" {
 		t.Error("empty response text")
 	}
 	if chunks == 0 {
@@ -270,10 +264,8 @@ func TestIntegrationErnie(t *testing.T) {
 	if key == "" {
 		t.Skip("QIANFAN_API_KEY not set")
 	}
-	resp, err := llmkit.Prompt(context.Background(),
-		llmkit.Provider{Name: providers.Ernie, APIKey: key},
-		llmkit.Request{System: "Reply with only the word pong", User: "ping"},
-	)
+	c := llmkit.New(providers.Ernie, key)
+	resp, err := c.Text.System("Reply with only the word pong").Prompt(context.Background(), "ping")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -291,15 +283,16 @@ func TestIntegrationErnieStream(t *testing.T) {
 		t.Skip("QIANFAN_API_KEY not set")
 	}
 	var chunks int
-	resp, err := llmkit.PromptStream(context.Background(),
-		llmkit.Provider{Name: providers.Ernie, APIKey: key},
-		llmkit.Request{System: "Reply with only the word pong", User: "ping"},
-		func(chunk string) { chunks++ },
-	)
-	if err != nil {
-		t.Fatal(err)
+	var text string
+	c := llmkit.New(providers.Ernie, key)
+	for chunk, err := range c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping") {
+		if err != nil {
+			t.Fatal(err)
+		}
+		chunks++
+		text += chunk
 	}
-	if resp.Text == "" {
+	if text == "" {
 		t.Error("empty response text")
 	}
 	if chunks == 0 {
@@ -312,10 +305,8 @@ func TestIntegrationFireworks(t *testing.T) {
 	if key == "" {
 		t.Skip("FIREWORKS_API_KEY not set")
 	}
-	resp, err := llmkit.Prompt(context.Background(),
-		llmkit.Provider{Name: providers.Fireworks, APIKey: key},
-		llmkit.Request{System: "Reply with only the word pong", User: "ping"},
-	)
+	c := llmkit.New(providers.Fireworks, key)
+	resp, err := c.Text.System("Reply with only the word pong").Prompt(context.Background(), "ping")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -333,15 +324,16 @@ func TestIntegrationFireworksStream(t *testing.T) {
 		t.Skip("FIREWORKS_API_KEY not set")
 	}
 	var chunks int
-	resp, err := llmkit.PromptStream(context.Background(),
-		llmkit.Provider{Name: providers.Fireworks, APIKey: key},
-		llmkit.Request{System: "Reply with only the word pong", User: "ping"},
-		func(chunk string) { chunks++ },
-	)
-	if err != nil {
-		t.Fatal(err)
+	var text string
+	c := llmkit.New(providers.Fireworks, key)
+	for chunk, err := range c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping") {
+		if err != nil {
+			t.Fatal(err)
+		}
+		chunks++
+		text += chunk
 	}
-	if resp.Text == "" {
+	if text == "" {
 		t.Error("empty response text")
 	}
 	if chunks == 0 {
@@ -354,10 +346,8 @@ func TestIntegrationGoogle(t *testing.T) {
 	if key == "" {
 		t.Skip("GOOGLE_API_KEY not set")
 	}
-	resp, err := llmkit.Prompt(context.Background(),
-		llmkit.Provider{Name: providers.Google, APIKey: key},
-		llmkit.Request{System: "Reply with only the word pong", User: "ping"},
-	)
+	c := llmkit.New(providers.Google, key)
+	resp, err := c.Text.System("Reply with only the word pong").Prompt(context.Background(), "ping")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -375,15 +365,16 @@ func TestIntegrationGoogleStream(t *testing.T) {
 		t.Skip("GOOGLE_API_KEY not set")
 	}
 	var chunks int
-	resp, err := llmkit.PromptStream(context.Background(),
-		llmkit.Provider{Name: providers.Google, APIKey: key},
-		llmkit.Request{System: "Reply with only the word pong", User: "ping"},
-		func(chunk string) { chunks++ },
-	)
-	if err != nil {
-		t.Fatal(err)
+	var text string
+	c := llmkit.New(providers.Google, key)
+	for chunk, err := range c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping") {
+		if err != nil {
+			t.Fatal(err)
+		}
+		chunks++
+		text += chunk
 	}
-	if resp.Text == "" {
+	if text == "" {
 		t.Error("empty response text")
 	}
 	if chunks == 0 {
@@ -396,10 +387,8 @@ func TestIntegrationGrok(t *testing.T) {
 	if key == "" {
 		t.Skip("GROK_API_KEY not set")
 	}
-	resp, err := llmkit.Prompt(context.Background(),
-		llmkit.Provider{Name: providers.Grok, APIKey: key},
-		llmkit.Request{System: "Reply with only the word pong", User: "ping"},
-	)
+	c := llmkit.New(providers.Grok, key)
+	resp, err := c.Text.System("Reply with only the word pong").Prompt(context.Background(), "ping")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -417,15 +406,16 @@ func TestIntegrationGrokStream(t *testing.T) {
 		t.Skip("GROK_API_KEY not set")
 	}
 	var chunks int
-	resp, err := llmkit.PromptStream(context.Background(),
-		llmkit.Provider{Name: providers.Grok, APIKey: key},
-		llmkit.Request{System: "Reply with only the word pong", User: "ping"},
-		func(chunk string) { chunks++ },
-	)
-	if err != nil {
-		t.Fatal(err)
+	var text string
+	c := llmkit.New(providers.Grok, key)
+	for chunk, err := range c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping") {
+		if err != nil {
+			t.Fatal(err)
+		}
+		chunks++
+		text += chunk
 	}
-	if resp.Text == "" {
+	if text == "" {
 		t.Error("empty response text")
 	}
 	if chunks == 0 {
@@ -438,10 +428,8 @@ func TestIntegrationGroq(t *testing.T) {
 	if key == "" {
 		t.Skip("GROQ_API_KEY not set")
 	}
-	resp, err := llmkit.Prompt(context.Background(),
-		llmkit.Provider{Name: providers.Groq, APIKey: key},
-		llmkit.Request{System: "Reply with only the word pong", User: "ping"},
-	)
+	c := llmkit.New(providers.Groq, key)
+	resp, err := c.Text.System("Reply with only the word pong").Prompt(context.Background(), "ping")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -459,15 +447,16 @@ func TestIntegrationGroqStream(t *testing.T) {
 		t.Skip("GROQ_API_KEY not set")
 	}
 	var chunks int
-	resp, err := llmkit.PromptStream(context.Background(),
-		llmkit.Provider{Name: providers.Groq, APIKey: key},
-		llmkit.Request{System: "Reply with only the word pong", User: "ping"},
-		func(chunk string) { chunks++ },
-	)
-	if err != nil {
-		t.Fatal(err)
+	var text string
+	c := llmkit.New(providers.Groq, key)
+	for chunk, err := range c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping") {
+		if err != nil {
+			t.Fatal(err)
+		}
+		chunks++
+		text += chunk
 	}
-	if resp.Text == "" {
+	if text == "" {
 		t.Error("empty response text")
 	}
 	if chunks == 0 {
@@ -480,10 +469,8 @@ func TestIntegrationMinimax(t *testing.T) {
 	if key == "" {
 		t.Skip("MINIMAX_API_KEY not set")
 	}
-	resp, err := llmkit.Prompt(context.Background(),
-		llmkit.Provider{Name: providers.Minimax, APIKey: key},
-		llmkit.Request{System: "Reply with only the word pong", User: "ping"},
-	)
+	c := llmkit.New(providers.Minimax, key)
+	resp, err := c.Text.System("Reply with only the word pong").Prompt(context.Background(), "ping")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -501,15 +488,16 @@ func TestIntegrationMinimaxStream(t *testing.T) {
 		t.Skip("MINIMAX_API_KEY not set")
 	}
 	var chunks int
-	resp, err := llmkit.PromptStream(context.Background(),
-		llmkit.Provider{Name: providers.Minimax, APIKey: key},
-		llmkit.Request{System: "Reply with only the word pong", User: "ping"},
-		func(chunk string) { chunks++ },
-	)
-	if err != nil {
-		t.Fatal(err)
+	var text string
+	c := llmkit.New(providers.Minimax, key)
+	for chunk, err := range c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping") {
+		if err != nil {
+			t.Fatal(err)
+		}
+		chunks++
+		text += chunk
 	}
-	if resp.Text == "" {
+	if text == "" {
 		t.Error("empty response text")
 	}
 	if chunks == 0 {
@@ -522,10 +510,8 @@ func TestIntegrationMistral(t *testing.T) {
 	if key == "" {
 		t.Skip("MISTRAL_API_KEY not set")
 	}
-	resp, err := llmkit.Prompt(context.Background(),
-		llmkit.Provider{Name: providers.Mistral, APIKey: key},
-		llmkit.Request{System: "Reply with only the word pong", User: "ping"},
-	)
+	c := llmkit.New(providers.Mistral, key)
+	resp, err := c.Text.System("Reply with only the word pong").Prompt(context.Background(), "ping")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -543,15 +529,16 @@ func TestIntegrationMistralStream(t *testing.T) {
 		t.Skip("MISTRAL_API_KEY not set")
 	}
 	var chunks int
-	resp, err := llmkit.PromptStream(context.Background(),
-		llmkit.Provider{Name: providers.Mistral, APIKey: key},
-		llmkit.Request{System: "Reply with only the word pong", User: "ping"},
-		func(chunk string) { chunks++ },
-	)
-	if err != nil {
-		t.Fatal(err)
+	var text string
+	c := llmkit.New(providers.Mistral, key)
+	for chunk, err := range c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping") {
+		if err != nil {
+			t.Fatal(err)
+		}
+		chunks++
+		text += chunk
 	}
-	if resp.Text == "" {
+	if text == "" {
 		t.Error("empty response text")
 	}
 	if chunks == 0 {
@@ -564,10 +551,8 @@ func TestIntegrationMoonshot(t *testing.T) {
 	if key == "" {
 		t.Skip("MOONSHOT_API_KEY not set")
 	}
-	resp, err := llmkit.Prompt(context.Background(),
-		llmkit.Provider{Name: providers.Moonshot, APIKey: key},
-		llmkit.Request{System: "Reply with only the word pong", User: "ping"},
-	)
+	c := llmkit.New(providers.Moonshot, key)
+	resp, err := c.Text.System("Reply with only the word pong").Prompt(context.Background(), "ping")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -585,15 +570,16 @@ func TestIntegrationMoonshotStream(t *testing.T) {
 		t.Skip("MOONSHOT_API_KEY not set")
 	}
 	var chunks int
-	resp, err := llmkit.PromptStream(context.Background(),
-		llmkit.Provider{Name: providers.Moonshot, APIKey: key},
-		llmkit.Request{System: "Reply with only the word pong", User: "ping"},
-		func(chunk string) { chunks++ },
-	)
-	if err != nil {
-		t.Fatal(err)
+	var text string
+	c := llmkit.New(providers.Moonshot, key)
+	for chunk, err := range c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping") {
+		if err != nil {
+			t.Fatal(err)
+		}
+		chunks++
+		text += chunk
 	}
-	if resp.Text == "" {
+	if text == "" {
 		t.Error("empty response text")
 	}
 	if chunks == 0 {
@@ -606,10 +592,8 @@ func TestIntegrationOpenAI(t *testing.T) {
 	if key == "" {
 		t.Skip("OPENAI_API_KEY not set")
 	}
-	resp, err := llmkit.Prompt(context.Background(),
-		llmkit.Provider{Name: providers.OpenAI, APIKey: key},
-		llmkit.Request{System: "Reply with only the word pong", User: "ping"},
-	)
+	c := llmkit.New(providers.OpenAI, key)
+	resp, err := c.Text.System("Reply with only the word pong").Prompt(context.Background(), "ping")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -627,15 +611,16 @@ func TestIntegrationOpenAIStream(t *testing.T) {
 		t.Skip("OPENAI_API_KEY not set")
 	}
 	var chunks int
-	resp, err := llmkit.PromptStream(context.Background(),
-		llmkit.Provider{Name: providers.OpenAI, APIKey: key},
-		llmkit.Request{System: "Reply with only the word pong", User: "ping"},
-		func(chunk string) { chunks++ },
-	)
-	if err != nil {
-		t.Fatal(err)
+	var text string
+	c := llmkit.New(providers.OpenAI, key)
+	for chunk, err := range c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping") {
+		if err != nil {
+			t.Fatal(err)
+		}
+		chunks++
+		text += chunk
 	}
-	if resp.Text == "" {
+	if text == "" {
 		t.Error("empty response text")
 	}
 	if chunks == 0 {
@@ -648,10 +633,8 @@ func TestIntegrationOpenrouter(t *testing.T) {
 	if key == "" {
 		t.Skip("OPENROUTER_API_KEY not set")
 	}
-	resp, err := llmkit.Prompt(context.Background(),
-		llmkit.Provider{Name: providers.Openrouter, APIKey: key},
-		llmkit.Request{System: "Reply with only the word pong", User: "ping"},
-	)
+	c := llmkit.New(providers.Openrouter, key)
+	resp, err := c.Text.System("Reply with only the word pong").Prompt(context.Background(), "ping")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -669,15 +652,16 @@ func TestIntegrationOpenrouterStream(t *testing.T) {
 		t.Skip("OPENROUTER_API_KEY not set")
 	}
 	var chunks int
-	resp, err := llmkit.PromptStream(context.Background(),
-		llmkit.Provider{Name: providers.Openrouter, APIKey: key},
-		llmkit.Request{System: "Reply with only the word pong", User: "ping"},
-		func(chunk string) { chunks++ },
-	)
-	if err != nil {
-		t.Fatal(err)
+	var text string
+	c := llmkit.New(providers.Openrouter, key)
+	for chunk, err := range c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping") {
+		if err != nil {
+			t.Fatal(err)
+		}
+		chunks++
+		text += chunk
 	}
-	if resp.Text == "" {
+	if text == "" {
 		t.Error("empty response text")
 	}
 	if chunks == 0 {
@@ -690,10 +674,8 @@ func TestIntegrationPerplexity(t *testing.T) {
 	if key == "" {
 		t.Skip("PERPLEXITY_API_KEY not set")
 	}
-	resp, err := llmkit.Prompt(context.Background(),
-		llmkit.Provider{Name: providers.Perplexity, APIKey: key},
-		llmkit.Request{System: "Reply with only the word pong", User: "ping"},
-	)
+	c := llmkit.New(providers.Perplexity, key)
+	resp, err := c.Text.System("Reply with only the word pong").Prompt(context.Background(), "ping")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -711,15 +693,16 @@ func TestIntegrationPerplexityStream(t *testing.T) {
 		t.Skip("PERPLEXITY_API_KEY not set")
 	}
 	var chunks int
-	resp, err := llmkit.PromptStream(context.Background(),
-		llmkit.Provider{Name: providers.Perplexity, APIKey: key},
-		llmkit.Request{System: "Reply with only the word pong", User: "ping"},
-		func(chunk string) { chunks++ },
-	)
-	if err != nil {
-		t.Fatal(err)
+	var text string
+	c := llmkit.New(providers.Perplexity, key)
+	for chunk, err := range c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping") {
+		if err != nil {
+			t.Fatal(err)
+		}
+		chunks++
+		text += chunk
 	}
-	if resp.Text == "" {
+	if text == "" {
 		t.Error("empty response text")
 	}
 	if chunks == 0 {
@@ -732,10 +715,8 @@ func TestIntegrationQwen(t *testing.T) {
 	if key == "" {
 		t.Skip("DASHSCOPE_API_KEY not set")
 	}
-	resp, err := llmkit.Prompt(context.Background(),
-		llmkit.Provider{Name: providers.Qwen, APIKey: key},
-		llmkit.Request{System: "Reply with only the word pong", User: "ping"},
-	)
+	c := llmkit.New(providers.Qwen, key)
+	resp, err := c.Text.System("Reply with only the word pong").Prompt(context.Background(), "ping")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -753,15 +734,16 @@ func TestIntegrationQwenStream(t *testing.T) {
 		t.Skip("DASHSCOPE_API_KEY not set")
 	}
 	var chunks int
-	resp, err := llmkit.PromptStream(context.Background(),
-		llmkit.Provider{Name: providers.Qwen, APIKey: key},
-		llmkit.Request{System: "Reply with only the word pong", User: "ping"},
-		func(chunk string) { chunks++ },
-	)
-	if err != nil {
-		t.Fatal(err)
+	var text string
+	c := llmkit.New(providers.Qwen, key)
+	for chunk, err := range c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping") {
+		if err != nil {
+			t.Fatal(err)
+		}
+		chunks++
+		text += chunk
 	}
-	if resp.Text == "" {
+	if text == "" {
 		t.Error("empty response text")
 	}
 	if chunks == 0 {
@@ -774,10 +756,8 @@ func TestIntegrationSambanova(t *testing.T) {
 	if key == "" {
 		t.Skip("SAMBANOVA_API_KEY not set")
 	}
-	resp, err := llmkit.Prompt(context.Background(),
-		llmkit.Provider{Name: providers.Sambanova, APIKey: key},
-		llmkit.Request{System: "Reply with only the word pong", User: "ping"},
-	)
+	c := llmkit.New(providers.Sambanova, key)
+	resp, err := c.Text.System("Reply with only the word pong").Prompt(context.Background(), "ping")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -795,15 +775,16 @@ func TestIntegrationSambanovaStream(t *testing.T) {
 		t.Skip("SAMBANOVA_API_KEY not set")
 	}
 	var chunks int
-	resp, err := llmkit.PromptStream(context.Background(),
-		llmkit.Provider{Name: providers.Sambanova, APIKey: key},
-		llmkit.Request{System: "Reply with only the word pong", User: "ping"},
-		func(chunk string) { chunks++ },
-	)
-	if err != nil {
-		t.Fatal(err)
+	var text string
+	c := llmkit.New(providers.Sambanova, key)
+	for chunk, err := range c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping") {
+		if err != nil {
+			t.Fatal(err)
+		}
+		chunks++
+		text += chunk
 	}
-	if resp.Text == "" {
+	if text == "" {
 		t.Error("empty response text")
 	}
 	if chunks == 0 {
@@ -816,10 +797,8 @@ func TestIntegrationTogether(t *testing.T) {
 	if key == "" {
 		t.Skip("TOGETHER_API_KEY not set")
 	}
-	resp, err := llmkit.Prompt(context.Background(),
-		llmkit.Provider{Name: providers.Together, APIKey: key},
-		llmkit.Request{System: "Reply with only the word pong", User: "ping"},
-	)
+	c := llmkit.New(providers.Together, key)
+	resp, err := c.Text.System("Reply with only the word pong").Prompt(context.Background(), "ping")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -837,15 +816,16 @@ func TestIntegrationTogetherStream(t *testing.T) {
 		t.Skip("TOGETHER_API_KEY not set")
 	}
 	var chunks int
-	resp, err := llmkit.PromptStream(context.Background(),
-		llmkit.Provider{Name: providers.Together, APIKey: key},
-		llmkit.Request{System: "Reply with only the word pong", User: "ping"},
-		func(chunk string) { chunks++ },
-	)
-	if err != nil {
-		t.Fatal(err)
+	var text string
+	c := llmkit.New(providers.Together, key)
+	for chunk, err := range c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping") {
+		if err != nil {
+			t.Fatal(err)
+		}
+		chunks++
+		text += chunk
 	}
-	if resp.Text == "" {
+	if text == "" {
 		t.Error("empty response text")
 	}
 	if chunks == 0 {
@@ -858,10 +838,8 @@ func TestIntegrationYi(t *testing.T) {
 	if key == "" {
 		t.Skip("YI_API_KEY not set")
 	}
-	resp, err := llmkit.Prompt(context.Background(),
-		llmkit.Provider{Name: providers.Yi, APIKey: key},
-		llmkit.Request{System: "Reply with only the word pong", User: "ping"},
-	)
+	c := llmkit.New(providers.Yi, key)
+	resp, err := c.Text.System("Reply with only the word pong").Prompt(context.Background(), "ping")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -879,15 +857,16 @@ func TestIntegrationYiStream(t *testing.T) {
 		t.Skip("YI_API_KEY not set")
 	}
 	var chunks int
-	resp, err := llmkit.PromptStream(context.Background(),
-		llmkit.Provider{Name: providers.Yi, APIKey: key},
-		llmkit.Request{System: "Reply with only the word pong", User: "ping"},
-		func(chunk string) { chunks++ },
-	)
-	if err != nil {
-		t.Fatal(err)
+	var text string
+	c := llmkit.New(providers.Yi, key)
+	for chunk, err := range c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping") {
+		if err != nil {
+			t.Fatal(err)
+		}
+		chunks++
+		text += chunk
 	}
-	if resp.Text == "" {
+	if text == "" {
 		t.Error("empty response text")
 	}
 	if chunks == 0 {
@@ -900,10 +879,8 @@ func TestIntegrationZhipu(t *testing.T) {
 	if key == "" {
 		t.Skip("ZHIPU_API_KEY not set")
 	}
-	resp, err := llmkit.Prompt(context.Background(),
-		llmkit.Provider{Name: providers.Zhipu, APIKey: key},
-		llmkit.Request{System: "Reply with only the word pong", User: "ping"},
-	)
+	c := llmkit.New(providers.Zhipu, key)
+	resp, err := c.Text.System("Reply with only the word pong").Prompt(context.Background(), "ping")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -921,15 +898,16 @@ func TestIntegrationZhipuStream(t *testing.T) {
 		t.Skip("ZHIPU_API_KEY not set")
 	}
 	var chunks int
-	resp, err := llmkit.PromptStream(context.Background(),
-		llmkit.Provider{Name: providers.Zhipu, APIKey: key},
-		llmkit.Request{System: "Reply with only the word pong", User: "ping"},
-		func(chunk string) { chunks++ },
-	)
-	if err != nil {
-		t.Fatal(err)
+	var text string
+	c := llmkit.New(providers.Zhipu, key)
+	for chunk, err := range c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping") {
+		if err != nil {
+			t.Fatal(err)
+		}
+		chunks++
+		text += chunk
 	}
-	if resp.Text == "" {
+	if text == "" {
 		t.Error("empty response text")
 	}
 	if chunks == 0 {
@@ -942,11 +920,8 @@ func TestIntegrationAnthropicCaching(t *testing.T) {
 	if key == "" {
 		t.Skip("ANTHROPIC_API_KEY not set")
 	}
-	resp, err := llmkit.Prompt(context.Background(),
-		llmkit.Provider{Name: providers.Anthropic, APIKey: key},
-		llmkit.Request{System: "Reply with only the word pong", User: "ping"},
-		llmkit.WithCaching(),
-	)
+	c := llmkit.New(providers.Anthropic, key)
+	resp, err := c.Text.System("Reply with only the word pong").Caching().Prompt(context.Background(), "ping")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -961,11 +936,8 @@ func TestIntegrationOpenAICaching(t *testing.T) {
 	if key == "" {
 		t.Skip("OPENAI_API_KEY not set")
 	}
-	resp, err := llmkit.Prompt(context.Background(),
-		llmkit.Provider{Name: providers.OpenAI, APIKey: key},
-		llmkit.Request{System: "Reply with only the word pong", User: "ping"},
-		llmkit.WithCaching(),
-	)
+	c := llmkit.New(providers.OpenAI, key)
+	resp, err := c.Text.System("Reply with only the word pong").Caching().Prompt(context.Background(), "ping")
 	if err != nil {
 		t.Fatal(err)
 	}

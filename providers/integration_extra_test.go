@@ -51,11 +51,8 @@ func TestIntegrationGoogleResourceCaching(t *testing.T) {
 
 	// First call: our code creates the cachedContents resource, then the
 	// generate call references it. cache_read must be > 0 here.
-	resp1, err := llmkit.Prompt(context.Background(),
-		llmkit.Provider{Name: providers.Google, APIKey: key},
-		llmkit.Request{System: longSystem, User: "What is entropy in one sentence?"},
-		llmkit.WithCaching(),
-	)
+	c := llmkit.New(providers.Google, key)
+	resp1, err := c.Text.System(longSystem).Caching().Prompt(context.Background(), "What is entropy in one sentence?")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,11 +67,7 @@ func TestIntegrationGoogleResourceCaching(t *testing.T) {
 		resp1.Tokens.Input, resp1.Tokens.Output)
 
 	// Second call with same system prompt: should also hit the cache.
-	resp2, err := llmkit.Prompt(context.Background(),
-		llmkit.Provider{Name: providers.Google, APIKey: key},
-		llmkit.Request{System: longSystem, User: "Summarize Shannon's 1948 result."},
-		llmkit.WithCaching(),
-	)
+	resp2, err := c.Text.System(longSystem).Caching().Prompt(context.Background(), "Summarize Shannon's 1948 result.")
 	if err != nil {
 		t.Fatal(err)
 	}
