@@ -36,6 +36,11 @@ type Response struct {
 // one type without conversion.
 type Usage = providers.Usage
 
+// MiddlewareFn is the user-supplied hook fired around capability calls.
+// Aliased to providers.MiddlewareFn so callers don't need to import the
+// providers subpackage just to declare a hook.
+type MiddlewareFn = providers.MiddlewareFn
+
 // Message represents a single conversation turn.
 type Message struct {
 	Role    string // "user" or "assistant"
