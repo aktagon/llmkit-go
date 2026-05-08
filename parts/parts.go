@@ -1,0 +1,30 @@
+// Package parts provides constructors for the universal multimodal
+// input atom llmkit.Part. The constructors live in a sub-package so
+// that the type names *Text and *Image (typed-builder types in the
+// root package) can stay short — Go's flat package namespace
+// otherwise forces a tradeoff between short builder type names and
+// short Part constructor names. Sub-packages are the idiomatic Go
+// resolution (cf. aws-sdk-go-v2, stripe-go, kubernetes/client-go).
+//
+// Most users do not need this package directly: the typed-builder's
+// chain methods accept the underlying primitives (mime, bytes) and
+// build Parts internally:
+//
+//	c.Text.Image("image/png", bytes).Text("describe").Prompt(ctx, "")
+//
+// Reach for parts.Text / parts.Image only when constructing standalone
+// Parts to pass into a varargs terminal:
+//
+//	c.Image.Parts(parts.Text("describe"), parts.Image(mime, bytes)).Generate(ctx)
+package parts
+
+import llmkit "github.com/aktagon/llmkit-go"
+
+// Text constructs a text-bearing Part.
+func Text(s string) llmkit.Part { return llmkit.Part{Text: s} }
+
+// Image constructs an image-bearing Part. mime is the IANA media
+// type (e.g., "image/png"); b is the raw bytes (not base64-encoded).
+func Image(mime string, b []byte) llmkit.Part {
+	return llmkit.Part{Image: &llmkit.MediaRef{MimeType: mime, Bytes: b}}
+}
