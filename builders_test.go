@@ -26,15 +26,23 @@ func TestSurface_Chains(t *testing.T) {
 	text := c.Text.
 		Caching().
 		File("file-id").
+		FrequencyPenalty(0.1).
 		History(Message{Role: "user", Content: "earlier"}).
 		Image("image/png", []byte{0xff}).
 		MaxTokens(42).
 		Middleware(noopMiddleware).
 		Model("text-model").
+		PresencePenalty(0.2).
+		ReasoningEffort("high").
 		Schema(`{"type":"object"}`).
+		Seed(1234).
+		StopSequences("END", "STOP").
 		System("you are a tutor").
 		Temperature(0.7).
-		Text("hello")
+		Text("hello").
+		ThinkingBudget(1024).
+		TopK(40).
+		TopP(0.9)
 
 	if !text.caching {
 		t.Errorf("caching not set")
@@ -86,12 +94,20 @@ func TestSurface_Chains(t *testing.T) {
 
 	agent := c.Agent.
 		Caching().
+		FrequencyPenalty(0.1).
 		MaxTokens(1).
 		Middleware(noopMiddleware).
 		Model("a").
+		PresencePenalty(0.2).
+		ReasoningEffort("medium").
+		Seed(7).
+		StopSequences("Q:").
 		System("sys").
 		Temperature(0.5).
-		Tool(Tool{Name: "calc"})
+		ThinkingBudget(512).
+		Tool(Tool{Name: "calc"}).
+		TopK(20).
+		TopP(0.85)
 
 	if len(agent.tools) != 1 || agent.tools[0].Name != "calc" {
 		t.Errorf("tools: got %+v", agent.tools)
