@@ -117,7 +117,10 @@ func resolveImageOptions(opts []ImageOption) *imageOptions {
 // multimodal sequence) — exactly one must be set. Pre-flight validation
 // rejects unsupported aspect ratios, sizes, and image-part counts before
 // any HTTP call.
-func GenerateImage(ctx context.Context, p Provider, req ImageRequest, opts ...ImageOption) (ImageResponse, error) {
+//
+// Internal helper as of plan-018 D1.3c — public surface is
+// (*Image).Generate in image_builder.go.
+func generateImage(ctx context.Context, p Provider, req ImageRequest, opts ...ImageOption) (ImageResponse, error) {
 	o := resolveImageOptions(opts)
 
 	if err := validateProvider(p); err != nil {

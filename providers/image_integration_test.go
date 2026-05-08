@@ -21,12 +21,8 @@ func TestIntegrationImageGoogleGemini3ProImagePreview(t *testing.T) {
 	if os.Getenv("LLMKIT_RUN_SLOW_IMAGE") == "" {
 		t.Skip("LLMKIT_RUN_SLOW_IMAGE not set; skipping gemini-3-pro-image-preview smoke")
 	}
-	resp, err := llmkit.GenerateImage(context.Background(),
-		llmkit.Provider{Name: providers.Google, APIKey: key},
-		llmkit.ImageRequest{Prompt: "A simple red circle on a white background.", Model: "gemini-3-pro-image-preview"},
-		llmkit.WithAspectRatio("1:1"),
-		llmkit.WithImageSize("1K"),
-	)
+	c := llmkit.New(providers.Google, key)
+	resp, err := c.Image.Model("gemini-3-pro-image-preview").AspectRatio("1:1").ImageSize("1K").Generate(context.Background(), "A simple red circle on a white background.")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,12 +42,8 @@ func TestIntegrationImageGoogleGemini31FlashImagePreview(t *testing.T) {
 	if key == "" {
 		t.Skip("GOOGLE_API_KEY not set")
 	}
-	resp, err := llmkit.GenerateImage(context.Background(),
-		llmkit.Provider{Name: providers.Google, APIKey: key},
-		llmkit.ImageRequest{Prompt: "A simple red circle on a white background.", Model: "gemini-3.1-flash-image-preview"},
-		llmkit.WithAspectRatio("1:1"),
-		llmkit.WithImageSize("1K"),
-	)
+	c := llmkit.New(providers.Google, key)
+	resp, err := c.Image.Model("gemini-3.1-flash-image-preview").AspectRatio("1:1").ImageSize("1K").Generate(context.Background(), "A simple red circle on a white background.")
 	if err != nil {
 		t.Fatal(err)
 	}
