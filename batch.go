@@ -15,18 +15,18 @@ import (
 // BatchHandle is defined in builders.go (typed-builder API surface);
 // the legacy free-functions below operate on the same struct.
 
-// PromptBatch sends multiple requests as a batch and blocks until all results are ready.
-// Uses the provider's batch config from the ontology to determine input mode and lifecycle.
-func PromptBatch(ctx context.Context, p Provider, reqs []Request, opts ...Option) ([]Response, error) {
-	handle, err := SubmitBatch(ctx, p, reqs, opts...)
+// promptBatch / submitBatch / waitBatch are internal implementations.
+// Public surface: (*Text).Batch / (*Text).SubmitBatch / BatchHandle.Wait
+// in batch_builder.go (plan-018 D1.3e).
+func promptBatch(ctx context.Context, p Provider, reqs []Request, opts ...Option) ([]Response, error) {
+	handle, err := submitBatch(ctx, p, reqs, opts...)
 	if err != nil {
 		return nil, err
 	}
-	return WaitBatch(ctx, handle, opts...)
+	return waitBatch(ctx, handle, opts...)
 }
 
-// SubmitBatch submits a batch of requests and returns a handle for polling.
-func SubmitBatch(ctx context.Context, p Provider, reqs []Request, opts ...Option) (BatchHandle, error) {
+func submitBatch(ctx context.Context, p Provider, reqs []Request, opts ...Option) (BatchHandle, error) {
 	o := resolveOptions(opts)
 
 	if err := validateProvider(p); err != nil {
@@ -122,8 +122,7 @@ func SubmitBatch(ctx context.Context, p Provider, reqs []Request, opts ...Option
 	return BatchHandle{ID: batchID, Provider: p}, nil
 }
 
-// WaitBatch polls until the batch is complete and returns results.
-func WaitBatch(ctx context.Context, handle BatchHandle, opts ...Option) ([]Response, error) {
+func waitBatch(ctx context.Context, handle BatchHandle, opts ...Option) ([]Response, error) {
 	o := resolveOptions(opts)
 	p := handle.Provider
 
