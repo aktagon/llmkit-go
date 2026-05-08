@@ -1,10 +1,8 @@
-package builders
+package llmkit
 
 import (
 	"context"
 	"errors"
-
-	llmkit "github.com/aktagon/llmkit-go"
 )
 
 //
@@ -28,11 +26,11 @@ func (b *Upload) Run(ctx context.Context) (File, error) {
 		return File{}, errors.New("Upload: Bytes path not yet wired (phase 3 follow-up); use Path for now")
 	}
 
-	var opts []llmkit.Option
+	var opts []Option
 	if len(b.middleware) > 0 {
-		opts = append(opts, llmkit.WithMiddleware(b.middleware...))
+		opts = append(opts, WithMiddleware(b.middleware...))
 	}
 
-	provider := b.client.provider.toLlmkit("")
-	return llmkit.UploadFile(ctx, provider, b.path, opts...)
+	provider := b.client.provider.toProvider("")
+	return UploadFile(ctx, provider, b.path, opts...)
 }

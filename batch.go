@@ -13,10 +13,7 @@ import (
 )
 
 //
-type BatchHandle struct {
-	ID       string
-	Provider Provider
-}
+//
 
 //
 //

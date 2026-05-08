@@ -1,10 +1,8 @@
-package builders
+package llmkit
 
 import (
 	"context"
 	"iter"
-
-	llmkit "github.com/aktagon/llmkit-go"
 )
 
 //
@@ -32,7 +30,7 @@ import (
 //
 func (b *Text) Stream(ctx context.Context, finalText string) iter.Seq2[string, error] {
 	req, opts := b.buildRequest(finalText)
-	provider := b.client.provider.toLlmkit(b.model)
+	provider := b.client.provider.toProvider(b.model)
 
 	return func(yield func(string, error) bool) {
 		innerCtx, cancel := context.WithCancel(ctx)
@@ -48,7 +46,7 @@ func (b *Text) Stream(ctx context.Context, finalText string) iter.Seq2[string, e
 
 		go func() {
 			defer close(done)
-			_, err := llmkit.PromptStream(innerCtx, provider, req, func(chunk string) {
+			_, err := PromptStream(innerCtx, provider, req, func(chunk string) {
 				select {
 				case chunks <- chunk:
 				case <-innerCtx.Done():

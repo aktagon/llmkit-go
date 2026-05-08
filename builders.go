@@ -3,30 +3,8 @@
 //
 //
 //
-//
-//
-//
-//
-package builders
+package llmkit
 
-import (
-	llmkit "github.com/aktagon/llmkit-go"
-)
-
-//
-
-type Message = llmkit.Message
-type Tool = llmkit.Tool
-type MiddlewareFn = llmkit.MiddlewareFn
-type Response = llmkit.Response
-type ImageResponse = llmkit.ImageResponse
-type ImageData = llmkit.ImageData
-type File = llmkit.File
-type Part = llmkit.Part
-type Provider = llmkit.Provider
-
-//
-//
 //
 //
 //
@@ -39,7 +17,6 @@ type BatchHandle struct {
 //
 //
 //
-//
 type providerConfig struct {
 	name    string
 	apiKey  string
@@ -48,8 +25,8 @@ type providerConfig struct {
 
 //
 //
-func (pc providerConfig) toLlmkit(model string) llmkit.Provider {
-	return llmkit.Provider{Name: pc.name, APIKey: pc.apiKey, Model: model, BaseURL: pc.baseURL}
+func (pc providerConfig) toProvider(model string) Provider {
+	return Provider{Name: pc.name, APIKey: pc.apiKey, Model: model, BaseURL: pc.baseURL}
 }
 
 //
@@ -114,11 +91,11 @@ func Zhipu(apiKey string) *Client      { return newClient("zhipu", apiKey) }
 type Text struct {
 	client      *Client
 	caching     bool
-	files       []llmkit.File
-	history     []llmkit.Message
-	parts       []llmkit.Part
+	files       []File
+	history     []Message
+	parts       []Part
 	maxTokens   *int
-	middleware  []llmkit.MiddlewareFn
+	middleware  []MiddlewareFn
 	model       string
 	schema      string
 	system      string
@@ -128,17 +105,17 @@ type Text struct {
 func (b *Text) Caching() *Text { out := *b; out.caching = true; return &out }
 func (b *Text) File(id string) *Text {
 	out := *b
-	out.files = append(out.files, llmkit.File{ID: id})
+	out.files = append(out.files, File{ID: id})
 	return &out
-}                                                    // ordered
-func (b *Text) History(msgs ...llmkit.Message) *Text { out := *b; out.history = msgs; return &out }
+}                                             // ordered
+func (b *Text) History(msgs ...Message) *Text { out := *b; out.history = msgs; return &out }
 func (b *Text) Image(mime string, data []byte) *Text {
 	out := *b
-	out.parts = append(out.parts, llmkit.Part{Image: &llmkit.MediaRef{MimeType: mime, Bytes: data}})
+	out.parts = append(out.parts, Part{Image: &MediaRef{MimeType: mime, Bytes: data}})
 	return &out
 }                                     // ordered
 func (b *Text) MaxTokens(n int) *Text { out := *b; v := n; out.maxTokens = &v; return &out }
-func (b *Text) Middleware(fns ...llmkit.MiddlewareFn) *Text {
+func (b *Text) Middleware(fns ...MiddlewareFn) *Text {
 	out := *b
 	out.middleware = append(out.middleware, fns...)
 	return &out
@@ -149,7 +126,7 @@ func (b *Text) System(s string) *Text       { out := *b; out.system = s; return 
 func (b *Text) Temperature(t float64) *Text { out := *b; v := t; out.temperature = &v; return &out }
 func (b *Text) Text(s string) *Text {
 	out := *b
-	out.parts = append(out.parts, llmkit.Part{Text: s})
+	out.parts = append(out.parts, Part{Text: s})
 	return &out
 } // ordered
 
@@ -162,10 +139,10 @@ type Image struct {
 	client      *Client
 	aspectRatio string
 	caching     bool
-	parts       []llmkit.Part
+	parts       []Part
 	imageSize   string
 	includeText bool
-	middleware  []llmkit.MiddlewareFn
+	middleware  []MiddlewareFn
 	model       string
 }
 
@@ -173,12 +150,12 @@ func (b *Image) AspectRatio(r string) *Image { out := *b; out.aspectRatio = r; r
 func (b *Image) Caching() *Image             { out := *b; out.caching = true; return &out }
 func (b *Image) Image(mime string, data []byte) *Image {
 	out := *b
-	out.parts = append(out.parts, llmkit.Part{Image: &llmkit.MediaRef{MimeType: mime, Bytes: data}})
+	out.parts = append(out.parts, Part{Image: &MediaRef{MimeType: mime, Bytes: data}})
 	return &out
 }                                          // ordered
 func (b *Image) ImageSize(s string) *Image { out := *b; out.imageSize = s; return &out }
 func (b *Image) IncludeText() *Image       { out := *b; out.includeText = true; return &out }
-func (b *Image) Middleware(fns ...llmkit.MiddlewareFn) *Image {
+func (b *Image) Middleware(fns ...MiddlewareFn) *Image {
 	out := *b
 	out.middleware = append(out.middleware, fns...)
 	return &out
@@ -186,7 +163,7 @@ func (b *Image) Middleware(fns ...llmkit.MiddlewareFn) *Image {
 func (b *Image) Model(name string) *Image { out := *b; out.model = name; return &out }
 func (b *Image) Text(s string) *Image {
 	out := *b
-	out.parts = append(out.parts, llmkit.Part{Text: s})
+	out.parts = append(out.parts, Part{Text: s})
 	return &out
 } // ordered
 
@@ -199,11 +176,11 @@ type Agent struct {
 	client      *Client
 	caching     bool
 	maxTokens   *int
-	middleware  []llmkit.MiddlewareFn
+	middleware  []MiddlewareFn
 	model       string
 	system      string
 	temperature *float64
-	tools       []llmkit.Tool
+	tools       []Tool
 	state       *agentState
 }
 
@@ -215,7 +192,7 @@ func (b *Agent) MaxTokens(n int) *Agent {
 	out.state = nil
 	return &out
 }
-func (b *Agent) Middleware(fns ...llmkit.MiddlewareFn) *Agent {
+func (b *Agent) Middleware(fns ...MiddlewareFn) *Agent {
 	out := *b
 	out.middleware = append(out.middleware, fns...)
 	out.state = nil
@@ -230,7 +207,7 @@ func (b *Agent) Temperature(t float64) *Agent {
 	out.state = nil
 	return &out
 }
-func (b *Agent) Tool(t llmkit.Tool) *Agent {
+func (b *Agent) Tool(t Tool) *Agent {
 	out := *b
 	out.tools = append(out.tools, t)
 	out.state = nil
@@ -246,14 +223,14 @@ type Upload struct {
 	client     *Client
 	bytes      []byte
 	filename   string
-	middleware []llmkit.MiddlewareFn
+	middleware []MiddlewareFn
 	mimeType   string
 	path       string
 }
 
 func (b *Upload) Bytes(data []byte) *Upload    { out := *b; out.bytes = data; return &out }
 func (b *Upload) Filename(name string) *Upload { out := *b; out.filename = name; return &out }
-func (b *Upload) Middleware(fns ...llmkit.MiddlewareFn) *Upload {
+func (b *Upload) Middleware(fns ...MiddlewareFn) *Upload {
 	out := *b
 	out.middleware = append(out.middleware, fns...)
 	return &out

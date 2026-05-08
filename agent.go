@@ -11,7 +11,7 @@ import (
 )
 
 //
-type Agent struct {
+type legacyAgent struct {
 	provider Provider
 	opts     *options
 	tools    []Tool
@@ -39,37 +39,37 @@ type toolResult struct {
 }
 
 //
-func NewAgent(p Provider, opts ...Option) *Agent {
-	return &Agent{
+func newLegacyAgent(p Provider, opts ...Option) *legacyAgent {
+	return &legacyAgent{
 		provider: p,
 		opts:     resolveOptions(opts),
 	}
 }
 
 //
-func (a *Agent) SetSystem(system string) {
+func (a *legacyAgent) SetSystem(system string) {
 	a.system = system
 }
 
 //
-func (a *Agent) AddTool(tool Tool) {
+func (a *legacyAgent) AddTool(tool Tool) {
 	a.tools = append(a.tools, tool)
 }
 
 //
-func (a *Agent) Reset() {
+func (a *legacyAgent) Reset() {
 	a.history = nil
 	a.tools = nil
 }
 
 //
-func (a *Agent) Chat(ctx context.Context, msg string) (Response, error) {
+func (a *legacyAgent) Chat(ctx context.Context, msg string) (Response, error) {
 	a.history = append(a.history, internalMessage{role: "user", content: msg})
 	return a.runToolLoop(ctx)
 }
 
 //
-func (a *Agent) runToolLoop(ctx context.Context) (Response, error) {
+func (a *legacyAgent) runToolLoop(ctx context.Context) (Response, error) {
 	cfg, ok := providers.Providers()[a.provider.Name]
 	if !ok {
 		return Response{}, &ValidationError{Field: "provider", Message: "unknown: " + a.provider.Name}
@@ -211,7 +211,7 @@ func (a *Agent) runToolLoop(ctx context.Context) (Response, error) {
 }
 
 //
-func (a *Agent) buildAgentRequest(cfg providers.ProviderConfig) (map[string]any, map[string]string) {
+func (a *legacyAgent) buildAgentRequest(cfg providers.ProviderConfig) (map[string]any, map[string]string) {
 	body := map[string]any{}
 	headers := map[string]string{}
 
@@ -288,7 +288,7 @@ func (a *Agent) buildAgentRequest(cfg providers.ProviderConfig) (map[string]any,
 }
 
 //
-func (a *Agent) buildHistoryMessages(body map[string]any, cfg providers.ProviderConfig,
+func (a *legacyAgent) buildHistoryMessages(body map[string]any, cfg providers.ProviderConfig,
 	msgTransform messageTransformFunc,
 	tcCallTransform toolCallTransformFunc,
 	tcResultTransform toolResultTransformFunc) {
@@ -354,7 +354,7 @@ func (a *Agent) buildHistoryMessages(body map[string]any, cfg providers.Provider
 	}
 }
 
-func (a *Agent) findTool(name string) *Tool {
+func (a *legacyAgent) findTool(name string) *Tool {
 	for i := range a.tools {
 		if a.tools[i].Name == name {
 			return &a.tools[i]

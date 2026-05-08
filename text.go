@@ -1,10 +1,8 @@
-package builders
+package llmkit
 
 import (
 	"context"
 	"encoding/base64"
-
-	llmkit "github.com/aktagon/llmkit-go"
 )
 
 //
@@ -19,8 +17,8 @@ import (
 //
 func (b *Text) Prompt(ctx context.Context, finalText string) (Response, error) {
 	req, opts := b.buildRequest(finalText)
-	provider := b.client.provider.toLlmkit(b.model)
-	return llmkit.Prompt(ctx, provider, req, opts...)
+	provider := b.client.provider.toProvider(b.model)
+	return Prompt(ctx, provider, req, opts...)
 }
 
 //
@@ -38,15 +36,15 @@ func (b *Text) Prompt(ctx context.Context, finalText string) (Response, error) {
 //
 //
 //
-func (b *Text) buildRequest(finalText string) (llmkit.Request, []llmkit.Option) {
+func (b *Text) buildRequest(finalText string) (Request, []Option) {
 	parts := b.parts
 	if finalText != "" {
-		parts = append(parts, llmkit.Part{Text: finalText})
+		parts = append(parts, Part{Text: finalText})
 	}
 
 	user, images := splitTextAndImages(parts)
 
-	req := llmkit.Request{
+	req := Request{
 		System:   b.system,
 		User:     user,
 		Messages: b.history,
@@ -55,18 +53,18 @@ func (b *Text) buildRequest(finalText string) (llmkit.Request, []llmkit.Option) 
 		Images:   images,
 	}
 
-	var opts []llmkit.Option
+	var opts []Option
 	if b.maxTokens != nil {
-		opts = append(opts, llmkit.WithMaxTokens(*b.maxTokens))
+		opts = append(opts, WithMaxTokens(*b.maxTokens))
 	}
 	if b.temperature != nil {
-		opts = append(opts, llmkit.WithTemperature(*b.temperature))
+		opts = append(opts, WithTemperature(*b.temperature))
 	}
 	if b.caching {
-		opts = append(opts, llmkit.WithCaching())
+		opts = append(opts, WithCaching())
 	}
 	if len(b.middleware) > 0 {
-		opts = append(opts, llmkit.WithMiddleware(b.middleware...))
+		opts = append(opts, WithMiddleware(b.middleware...))
 	}
 	return req, opts
 }
@@ -79,13 +77,13 @@ func (b *Text) buildRequest(finalText string) (llmkit.Request, []llmkit.Option) 
 //
 //
 //
-func splitTextAndImages(parts []llmkit.Part) (string, []llmkit.InputImage) {
+func splitTextAndImages(parts []Part) (string, []InputImage) {
 	var text string
-	var images []llmkit.InputImage
+	var images []InputImage
 	for _, p := range parts {
 		switch {
 		case p.Image != nil:
-			images = append(images, llmkit.InputImage{
+			images = append(images, InputImage{
 				URL:      "data:" + p.Image.MimeType + ";base64," + base64.StdEncoding.EncodeToString(p.Image.Bytes),
 				MimeType: p.Image.MimeType,
 			})

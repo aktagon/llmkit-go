@@ -36,6 +36,7 @@ type ImageRequest struct {
 //
 //
 //
+//
 type Part struct {
 	Text  string
 	Image *MediaRef
@@ -46,15 +47,6 @@ type Part struct {
 type MediaRef struct {
 	MimeType string
 	Bytes    []byte
-}
-
-//
-func Text(s string) Part { return Part{Text: s} }
-
-//
-//
-func Image(mime string, b []byte) Part {
-	return Part{Image: &MediaRef{MimeType: mime, Bytes: b}}
 }
 
 //
@@ -240,7 +232,7 @@ func normalizeImageParts(req ImageRequest) ([]Part, error) {
 	case !hasPrompt && !hasParts:
 		return nil, &ValidationError{Field: "prompt", Message: "set either Prompt or Parts"}
 	case hasPrompt:
-		return []Part{Text(req.Prompt)}, nil
+		return []Part{{Text: req.Prompt}}, nil
 	default:
 		return req.Parts, nil
 	}

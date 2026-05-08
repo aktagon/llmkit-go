@@ -1,9 +1,7 @@
-package builders
+package llmkit
 
 import (
 	"context"
-
-	llmkit "github.com/aktagon/llmkit-go"
 )
 
 //
@@ -15,7 +13,7 @@ import (
 //
 //
 type agentState struct {
-	agent *llmkit.Agent
+	agent *legacyAgent
 }
 
 //
@@ -45,22 +43,22 @@ func (b *Agent) Reset() {
 //
 //
 func (b *Agent) initAgent() {
-	var opts []llmkit.Option
+	var opts []Option
 	if b.maxTokens != nil {
-		opts = append(opts, llmkit.WithMaxTokens(*b.maxTokens))
+		opts = append(opts, WithMaxTokens(*b.maxTokens))
 	}
 	if b.temperature != nil {
-		opts = append(opts, llmkit.WithTemperature(*b.temperature))
+		opts = append(opts, WithTemperature(*b.temperature))
 	}
 	if b.caching {
-		opts = append(opts, llmkit.WithCaching())
+		opts = append(opts, WithCaching())
 	}
 	if len(b.middleware) > 0 {
-		opts = append(opts, llmkit.WithMiddleware(b.middleware...))
+		opts = append(opts, WithMiddleware(b.middleware...))
 	}
 
-	provider := b.client.provider.toLlmkit(b.model)
-	a := llmkit.NewAgent(provider, opts...)
+	provider := b.client.provider.toProvider(b.model)
+	a := newLegacyAgent(provider, opts...)
 	if b.system != "" {
 		a.SetSystem(b.system)
 	}
