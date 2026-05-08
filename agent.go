@@ -57,12 +57,6 @@ func (a *legacyAgent) addTool(tool Tool) {
 }
 
 //
-func (a *legacyAgent) reset() {
-	a.history = nil
-	a.tools = nil
-}
-
-//
 func (a *legacyAgent) chat(ctx context.Context, msg string) (Response, error) {
 	a.history = append(a.history, internalMessage{role: "user", content: msg})
 	return a.runToolLoop(ctx)
