@@ -152,10 +152,7 @@ func TestUploadFileRejectsUnsupportedProvider(t *testing.T) {
 	// anthropic supports file uploads, but ai21 doesn't — picking a
 	// no-upload provider keeps the test offline while still entering
 	// the function body and exercising the error path.
-	_, err := UploadFile(context.Background(),
-		Provider{Name: providers.Ai21, APIKey: "k"},
-		"any.pdf",
-	)
+	_, err := New(providers.Ai21, "k").Upload.Path("any.pdf").Run(context.Background())
 	var verr *ValidationError
 	if !errors.As(err, &verr) {
 		t.Fatalf("expected ValidationError, got %v", err)
