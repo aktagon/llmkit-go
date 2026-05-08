@@ -6,32 +6,46 @@
 //
 //
 //
+//
 package builders
 
 import (
 	"context"
 	"iter"
+
+	llmkit "github.com/aktagon/llmkit-go"
 )
 
 //
 
-type Message struct{ Role string }
-type Tool interface{}
-type MiddlewareFn func() error
-type Response struct{ Text string }
-type ImageResponse struct{}
+type Message = llmkit.Message
+type Tool = llmkit.Tool
+type MiddlewareFn = llmkit.MiddlewareFn
+type Response = llmkit.Response
+type ImageResponse = llmkit.ImageResponse
+type ImageData = llmkit.ImageData
+type File = llmkit.File
+type Part = llmkit.Part
+
+//
+//
+//
 type BatchHandle struct {
 	ID       string
 	Provider string
 }
-type File struct{ ID string }
 
-//
 //
 //
 type providerConfig struct {
 	name   string
 	apiKey string
+}
+
+//
+//
+func (pc providerConfig) toLlmkit(model string) llmkit.Provider {
+	return llmkit.Provider{Name: pc.name, APIKey: pc.apiKey, Model: model}
 }
 
 //
@@ -94,25 +108,47 @@ func Zhipu(apiKey string) *Client      { return newClient("zhipu", apiKey) }
 //
 //
 type Text struct {
-	client *Client
-	//
+	client      *Client
+	caching     bool
+	files       []llmkit.File
+	history     []llmkit.Message
+	parts       []llmkit.Part
+	maxTokens   *int
+	middleware  []llmkit.MiddlewareFn
+	model       string
+	schema      string
+	system      string
+	temperature *float64
 }
 
-func (b *Text) Caching() *Text                       { out := *b; return &out }
-func (b *Text) File(id string) *Text                 { out := *b; return &out } // ordered: parts accumulator
-func (b *Text) History(msgs ...Message) *Text        { out := *b; return &out }
-func (b *Text) Image(mime string, data []byte) *Text { out := *b; return &out } // ordered: parts accumulator
-func (b *Text) MaxTokens(n int) *Text                { out := *b; return &out }
-func (b *Text) Middleware(fns ...MiddlewareFn) *Text { out := *b; return &out }
-func (b *Text) Model(name string) *Text              { out := *b; return &out }
-func (b *Text) Schema(s string) *Text                { out := *b; return &out }
-func (b *Text) System(s string) *Text                { out := *b; return &out }
-func (b *Text) Temperature(t float64) *Text          { out := *b; return &out }
-func (b *Text) Text(s string) *Text                  { out := *b; return &out } // ordered: parts accumulator
-
-func (b *Text) Prompt(ctx context.Context, finalText string) (Response, error) {
-	panic("plan 016 phase 3: *Text.Prompt not yet implemented")
+func (b *Text) Caching() *Text { out := *b; out.caching = true; return &out }
+func (b *Text) File(id string) *Text {
+	out := *b
+	out.files = append(out.files, llmkit.File{ID: id})
+	return &out
+}                                                    // ordered
+func (b *Text) History(msgs ...llmkit.Message) *Text { out := *b; out.history = msgs; return &out }
+func (b *Text) Image(mime string, data []byte) *Text {
+	out := *b
+	out.parts = append(out.parts, llmkit.Image(mime, data))
+	return &out
+}                                     // ordered
+func (b *Text) MaxTokens(n int) *Text { out := *b; v := n; out.maxTokens = &v; return &out }
+func (b *Text) Middleware(fns ...llmkit.MiddlewareFn) *Text {
+	out := *b
+	out.middleware = append(out.middleware, fns...)
+	return &out
 }
+func (b *Text) Model(name string) *Text     { out := *b; out.model = name; return &out }
+func (b *Text) Schema(s string) *Text       { out := *b; out.schema = s; return &out }
+func (b *Text) System(s string) *Text       { out := *b; out.system = s; return &out }
+func (b *Text) Temperature(t float64) *Text { out := *b; v := t; out.temperature = &v; return &out }
+func (b *Text) Text(s string) *Text {
+	out := *b
+	out.parts = append(out.parts, llmkit.Text(s))
+	return &out
+} // ordered
+
 func (b *Text) Stream(ctx context.Context, finalText string) iter.Seq2[string, error] {
 	panic("plan 016 phase 3: *Text.Stream not yet implemented")
 }
@@ -129,22 +165,36 @@ func (b *Text) SubmitBatch(ctx context.Context, prompts ...string) (BatchHandle,
 //
 //
 type Image struct {
-	client *Client
-	//
+	client      *Client
+	aspectRatio string
+	caching     bool
+	parts       []llmkit.Part
+	imageSize   string
+	includeText bool
+	middleware  []llmkit.MiddlewareFn
+	model       string
 }
 
-func (b *Image) AspectRatio(r string) *Image           { out := *b; return &out }
-func (b *Image) Caching() *Image                       { out := *b; return &out }
-func (b *Image) Image(mime string, data []byte) *Image { out := *b; return &out } // ordered: parts accumulator
-func (b *Image) ImageSize(s string) *Image             { out := *b; return &out }
-func (b *Image) IncludeText() *Image                   { out := *b; return &out }
-func (b *Image) Middleware(fns ...MiddlewareFn) *Image { out := *b; return &out }
-func (b *Image) Model(name string) *Image              { out := *b; return &out }
-func (b *Image) Text(s string) *Image                  { out := *b; return &out } // ordered: parts accumulator
-
-func (b *Image) Generate(ctx context.Context, finalText string) (ImageResponse, error) {
-	panic("plan 016 phase 3: *Image.Generate not yet implemented")
+func (b *Image) AspectRatio(r string) *Image { out := *b; out.aspectRatio = r; return &out }
+func (b *Image) Caching() *Image             { out := *b; out.caching = true; return &out }
+func (b *Image) Image(mime string, data []byte) *Image {
+	out := *b
+	out.parts = append(out.parts, llmkit.Image(mime, data))
+	return &out
+}                                          // ordered
+func (b *Image) ImageSize(s string) *Image { out := *b; out.imageSize = s; return &out }
+func (b *Image) IncludeText() *Image       { out := *b; out.includeText = true; return &out }
+func (b *Image) Middleware(fns ...llmkit.MiddlewareFn) *Image {
+	out := *b
+	out.middleware = append(out.middleware, fns...)
+	return &out
 }
+func (b *Image) Model(name string) *Image { out := *b; out.model = name; return &out }
+func (b *Image) Text(s string) *Image {
+	out := *b
+	out.parts = append(out.parts, llmkit.Text(s))
+	return &out
+} // ordered
 
 //
 
@@ -152,17 +202,27 @@ func (b *Image) Generate(ctx context.Context, finalText string) (ImageResponse, 
 //
 //
 type Agent struct {
-	client *Client
-	//
+	client      *Client
+	caching     bool
+	maxTokens   *int
+	middleware  []llmkit.MiddlewareFn
+	model       string
+	system      string
+	temperature *float64
+	tools       []llmkit.Tool
 }
 
-func (b *Agent) Caching() *Agent                       { out := *b; return &out }
-func (b *Agent) MaxTokens(n int) *Agent                { out := *b; return &out }
-func (b *Agent) Middleware(fns ...MiddlewareFn) *Agent { out := *b; return &out }
-func (b *Agent) Model(name string) *Agent              { out := *b; return &out }
-func (b *Agent) System(s string) *Agent                { out := *b; return &out }
-func (b *Agent) Temperature(t float64) *Agent          { out := *b; return &out }
-func (b *Agent) Tool(t Tool) *Agent                    { out := *b; return &out }
+func (b *Agent) Caching() *Agent        { out := *b; out.caching = true; return &out }
+func (b *Agent) MaxTokens(n int) *Agent { out := *b; v := n; out.maxTokens = &v; return &out }
+func (b *Agent) Middleware(fns ...llmkit.MiddlewareFn) *Agent {
+	out := *b
+	out.middleware = append(out.middleware, fns...)
+	return &out
+}
+func (b *Agent) Model(name string) *Agent     { out := *b; out.model = name; return &out }
+func (b *Agent) System(s string) *Agent       { out := *b; out.system = s; return &out }
+func (b *Agent) Temperature(t float64) *Agent { out := *b; v := t; out.temperature = &v; return &out }
+func (b *Agent) Tool(t llmkit.Tool) *Agent    { out := *b; out.tools = append(out.tools, t); return &out }
 
 func (b *Agent) Prompt(ctx context.Context, msg string) (Response, error) {
 	panic("plan 016 phase 3: *Agent.Prompt not yet implemented")
@@ -177,15 +237,23 @@ func (b *Agent) Reset() {
 //
 //
 type Upload struct {
-	client *Client
-	//
+	client     *Client
+	bytes      []byte
+	filename   string
+	middleware []llmkit.MiddlewareFn
+	mimeType   string
+	path       string
 }
 
-func (b *Upload) Bytes(data []byte) *Upload              { out := *b; return &out }
-func (b *Upload) Filename(name string) *Upload           { out := *b; return &out }
-func (b *Upload) Middleware(fns ...MiddlewareFn) *Upload { out := *b; return &out }
-func (b *Upload) MimeType(mime string) *Upload           { out := *b; return &out }
-func (b *Upload) Path(p string) *Upload                  { out := *b; return &out }
+func (b *Upload) Bytes(data []byte) *Upload    { out := *b; out.bytes = data; return &out }
+func (b *Upload) Filename(name string) *Upload { out := *b; out.filename = name; return &out }
+func (b *Upload) Middleware(fns ...llmkit.MiddlewareFn) *Upload {
+	out := *b
+	out.middleware = append(out.middleware, fns...)
+	return &out
+}
+func (b *Upload) MimeType(mime string) *Upload { out := *b; out.mimeType = mime; return &out }
+func (b *Upload) Path(p string) *Upload        { out := *b; out.path = p; return &out }
 
 func (b *Upload) Run(ctx context.Context) (File, error) {
 	panic("plan 016 phase 3: *Upload.Run not yet implemented")
