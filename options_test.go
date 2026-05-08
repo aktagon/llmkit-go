@@ -125,7 +125,7 @@ func TestMiddlewareVetoErrorWrapsCause(t *testing.T) {
 }
 
 func TestAgentResetClearsHistoryAndTools(t *testing.T) {
-	agent := NewAgent(Provider{Name: providers.Anthropic, APIKey: "test"})
+	agent := newLegacyAgent(Provider{Name: providers.Anthropic, APIKey: "test"})
 	agent.SetSystem("you are helpful")
 	agent.AddTool(Tool{
 		Name:        "noop",

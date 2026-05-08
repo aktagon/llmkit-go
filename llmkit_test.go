@@ -479,7 +479,7 @@ func TestAgentWithTools(t *testing.T) {
 	}))
 	defer server.Close()
 
-	agent := NewAgent(Provider{Name: providers.OpenAI, APIKey: "key", BaseURL: server.URL})
+	agent := newLegacyAgent(Provider{Name: providers.OpenAI, APIKey: "key", BaseURL: server.URL})
 	agent.SetSystem("You are a calculator")
 	agent.AddTool(Tool{
 		Name:        "add",
