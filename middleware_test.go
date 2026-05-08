@@ -49,11 +49,9 @@ func TestMiddlewarePrePostFire(t *testing.T) {
 		return nil
 	}
 
-	_, err := Prompt(context.Background(),
-		Provider{Name: providers.OpenAI, APIKey: "test-key", BaseURL: server.URL},
-		Request{User: "Hi"},
-		WithMiddleware(mw),
-	)
+	c := Openai("test-key")
+	c.provider.baseURL = server.URL
+	_, err := c.Text.Middleware(mw).Prompt(context.Background(), "Hi")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -88,11 +86,9 @@ func TestMiddlewarePreVetoAborts(t *testing.T) {
 		return nil
 	}
 
-	_, err := Prompt(context.Background(),
-		Provider{Name: providers.OpenAI, APIKey: "test-key", BaseURL: server.URL},
-		Request{User: "Hi"},
-		WithMiddleware(mw),
-	)
+	c := New(providers.OpenAI, "test-key")
+	c.provider.baseURL = server.URL
+	_, err := c.Text.Middleware(mw).Prompt(context.Background(), "Hi")
 	if err == nil {
 		t.Fatal("expected veto error, got nil")
 	}
@@ -120,11 +116,9 @@ func TestMiddlewarePostErrorIsSwallowed(t *testing.T) {
 		return nil
 	}
 
-	resp, err := Prompt(context.Background(),
-		Provider{Name: providers.OpenAI, APIKey: "test-key", BaseURL: server.URL},
-		Request{User: "Hi"},
-		WithMiddleware(mw),
-	)
+	c := New(providers.OpenAI, "test-key")
+	c.provider.baseURL = server.URL
+	resp, err := c.Text.Middleware(mw).Prompt(context.Background(), "Hi")
 	if err != nil {
 		t.Fatalf("post-phase error must not propagate: %v", err)
 	}
@@ -151,11 +145,9 @@ func TestMiddlewareFiresInRegistrationOrder(t *testing.T) {
 		return nil
 	}
 
-	_, err := Prompt(context.Background(),
-		Provider{Name: providers.OpenAI, APIKey: "test-key", BaseURL: server.URL},
-		Request{User: "Hi"},
-		WithMiddleware(first, second),
-	)
+	c := New(providers.OpenAI, "test-key")
+	c.provider.baseURL = server.URL
+	_, err := c.Text.Middleware(first, second).Prompt(context.Background(), "Hi")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -183,11 +175,9 @@ func TestMiddlewareFirstVetoStopsChain(t *testing.T) {
 		return nil
 	}
 
-	_, err := Prompt(context.Background(),
-		Provider{Name: providers.OpenAI, APIKey: "test-key", BaseURL: server.URL},
-		Request{User: "Hi"},
-		WithMiddleware(first, second),
-	)
+	c := New(providers.OpenAI, "test-key")
+	c.provider.baseURL = server.URL
+	_, err := c.Text.Middleware(first, second).Prompt(context.Background(), "Hi")
 	if err == nil {
 		t.Fatal("expected veto error")
 	}
@@ -209,11 +199,9 @@ func TestMiddlewareCarriesModelAndProvider(t *testing.T) {
 		return nil
 	}
 
-	_, err := Prompt(context.Background(),
-		Provider{Name: providers.OpenAI, APIKey: "test-key", BaseURL: server.URL, Model: "gpt-4o-mini"},
-		Request{User: "Hi"},
-		WithMiddleware(mw),
-	)
+	c := New(providers.OpenAI, "test-key")
+	c.provider.baseURL = server.URL
+	_, err := c.Text.Model("gpt-4o-mini").Middleware(mw).Prompt(context.Background(), "Hi")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -253,11 +241,9 @@ func TestReasoningTokensPopulatedForOpenAI(t *testing.T) {
 		return nil
 	}
 
-	resp, err := Prompt(context.Background(),
-		Provider{Name: providers.OpenAI, APIKey: "test-key", BaseURL: server.URL},
-		Request{User: "Hi"},
-		WithMiddleware(mw),
-	)
+	c := New(providers.OpenAI, "test-key")
+	c.provider.baseURL = server.URL
+	resp, err := c.Text.Middleware(mw).Prompt(context.Background(), "Hi")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -280,10 +266,9 @@ func TestReasoningTokensZeroWhenUnreported(t *testing.T) {
 	}))
 	defer server.Close()
 
-	resp, err := Prompt(context.Background(),
-		Provider{Name: providers.Anthropic, APIKey: "test-key", BaseURL: server.URL},
-		Request{User: "Hi"},
-	)
+	c := New(providers.Anthropic, "test-key")
+	c.provider.baseURL = server.URL
+	resp, err := c.Text.Prompt(context.Background(), "Hi")
 	if err != nil {
 		t.Fatal(err)
 	}
