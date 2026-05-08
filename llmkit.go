@@ -134,7 +134,8 @@ func buildStreamURL(p Provider, cfg providers.ProviderConfig, streamCfg *provide
 }
 
 //
-func UploadFile(ctx context.Context, p Provider, path string, opts ...Option) (File, error) {
+//
+func uploadFile(ctx context.Context, p Provider, path string, opts ...Option) (File, error) {
 	if err := validateProvider(p); err != nil {
 		return File{}, err
 	}

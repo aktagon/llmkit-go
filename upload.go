@@ -32,5 +32,5 @@ func (b *Upload) Run(ctx context.Context) (File, error) {
 	}
 
 	provider := b.client.provider.toProvider("")
-	return UploadFile(ctx, provider, b.path, opts...)
+	return uploadFile(ctx, provider, b.path, opts...)
 }
