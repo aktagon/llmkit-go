@@ -38,5 +38,5 @@ func (b *Image) Generate(ctx context.Context, finalText string) (ImageResponse, 
 	}
 
 	provider := b.client.provider.toProvider(b.model)
-	return GenerateImage(ctx, provider, req, opts...)
+	return generateImage(ctx, provider, req, opts...)
 }
