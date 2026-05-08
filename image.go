@@ -117,7 +117,10 @@ func resolveImageOptions(opts []ImageOption) *imageOptions {
 //
 //
 //
-func GenerateImage(ctx context.Context, p Provider, req ImageRequest, opts ...ImageOption) (ImageResponse, error) {
+//
+//
+//
+func generateImage(ctx context.Context, p Provider, req ImageRequest, opts ...ImageOption) (ImageResponse, error) {
 	o := resolveImageOptions(opts)
 
 	if err := validateProvider(p); err != nil {
