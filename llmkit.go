@@ -133,8 +133,9 @@ func buildStreamURL(p Provider, cfg providers.ProviderConfig, streamCfg *provide
 	return base + endpoint
 }
 
-// UploadFile uploads a file to a provider and returns a File reference.
-func UploadFile(ctx context.Context, p Provider, path string, opts ...Option) (File, error) {
+// uploadFile is the internal upload implementation; the public
+// surface is (*Upload).Run in upload.go (plan-018 D1.3d).
+func uploadFile(ctx context.Context, p Provider, path string, opts ...Option) (File, error) {
 	if err := validateProvider(p); err != nil {
 		return File{}, err
 	}
