@@ -41,7 +41,7 @@ func (b *Text) Prompt(ctx context.Context, finalText string) (Response, error) {
 func (b *Text) buildRequest(finalText string) (llmkit.Request, []llmkit.Option) {
 	parts := b.parts
 	if finalText != "" {
-		parts = append(parts, llmkit.Text(finalText))
+		parts = append(parts, llmkit.Part{Text: finalText})
 	}
 
 	user, images := splitTextAndImages(parts)
