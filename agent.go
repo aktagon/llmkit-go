@@ -10,8 +10,8 @@ import (
 	"github.com/aktagon/llmkit-go/providers"
 )
 
-// Agent manages multi-turn conversations with optional tool calling.
-type Agent struct {
+// legacyAgent manages multi-turn conversations with optional tool calling.
+type legacyAgent struct {
 	provider Provider
 	opts     *options
 	tools    []Tool
@@ -38,38 +38,38 @@ type toolResult struct {
 	content   string
 }
 
-// NewAgent creates a new agent for multi-turn conversations.
-func NewAgent(p Provider, opts ...Option) *Agent {
-	return &Agent{
+// newLegacyAgent creates a new agent for multi-turn conversations.
+func newLegacyAgent(p Provider, opts ...Option) *legacyAgent {
+	return &legacyAgent{
 		provider: p,
 		opts:     resolveOptions(opts),
 	}
 }
 
 // SetSystem sets the system prompt.
-func (a *Agent) SetSystem(system string) {
+func (a *legacyAgent) SetSystem(system string) {
 	a.system = system
 }
 
 // AddTool registers a tool the LLM can call.
-func (a *Agent) AddTool(tool Tool) {
+func (a *legacyAgent) AddTool(tool Tool) {
 	a.tools = append(a.tools, tool)
 }
 
 // Reset clears conversation history and tools.
-func (a *Agent) Reset() {
+func (a *legacyAgent) Reset() {
 	a.history = nil
 	a.tools = nil
 }
 
 // Chat sends a message and returns the response, executing tool calls if needed.
-func (a *Agent) Chat(ctx context.Context, msg string) (Response, error) {
+func (a *legacyAgent) Chat(ctx context.Context, msg string) (Response, error) {
 	a.history = append(a.history, internalMessage{role: "user", content: msg})
 	return a.runToolLoop(ctx)
 }
 
 // runToolLoop sends requests and executes tools until no more tool calls or max iterations.
-func (a *Agent) runToolLoop(ctx context.Context) (Response, error) {
+func (a *legacyAgent) runToolLoop(ctx context.Context) (Response, error) {
 	cfg, ok := providers.Providers()[a.provider.Name]
 	if !ok {
 		return Response{}, &ValidationError{Field: "provider", Message: "unknown: " + a.provider.Name}
@@ -211,7 +211,7 @@ func (a *Agent) runToolLoop(ctx context.Context) (Response, error) {
 }
 
 // buildAgentRequest builds the request body with conversation history and tools.
-func (a *Agent) buildAgentRequest(cfg providers.ProviderConfig) (map[string]any, map[string]string) {
+func (a *legacyAgent) buildAgentRequest(cfg providers.ProviderConfig) (map[string]any, map[string]string) {
 	body := map[string]any{}
 	headers := map[string]string{}
 
@@ -288,7 +288,7 @@ func (a *Agent) buildAgentRequest(cfg providers.ProviderConfig) (map[string]any,
 }
 
 // buildHistoryMessages converts internal history to provider message format.
-func (a *Agent) buildHistoryMessages(body map[string]any, cfg providers.ProviderConfig,
+func (a *legacyAgent) buildHistoryMessages(body map[string]any, cfg providers.ProviderConfig,
 	msgTransform messageTransformFunc,
 	tcCallTransform toolCallTransformFunc,
 	tcResultTransform toolResultTransformFunc) {
@@ -354,7 +354,7 @@ func (a *Agent) buildHistoryMessages(body map[string]any, cfg providers.Provider
 	}
 }
 
-func (a *Agent) findTool(name string) *Tool {
+func (a *legacyAgent) findTool(name string) *Tool {
 	for i := range a.tools {
 		if a.tools[i].Name == name {
 			return &a.tools[i]

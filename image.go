@@ -35,7 +35,8 @@ type ImageRequest struct {
 
 // Part is the universal multimodal input atom. Exactly one of Text or
 // Image is set; both empty or both set is invalid (rejected by pre-flight
-// validation). Construct via the package-level Text() and Image() helpers.
+// validation). Construct via the parts/ sub-package: parts.Text(s) /
+// parts.Image(mime, bytes).
 type Part struct {
 	Text  string
 	Image *MediaRef
@@ -46,15 +47,6 @@ type Part struct {
 type MediaRef struct {
 	MimeType string
 	Bytes    []byte
-}
-
-// Text constructs a text-bearing Part.
-func Text(s string) Part { return Part{Text: s} }
-
-// Image constructs an image-bearing Part. mime is the IANA media type
-// (e.g., "image/png"); b is the raw bytes (not base64-encoded).
-func Image(mime string, b []byte) Part {
-	return Part{Image: &MediaRef{MimeType: mime, Bytes: b}}
 }
 
 // ImageData is one decoded image in an ImageResponse.
@@ -240,7 +232,7 @@ func normalizeImageParts(req ImageRequest) ([]Part, error) {
 	case !hasPrompt && !hasParts:
 		return nil, &ValidationError{Field: "prompt", Message: "set either Prompt or Parts"}
 	case hasPrompt:
-		return []Part{Text(req.Prompt)}, nil
+		return []Part{{Text: req.Prompt}}, nil
 	default:
 		return req.Parts, nil
 	}
