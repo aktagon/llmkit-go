@@ -134,7 +134,7 @@ func (b *Text) File(id string) *Text {
 func (b *Text) History(msgs ...llmkit.Message) *Text { out := *b; out.history = msgs; return &out }
 func (b *Text) Image(mime string, data []byte) *Text {
 	out := *b
-	out.parts = append(out.parts, llmkit.Image(mime, data))
+	out.parts = append(out.parts, llmkit.Part{Image: &llmkit.MediaRef{MimeType: mime, Bytes: data}})
 	return &out
 }                                     // ordered
 func (b *Text) MaxTokens(n int) *Text { out := *b; v := n; out.maxTokens = &v; return &out }
@@ -149,7 +149,7 @@ func (b *Text) System(s string) *Text       { out := *b; out.system = s; return 
 func (b *Text) Temperature(t float64) *Text { out := *b; v := t; out.temperature = &v; return &out }
 func (b *Text) Text(s string) *Text {
 	out := *b
-	out.parts = append(out.parts, llmkit.Text(s))
+	out.parts = append(out.parts, llmkit.Part{Text: s})
 	return &out
 } // ordered
 
@@ -173,7 +173,7 @@ func (b *Image) AspectRatio(r string) *Image { out := *b; out.aspectRatio = r; r
 func (b *Image) Caching() *Image             { out := *b; out.caching = true; return &out }
 func (b *Image) Image(mime string, data []byte) *Image {
 	out := *b
-	out.parts = append(out.parts, llmkit.Image(mime, data))
+	out.parts = append(out.parts, llmkit.Part{Image: &llmkit.MediaRef{MimeType: mime, Bytes: data}})
 	return &out
 }                                          // ordered
 func (b *Image) ImageSize(s string) *Image { out := *b; out.imageSize = s; return &out }
@@ -186,7 +186,7 @@ func (b *Image) Middleware(fns ...llmkit.MiddlewareFn) *Image {
 func (b *Image) Model(name string) *Image { out := *b; out.model = name; return &out }
 func (b *Image) Text(s string) *Image {
 	out := *b
-	out.parts = append(out.parts, llmkit.Text(s))
+	out.parts = append(out.parts, llmkit.Part{Text: s})
 	return &out
 } // ordered
 

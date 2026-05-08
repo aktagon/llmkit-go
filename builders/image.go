@@ -17,7 +17,7 @@ import (
 func (b *Image) Generate(ctx context.Context, finalText string) (ImageResponse, error) {
 	parts := b.parts
 	if finalText != "" {
-		parts = append(parts, llmkit.Text(finalText))
+		parts = append(parts, llmkit.Part{Text: finalText})
 	}
 
 	req := llmkit.ImageRequest{
