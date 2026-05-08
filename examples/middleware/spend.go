@@ -86,11 +86,8 @@ func main() {
 		"claude-sonnet-4-5-20250929": {Input: 3.00, Output: 15.00},
 	})
 
-	resp, err := llmkit.Prompt(context.Background(),
-		llmkit.Provider{Name: providers.Anthropic, APIKey: key},
-		llmkit.Request{User: "What is 2+2? Reply in one word."},
-		llmkit.WithMiddleware(cap.Middleware, TokenLogger),
-	)
+	c := llmkit.New(providers.Anthropic, key)
+	resp, err := c.Text.Middleware(cap.Middleware, TokenLogger).Prompt(context.Background(), "What is 2+2? Reply in one word.")
 	if err != nil {
 		log.Fatal(err)
 	}

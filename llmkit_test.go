@@ -55,10 +55,9 @@ func TestPromptOpenAI(t *testing.T) {
 	}))
 	defer server.Close()
 
-	resp, err := Prompt(context.Background(),
-		Provider{Name: providers.OpenAI, APIKey: "test-key", BaseURL: server.URL},
-		Request{System: "You are helpful", User: "Hi"},
-	)
+	c := New(providers.OpenAI, "test-key")
+	c.provider.baseURL = server.URL
+	resp, err := c.Text.System("You are helpful").Prompt(context.Background(), "Hi")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,10 +114,9 @@ func TestPromptAnthropic(t *testing.T) {
 	}))
 	defer server.Close()
 
-	resp, err := Prompt(context.Background(),
-		Provider{Name: providers.Anthropic, APIKey: "test-key", BaseURL: server.URL},
-		Request{System: "You are helpful", User: "Hi"},
-	)
+	c := New(providers.Anthropic, "test-key")
+	c.provider.baseURL = server.URL
+	resp, err := c.Text.System("You are helpful").Prompt(context.Background(), "Hi")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,19 +135,19 @@ func TestPromptValidation(t *testing.T) {
 	ctx := context.Background()
 
 	// Missing API key
-	_, err := Prompt(ctx, Provider{Name: "openai"}, Request{User: "hi"})
+	_, err := New("openai", "").Text.Prompt(ctx, "hi")
 	if err == nil {
 		t.Error("expected error for missing API key")
 	}
 
 	// Missing user message
-	_, err = Prompt(ctx, Provider{Name: "openai", APIKey: "key"}, Request{})
+	_, err = New("openai", "key").Text.Prompt(ctx, "")
 	if err == nil {
 		t.Error("expected error for missing user message")
 	}
 
 	// Unknown provider
-	_, err = Prompt(ctx, Provider{Name: "unknown", APIKey: "key"}, Request{User: "hi"})
+	_, err = New("unknown", "key").Text.Prompt(ctx, "hi")
 	if err == nil {
 		t.Error("expected error for unknown provider")
 	}
@@ -183,12 +181,9 @@ func TestPromptWithOptions(t *testing.T) {
 	}))
 	defer server.Close()
 
-	_, err := Prompt(context.Background(),
-		Provider{Name: providers.OpenAI, APIKey: "key", BaseURL: server.URL},
-		Request{User: "test"},
-		WithTemperature(0.7),
-		WithStopSequences("END"),
-	)
+	c := New(providers.OpenAI, "key")
+	c.provider.baseURL = server.URL
+	_, err := c.Text.Temperature(0.7).StopSequences("END").Prompt(context.Background(), "test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -210,11 +205,9 @@ func TestPromptWithThinkingBudgetAnthropic(t *testing.T) {
 	}))
 	defer server.Close()
 
-	_, err := Prompt(context.Background(),
-		Provider{Name: providers.Anthropic, APIKey: "k", BaseURL: server.URL},
-		Request{User: "test"},
-		WithThinkingBudget(1024),
-	)
+	c := New(providers.Anthropic, "k")
+	c.provider.baseURL = server.URL
+	_, err := c.Text.ThinkingBudget(1024).Prompt(context.Background(), "test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -235,11 +228,7 @@ func TestPromptWithThinkingBudgetAnthropic(t *testing.T) {
 
 func TestUnsupportedOption(t *testing.T) {
 	// Anthropic doesn't support seed
-	_, err := Prompt(context.Background(),
-		Provider{Name: providers.Anthropic, APIKey: "key"},
-		Request{User: "test"},
-		WithSeed(42),
-	)
+	_, err := New(providers.Anthropic, "key").Text.Seed(42).Prompt(context.Background(), "test")
 	if err == nil {
 		t.Error("expected error for unsupported seed option on Anthropic")
 	}
@@ -419,21 +408,15 @@ func TestReasoningEffortValidation(t *testing.T) {
 	}))
 	defer server.Close()
 
-	_, err := Prompt(context.Background(),
-		Provider{Name: providers.OpenAI, APIKey: "key", BaseURL: server.URL},
-		Request{User: "test"},
-		WithReasoningEffort("high"),
-	)
+	c := New(providers.OpenAI, "key")
+	c.provider.baseURL = server.URL
+	_, err := c.Text.ReasoningEffort("high").Prompt(context.Background(), "test")
 	if err != nil {
 		t.Fatalf("expected valid reasoning effort to pass, got: %v", err)
 	}
 
 	// Invalid value should fail validation
-	_, err = Prompt(context.Background(),
-		Provider{Name: providers.OpenAI, APIKey: "key", BaseURL: server.URL},
-		Request{User: "test"},
-		WithReasoningEffort("extreme"),
-	)
+	_, err = c.Text.ReasoningEffort("extreme").Prompt(context.Background(), "test")
 	if err == nil {
 		t.Error("expected error for invalid reasoning effort value")
 	}
@@ -571,10 +554,9 @@ func TestStructuredOutputOpenAI(t *testing.T) {
 	}))
 	defer server.Close()
 
-	resp, err := Prompt(context.Background(),
-		Provider{Name: providers.OpenAI, APIKey: "key", BaseURL: server.URL},
-		Request{User: "color of sky", Schema: `{"type":"object","properties":{"color":{"type":"string"}}}`},
-	)
+	c := New(providers.OpenAI, "key")
+	c.provider.baseURL = server.URL
+	resp, err := c.Text.Schema(`{"type":"object","properties":{"color":{"type":"string"}}}`).Prompt(context.Background(), "color of sky")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -613,10 +595,9 @@ func TestStructuredOutputAnthropic(t *testing.T) {
 	}))
 	defer server.Close()
 
-	resp, err := Prompt(context.Background(),
-		Provider{Name: providers.Anthropic, APIKey: "key", BaseURL: server.URL},
-		Request{User: "color of sky", Schema: `{"type":"object","properties":{"color":{"type":"string"}}}`},
-	)
+	c := New(providers.Anthropic, "key")
+	c.provider.baseURL = server.URL
+	resp, err := c.Text.Schema(`{"type":"object","properties":{"color":{"type":"string"}}}`).Prompt(context.Background(), "color of sky")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -663,11 +644,9 @@ func TestWithCachingAnthropic(t *testing.T) {
 	}))
 	defer server.Close()
 
-	resp, err := Prompt(context.Background(),
-		Provider{Name: providers.Anthropic, APIKey: "key", BaseURL: server.URL},
-		Request{System: "You are helpful", User: "Hi"},
-		WithCaching(),
-	)
+	c := New(providers.Anthropic, "key")
+	c.provider.baseURL = server.URL
+	resp, err := c.Text.System("You are helpful").Caching().Prompt(context.Background(), "Hi")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -711,11 +690,9 @@ func TestWithCachingOpenAI(t *testing.T) {
 	}))
 	defer server.Close()
 
-	resp, err := Prompt(context.Background(),
-		Provider{Name: providers.OpenAI, APIKey: "key", BaseURL: server.URL},
-		Request{System: "You are helpful", User: "Hi"},
-		WithCaching(),
-	)
+	c := New(providers.OpenAI, "key")
+	c.provider.baseURL = server.URL
+	resp, err := c.Text.System("You are helpful").Caching().Prompt(context.Background(), "Hi")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -726,11 +703,7 @@ func TestWithCachingOpenAI(t *testing.T) {
 
 func TestWithCachingUnsupported(t *testing.T) {
 	// Groq doesn't support caching — should fail at applyCaching
-	_, err := Prompt(context.Background(),
-		Provider{Name: providers.Groq, APIKey: "key"},
-		Request{User: "Hi"},
-		WithCaching(),
-	)
+	_, err := New(providers.Groq, "key").Text.Caching().Prompt(context.Background(), "Hi")
 	if err == nil {
 		t.Error("expected error for unsupported caching")
 	}
