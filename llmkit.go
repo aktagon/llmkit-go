@@ -16,11 +16,9 @@ import (
 // StreamCallback is called with each text chunk during streaming.
 type StreamCallback func(chunk string)
 
-// PromptStream sends a streaming request, calling back with each text chunk.
-// Returns the final response with accumulated text and usage.
-// Middleware fires exactly once pre-phase and once post-phase, bracketing the
-// whole stream. Usage in post-phase is the accumulated total at stream close.
-func PromptStream(ctx context.Context, p Provider, req Request, callback StreamCallback, opts ...Option) (Response, error) {
+// promptStream is the internal streaming implementation. The
+// public surface is (*Text).Stream in stream.go (plan-018 D1.3b).
+func promptStream(ctx context.Context, p Provider, req Request, callback StreamCallback, opts ...Option) (Response, error) {
 	o := resolveOptions(opts)
 
 	if err := validateProvider(p); err != nil {
