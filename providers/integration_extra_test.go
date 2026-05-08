@@ -91,13 +91,8 @@ func TestIntegrationSubmitBatchAnthropic(t *testing.T) {
 		t.Skip("ANTHROPIC_API_KEY not set")
 	}
 
-	p := llmkit.Provider{Name: providers.Anthropic, APIKey: key}
-	reqs := []llmkit.Request{
-		{System: "Reply with only the word pong", User: "ping"},
-		{System: "Reply with only the word pong", User: "ping"},
-	}
-
-	handle, err := llmkit.SubmitBatch(context.Background(), p, reqs)
+	c := llmkit.New(providers.Anthropic, key)
+	handle, err := c.Text.System("Reply with only the word pong").SubmitBatch(context.Background(), "ping", "ping")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -119,19 +114,14 @@ func TestIntegrationSubmitWaitBatchAnthropic(t *testing.T) {
 		t.Skip("LLMKIT_RUN_SLOW_BATCH not set — Anthropic batches can take 5+ minutes")
 	}
 
-	p := llmkit.Provider{Name: providers.Anthropic, APIKey: key}
-	reqs := []llmkit.Request{
-		{System: "Reply with only the word pong", User: "ping"},
-		{System: "Reply with only the word pong", User: "ping"},
-	}
-
-	handle, err := llmkit.SubmitBatch(context.Background(), p, reqs)
+	c := llmkit.New(providers.Anthropic, key)
+	handle, err := c.Text.System("Reply with only the word pong").SubmitBatch(context.Background(), "ping", "ping")
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Logf("batch submitted: id=%s", handle.ID)
 
-	results, err := llmkit.WaitBatch(context.Background(), handle)
+	results, err := handle.Wait(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -155,13 +145,8 @@ func TestIntegrationSubmitBatchOpenAI(t *testing.T) {
 		t.Skip("OPENAI_API_KEY not set")
 	}
 
-	p := llmkit.Provider{Name: providers.OpenAI, APIKey: key}
-	reqs := []llmkit.Request{
-		{System: "Reply with only the word pong", User: "ping"},
-		{System: "Reply with only the word pong", User: "ping"},
-	}
-
-	handle, err := llmkit.SubmitBatch(context.Background(), p, reqs)
+	c := llmkit.New(providers.OpenAI, key)
+	handle, err := c.Text.System("Reply with only the word pong").SubmitBatch(context.Background(), "ping", "ping")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -184,13 +169,8 @@ func TestIntegrationPromptBatchOpenAI(t *testing.T) {
 		t.Skip("LLMKIT_RUN_SLOW_BATCH not set — OpenAI batches can take 5+ minutes")
 	}
 
-	p := llmkit.Provider{Name: providers.OpenAI, APIKey: key}
-	reqs := []llmkit.Request{
-		{System: "Reply with only the word pong", User: "ping"},
-		{System: "Reply with only the word pong", User: "ping"},
-	}
-
-	results, err := llmkit.PromptBatch(context.Background(), p, reqs)
+	c := llmkit.New(providers.OpenAI, key)
+	results, err := c.Text.System("Reply with only the word pong").Batch(context.Background(), "ping", "ping")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -217,13 +197,8 @@ func TestIntegrationSubmitWaitBatchOpenAI(t *testing.T) {
 		t.Skip("LLMKIT_RUN_SLOW_BATCH not set — OpenAI batches can take 5+ minutes")
 	}
 
-	p := llmkit.Provider{Name: providers.OpenAI, APIKey: key}
-	reqs := []llmkit.Request{
-		{System: "Reply with only the word pong", User: "ping"},
-		{System: "Reply with only the word pong", User: "ping"},
-	}
-
-	handle, err := llmkit.SubmitBatch(context.Background(), p, reqs)
+	c := llmkit.New(providers.OpenAI, key)
+	handle, err := c.Text.System("Reply with only the word pong").SubmitBatch(context.Background(), "ping", "ping")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -232,7 +207,7 @@ func TestIntegrationSubmitWaitBatchOpenAI(t *testing.T) {
 	}
 	t.Logf("batch submitted: id=%s", handle.ID)
 
-	results, err := llmkit.WaitBatch(context.Background(), handle)
+	results, err := handle.Wait(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}

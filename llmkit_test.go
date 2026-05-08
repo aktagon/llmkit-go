@@ -762,13 +762,9 @@ func TestPromptBatch(t *testing.T) {
 	}))
 	defer server.Close()
 
-	results, err := PromptBatch(context.Background(),
-		Provider{Name: providers.Anthropic, APIKey: "key", BaseURL: server.URL},
-		[]Request{
-			{System: "Be brief", User: "Hello"},
-			{System: "Be brief", User: "World"},
-		},
-	)
+	c := New(providers.Anthropic, "key")
+	c.provider.baseURL = server.URL
+	results, err := c.Text.System("Be brief").Batch(context.Background(), "Hello", "World")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -892,13 +888,9 @@ func TestPromptBatchOpenAI(t *testing.T) {
 	}))
 	defer server.Close()
 
-	results, err := PromptBatch(context.Background(),
-		Provider{Name: providers.OpenAI, APIKey: "test-key", BaseURL: server.URL},
-		[]Request{
-			{System: "Reply with only the word pong", User: "ping"},
-			{System: "Reply with only the word pong", User: "ping again"},
-		},
-	)
+	c := New(providers.OpenAI, "test-key")
+	c.provider.baseURL = server.URL
+	results, err := c.Text.System("Reply with only the word pong").Batch(context.Background(), "ping", "ping again")
 	if err != nil {
 		t.Fatal(err)
 	}
