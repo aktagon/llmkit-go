@@ -59,7 +59,7 @@ func main() {
 	}
 
 	if stream {
-		for chunk, err := range t.Stream(context.Background(), userPrompt) {
+		for chunk, err := range t.Stream(context.Background(), userPrompt).Chunks() {
 			if err != nil {
 				log.Fatalf("Error streaming from %s API: %v", provider, err)
 			}

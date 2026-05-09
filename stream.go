@@ -5,74 +5,116 @@ import (
 	"iter"
 )
 
-// Stream executes the chained ChatCompletion request as a streaming
-// call and returns an iterator that yields chunk-string / error pairs
-// in the order produced by the provider.
+// TextStream is the trailing-handle wrapper returned by *Text.Stream.
+// Range over Chunks() to consume deltas as they arrive; after iteration
+// completes (without a break), Response() returns the accumulated
+// Response carrying final token counts. Err() returns any error that
+// terminated the stream early.
 //
-// Range loop usage:
-//
-//	for chunk, err := range ai.Text.System("...").Stream(ctx, "tell a story") {
+//	stream := c.Text.System("...").Stream(ctx, "hi")
+//	for chunk, err := range stream.Chunks() {
 //	    if err != nil { return err }
 //	    fmt.Print(chunk)
 //	}
+//	resp := stream.Response()  // populated after the range loop ends
+//	fmt.Println(resp.Tokens)
 //
-// Errors land at the END of iteration (one final yield) — the
-// underlying PromptStream returns the accumulated Response and
-// any error only after the stream closes. To stop early, break the
-// range loop; the producer goroutine is cancelled via the inner
-// context and any pending chunks are drained so the goroutine exits.
-//
-// The final accumulated Response (with token counts) is NOT exposed
-// in this slice — the Seq2[string, error] signature has no slot for
-// it. Phase 4 / a follow-up plan can add token reporting via either
-// a final synthetic yield carrying a sentinel or a separate
-// (*Text).StreamWithUsage method. For now this is faithful to plan
-// 016's signature.
-func (b *Text) Stream(ctx context.Context, finalText string) iter.Seq2[string, error] {
+// Response() before iteration completes returns the zero value; Err()
+// returns nil. After iteration, both reflect the producer's final
+// outcome. Breaking the range loop cancels the producer; in that case
+// Response() reflects whatever was accumulated by the legacy callback
+// up to the break point and Err() returns nil.
+type TextStream struct {
+	ctx      context.Context
+	provider Provider
+	req      Request
+	opts     []Option
+	resp     Response
+	err      error
+	consumed bool
+}
+
+// Stream begins a streaming chat completion call. The returned
+// *TextStream is a trailing-handle: chunks are produced lazily via
+// Chunks(); Response() is populated when iteration completes.
+func (b *Text) Stream(ctx context.Context, finalText string) *TextStream {
 	req, opts := b.buildRequest(finalText)
 	provider := b.client.provider.toProvider(b.model)
+	return &TextStream{
+		ctx:      ctx,
+		provider: provider,
+		req:      req,
+		opts:     opts,
+	}
+}
 
+// Chunks returns an iter.Seq2[string, error] that yields chunk-string /
+// error pairs in producer order. Errors land at the end of iteration
+// (one final yield with chunk == ""). To stop early, break the range
+// loop; the producer goroutine is cancelled and any pending chunks are
+// drained so the goroutine exits cleanly.
+func (s *TextStream) Chunks() iter.Seq2[string, error] {
 	return func(yield func(string, error) bool) {
-		innerCtx, cancel := context.WithCancel(ctx)
+		if s.consumed {
+			// Defensive: re-iterating a consumed stream yields nothing.
+			// The handle's terminal state is already on Response()/Err().
+			return
+		}
+		s.consumed = true
+
+		innerCtx, cancel := context.WithCancel(s.ctx)
 		defer cancel()
 
-		// Buffered so the producer can hand off chunks without
-		// blocking when the consumer is mid-yield. Capacity 64
-		// matches TS/Python and bounds memory if a hostile or
-		// buggy provider streams faster than the consumer drains.
+		// Buffered: producer hands off chunks without blocking when the
+		// consumer is mid-yield. Capacity 64 matches TS/Python.
 		chunks := make(chan string, 64)
-		var finalErr error
+		var streamResp *Response
+		var streamErr error
 		done := make(chan struct{})
 
 		go func() {
 			defer close(done)
-			_, err := promptStream(innerCtx, provider, req, func(chunk string) {
+			r, err := promptStream(innerCtx, s.provider, s.req, func(chunk string) {
 				select {
 				case chunks <- chunk:
 				case <-innerCtx.Done():
 				}
-			}, opts...)
-			finalErr = err
+			}, s.opts...)
+			streamResp = &r
+			streamErr = err
 			close(chunks)
 		}()
 
 		for chunk := range chunks {
 			if !yield(chunk, nil) {
-				// Consumer broke. Cancel the producer and drain so
-				// it can complete its callback select, return from
-				// PromptStream, close(chunks), and exit.
 				cancel()
 				for range chunks {
 				}
 				<-done
+				if streamResp != nil {
+					s.resp = *streamResp
+				}
 				return
 			}
 		}
-		// chunks closed by producer; <-done synchronises the read of
-		// finalErr (written before close, ordered with the close).
 		<-done
-		if finalErr != nil {
-			yield("", finalErr)
+		if streamResp != nil {
+			s.resp = *streamResp
+		}
+		if streamErr != nil {
+			s.err = streamErr
+			yield("", streamErr)
 		}
 	}
 }
+
+// Response returns the accumulated Response (text + token counts).
+// Populated after Chunks() iteration completes; the zero value is
+// returned before iteration starts or if the stream errored before the
+// provider sent any usage events.
+func (s *TextStream) Response() Response { return s.resp }
+
+// Err returns any error that terminated the stream. Errors are also
+// surfaced via the final Chunks() yield; Err() is the convenience
+// accessor for code that doesn't want to inspect every iteration.
+func (s *TextStream) Err() error { return s.err }
