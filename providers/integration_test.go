@@ -4,7 +4,6 @@
 
 package providers_test
 
-
 import (
 	"context"
 	"os"
@@ -969,4 +968,3 @@ func TestIntegrationOpenAICaching(t *testing.T) {
 	}
 	t.Logf("cache_read=%d cache_write=%d", resp.Tokens.CacheRead, resp.Tokens.CacheWrite)
 }
-
