@@ -168,7 +168,6 @@ func (b *Text) TopP(v float64) *Text       { out := *b; x := v; out.topP = &x; r
 type Image struct {
 	client      *Client
 	aspectRatio string
-	caching     bool
 	parts       []Part
 	imageSize   string
 	includeText bool
@@ -177,7 +176,6 @@ type Image struct {
 }
 
 func (b *Image) AspectRatio(r string) *Image { out := *b; out.aspectRatio = r; return &out }
-func (b *Image) Caching() *Image             { out := *b; out.caching = true; return &out }
 func (b *Image) Image(mime string, data []byte) *Image {
 	out := *b
 	out.parts = append(out.parts, Part{Image: &MediaRef{MimeType: mime, Bytes: data}})
