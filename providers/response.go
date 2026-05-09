@@ -2,6 +2,7 @@
 
 package providers
 
+
 //
 func ResponseTextPath(provider string) string {
 	switch provider {
