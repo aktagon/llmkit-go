@@ -201,23 +201,24 @@ func (b *Image) Text(s string) *Image {
 // call. Chain methods return new instances (immutable); skipped
 // terminals live in hand-written text.go / image.go.
 type Agent struct {
-	client           *Client
-	caching          bool
-	frequencyPenalty *float64
-	maxTokens        *int
-	middleware       []MiddlewareFn
-	model            string
-	presencePenalty  *float64
-	reasoningEffort  string
-	seed             *int64
-	stopSequences    []string
-	system           string
-	temperature      *float64
-	thinkingBudget   *int
-	tools            []Tool
-	topK             *int
-	topP             *float64
-	state            *agentState
+	client            *Client
+	caching           bool
+	frequencyPenalty  *float64
+	maxTokens         *int
+	maxToolIterations *int
+	middleware        []MiddlewareFn
+	model             string
+	presencePenalty   *float64
+	reasoningEffort   string
+	seed              *int64
+	stopSequences     []string
+	system            string
+	temperature       *float64
+	thinkingBudget    *int
+	tools             []Tool
+	topK              *int
+	topP              *float64
+	state             *agentState
 }
 
 func (b *Agent) Caching() *Agent { out := *b; out.caching = true; out.state = nil; return &out }
@@ -232,6 +233,13 @@ func (b *Agent) MaxTokens(n int) *Agent {
 	out := *b
 	v := n
 	out.maxTokens = &v
+	out.state = nil
+	return &out
+}
+func (b *Agent) MaxToolIterations(n int) *Agent {
+	out := *b
+	v := n
+	out.maxToolIterations = &v
 	out.state = nil
 	return &out
 }
