@@ -95,6 +95,7 @@ func TestSurface_Chains(t *testing.T) {
 		Caching().
 		FrequencyPenalty(0.1).
 		MaxTokens(1).
+		MaxToolIterations(3).
 		Middleware(noopMiddleware).
 		Model("a").
 		PresencePenalty(0.2).
@@ -110,6 +111,9 @@ func TestSurface_Chains(t *testing.T) {
 
 	if len(agent.tools) != 1 || agent.tools[0].Name != "calc" {
 		t.Errorf("tools: got %+v", agent.tools)
+	}
+	if agent.maxToolIterations == nil || *agent.maxToolIterations != 3 {
+		t.Errorf("maxToolIterations: got %v", agent.maxToolIterations)
 	}
 
 	up := c.Upload.

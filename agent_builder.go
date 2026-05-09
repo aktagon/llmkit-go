@@ -74,6 +74,9 @@ func (b *Agent) initAgent() {
 	if b.reasoningEffort != "" {
 		opts = append(opts, WithReasoningEffort(b.reasoningEffort))
 	}
+	if b.maxToolIterations != nil {
+		opts = append(opts, WithMaxToolIterations(*b.maxToolIterations))
+	}
 	if b.caching {
 		opts = append(opts, WithCaching())
 	}
