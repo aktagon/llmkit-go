@@ -5,6 +5,7 @@
 // was deleted (ADR-010).
 package llmkit
 
+
 // BatchHandle is a value struct identifying a submitted batch.
 // Cross-process resume works by persisting {ID, Provider} and
 // reconstructing the struct.
@@ -35,10 +36,10 @@ func (pc providerConfig) toProvider(model string) Provider {
 // constant.
 type Client struct {
 	provider providerConfig
-	Text     *Text
-	Image    *Image
-	Agent    *Agent
-	Upload   *Upload
+	Text   *Text
+	Image  *Image
+	Agent  *Agent
+	Upload *Upload
 }
 
 func newClient(name, apiKey string) *Client {
@@ -55,33 +56,33 @@ func newClient(name, apiKey string) *Client {
 func New(name, apiKey string) *Client { return newClient(name, apiKey) }
 
 // === Per-provider constructors ===
-func Ai21(apiKey string) *Client       { return newClient("ai21", apiKey) }
-func Anthropic(apiKey string) *Client  { return newClient("anthropic", apiKey) }
-func Azure(apiKey string) *Client      { return newClient("azure", apiKey) }
-func Bedrock(apiKey string) *Client    { return newClient("bedrock", apiKey) }
-func Cerebras(apiKey string) *Client   { return newClient("cerebras", apiKey) }
-func Cohere(apiKey string) *Client     { return newClient("cohere", apiKey) }
-func Deepseek(apiKey string) *Client   { return newClient("deepseek", apiKey) }
-func Doubao(apiKey string) *Client     { return newClient("doubao", apiKey) }
-func Ernie(apiKey string) *Client      { return newClient("ernie", apiKey) }
-func Fireworks(apiKey string) *Client  { return newClient("fireworks", apiKey) }
-func Google(apiKey string) *Client     { return newClient("google", apiKey) }
-func Grok(apiKey string) *Client       { return newClient("grok", apiKey) }
-func Groq(apiKey string) *Client       { return newClient("groq", apiKey) }
-func Lmstudio(apiKey string) *Client   { return newClient("lmstudio", apiKey) }
-func Minimax(apiKey string) *Client    { return newClient("minimax", apiKey) }
-func Mistral(apiKey string) *Client    { return newClient("mistral", apiKey) }
-func Moonshot(apiKey string) *Client   { return newClient("moonshot", apiKey) }
-func Ollama(apiKey string) *Client     { return newClient("ollama", apiKey) }
-func Openai(apiKey string) *Client     { return newClient("openai", apiKey) }
+func Ai21(apiKey string) *Client { return newClient("ai21", apiKey) }
+func Anthropic(apiKey string) *Client { return newClient("anthropic", apiKey) }
+func Azure(apiKey string) *Client { return newClient("azure", apiKey) }
+func Bedrock(apiKey string) *Client { return newClient("bedrock", apiKey) }
+func Cerebras(apiKey string) *Client { return newClient("cerebras", apiKey) }
+func Cohere(apiKey string) *Client { return newClient("cohere", apiKey) }
+func Deepseek(apiKey string) *Client { return newClient("deepseek", apiKey) }
+func Doubao(apiKey string) *Client { return newClient("doubao", apiKey) }
+func Ernie(apiKey string) *Client { return newClient("ernie", apiKey) }
+func Fireworks(apiKey string) *Client { return newClient("fireworks", apiKey) }
+func Google(apiKey string) *Client { return newClient("google", apiKey) }
+func Grok(apiKey string) *Client { return newClient("grok", apiKey) }
+func Groq(apiKey string) *Client { return newClient("groq", apiKey) }
+func Lmstudio(apiKey string) *Client { return newClient("lmstudio", apiKey) }
+func Minimax(apiKey string) *Client { return newClient("minimax", apiKey) }
+func Mistral(apiKey string) *Client { return newClient("mistral", apiKey) }
+func Moonshot(apiKey string) *Client { return newClient("moonshot", apiKey) }
+func Ollama(apiKey string) *Client { return newClient("ollama", apiKey) }
+func Openai(apiKey string) *Client { return newClient("openai", apiKey) }
 func Openrouter(apiKey string) *Client { return newClient("openrouter", apiKey) }
 func Perplexity(apiKey string) *Client { return newClient("perplexity", apiKey) }
-func Qwen(apiKey string) *Client       { return newClient("qwen", apiKey) }
-func Sambanova(apiKey string) *Client  { return newClient("sambanova", apiKey) }
-func Together(apiKey string) *Client   { return newClient("together", apiKey) }
-func Vllm(apiKey string) *Client       { return newClient("vllm", apiKey) }
-func Yi(apiKey string) *Client         { return newClient("yi", apiKey) }
-func Zhipu(apiKey string) *Client      { return newClient("zhipu", apiKey) }
+func Qwen(apiKey string) *Client { return newClient("qwen", apiKey) }
+func Sambanova(apiKey string) *Client { return newClient("sambanova", apiKey) }
+func Together(apiKey string) *Client { return newClient("together", apiKey) }
+func Vllm(apiKey string) *Client { return newClient("vllm", apiKey) }
+func Yi(apiKey string) *Client { return newClient("yi", apiKey) }
+func Zhipu(apiKey string) *Client { return newClient("zhipu", apiKey) }
 
 // === *Text — ChatCompletion builder ===
 
@@ -89,76 +90,47 @@ func Zhipu(apiKey string) *Client      { return newClient("zhipu", apiKey) }
 // call. Chain methods return new instances (immutable); skipped
 // terminals live in hand-written text.go / image.go.
 type Text struct {
-	client           *Client
-	caching          bool
-	files            []File
+	client *Client
+	caching bool
+	files []File
 	frequencyPenalty *float64
-	history          []Message
-	parts            []Part
-	maxTokens        *int
-	middleware       []MiddlewareFn
-	model            string
-	presencePenalty  *float64
-	reasoningEffort  string
-	schema           string
-	seed             *int64
-	stopSequences    []string
-	system           string
-	temperature      *float64
-	thinkingBudget   *int
-	topK             *int
-	topP             *float64
+	history []Message
+	parts []Part
+	maxTokens *int
+	middleware []MiddlewareFn
+	model string
+	presencePenalty *float64
+	reasoningEffort string
+	schema string
+	seed *int64
+	stopSequences []string
+	system string
+	temperature *float64
+	thinkingBudget *int
+	topK *int
+	topP *float64
 }
 
 func (b *Text) Caching() *Text { out := *b; out.caching = true; return &out }
-func (b *Text) File(id string) *Text {
-	out := *b
-	out.files = append(out.files, File{ID: id})
-	return &out
-} // ordered
-func (b *Text) FrequencyPenalty(v float64) *Text {
-	out := *b
-	x := v
-	out.frequencyPenalty = &x
-	return &out
-}
+func (b *Text) File(id string) *Text { out := *b; out.files = append(out.files, File{ID: id}); return &out }  // ordered
+func (b *Text) FrequencyPenalty(v float64) *Text { out := *b; x := v; out.frequencyPenalty = &x; return &out }
 func (b *Text) History(msgs ...Message) *Text { out := *b; out.history = msgs; return &out }
-func (b *Text) Image(mime string, data []byte) *Text {
-	out := *b
-	out.parts = append(out.parts, Part{Image: &MediaRef{MimeType: mime, Bytes: data}})
-	return &out
-}                                     // ordered
+func (b *Text) Image(mime string, data []byte) *Text { out := *b; out.parts = append(out.parts, Part{Image: &MediaRef{MimeType: mime, Bytes: data}}); return &out }  // ordered
 func (b *Text) MaxTokens(n int) *Text { out := *b; v := n; out.maxTokens = &v; return &out }
-func (b *Text) Middleware(fns ...MiddlewareFn) *Text {
-	out := *b
-	out.middleware = append(out.middleware, fns...)
-	return &out
-}
+func (b *Text) Middleware(fns ...MiddlewareFn) *Text { out := *b; out.middleware = append(out.middleware, fns...); return &out }
 func (b *Text) Model(name string) *Text { out := *b; out.model = name; return &out }
-func (b *Text) PresencePenalty(v float64) *Text {
-	out := *b
-	x := v
-	out.presencePenalty = &x
-	return &out
-}
-func (b *Text) ReasoningEffort(level string) *Text {
-	out := *b
-	out.reasoningEffort = level
-	return &out
-}
-func (b *Text) Schema(s string) *Text              { out := *b; out.schema = s; return &out }
-func (b *Text) Seed(n int64) *Text                 { out := *b; v := n; out.seed = &v; return &out }
+func (b *Text) PresencePenalty(v float64) *Text { out := *b; x := v; out.presencePenalty = &x; return &out }
+func (b *Text) ReasoningEffort(level string) *Text { out := *b; out.reasoningEffort = level; return &out }
+func (b *Text) Schema(s string) *Text { out := *b; out.schema = s; return &out }
+func (b *Text) Seed(n int64) *Text { out := *b; v := n; out.seed = &v; return &out }
 func (b *Text) StopSequences(seqs ...string) *Text { out := *b; out.stopSequences = seqs; return &out }
-func (b *Text) System(s string) *Text              { out := *b; out.system = s; return &out }
-func (b *Text) Temperature(t float64) *Text        { out := *b; v := t; out.temperature = &v; return &out }
-func (b *Text) Text(s string) *Text {
-	out := *b
-	out.parts = append(out.parts, Part{Text: s})
-	return &out
-}                                          // ordered
+func (b *Text) System(s string) *Text { out := *b; out.system = s; return &out }
+func (b *Text) Temperature(t float64) *Text { out := *b; v := t; out.temperature = &v; return &out }
+func (b *Text) Text(s string) *Text { out := *b; out.parts = append(out.parts, Part{Text: s}); return &out }  // ordered
 func (b *Text) ThinkingBudget(n int) *Text { out := *b; v := n; out.thinkingBudget = &v; return &out }
-func (b *Text) TopK(n int) *Text           { out := *b; v := n; out.topK = &v; return &out }
-func (b *Text) TopP(v float64) *Text       { out := *b; x := v; out.topP = &x; return &out }
+func (b *Text) TopK(n int) *Text { out := *b; v := n; out.topK = &v; return &out }
+func (b *Text) TopP(v float64) *Text { out := *b; x := v; out.topP = &x; return &out }
+
 
 // === *Image — ImageGeneration builder ===
 
@@ -166,34 +138,23 @@ func (b *Text) TopP(v float64) *Text       { out := *b; x := v; out.topP = &x; r
 // call. Chain methods return new instances (immutable); skipped
 // terminals live in hand-written text.go / image.go.
 type Image struct {
-	client      *Client
+	client *Client
 	aspectRatio string
-	parts       []Part
-	imageSize   string
+	parts []Part
+	imageSize string
 	includeText bool
-	middleware  []MiddlewareFn
-	model       string
+	middleware []MiddlewareFn
+	model string
 }
 
 func (b *Image) AspectRatio(r string) *Image { out := *b; out.aspectRatio = r; return &out }
-func (b *Image) Image(mime string, data []byte) *Image {
-	out := *b
-	out.parts = append(out.parts, Part{Image: &MediaRef{MimeType: mime, Bytes: data}})
-	return &out
-}                                          // ordered
+func (b *Image) Image(mime string, data []byte) *Image { out := *b; out.parts = append(out.parts, Part{Image: &MediaRef{MimeType: mime, Bytes: data}}); return &out }  // ordered
 func (b *Image) ImageSize(s string) *Image { out := *b; out.imageSize = s; return &out }
-func (b *Image) IncludeText() *Image       { out := *b; out.includeText = true; return &out }
-func (b *Image) Middleware(fns ...MiddlewareFn) *Image {
-	out := *b
-	out.middleware = append(out.middleware, fns...)
-	return &out
-}
+func (b *Image) IncludeText() *Image { out := *b; out.includeText = true; return &out }
+func (b *Image) Middleware(fns ...MiddlewareFn) *Image { out := *b; out.middleware = append(out.middleware, fns...); return &out }
 func (b *Image) Model(name string) *Image { out := *b; out.model = name; return &out }
-func (b *Image) Text(s string) *Image {
-	out := *b
-	out.parts = append(out.parts, Part{Text: s})
-	return &out
-} // ordered
+func (b *Image) Text(s string) *Image { out := *b; out.parts = append(out.parts, Part{Text: s}); return &out }  // ordered
+
 
 // === *Agent — ToolCalling builder ===
 
@@ -201,104 +162,43 @@ func (b *Image) Text(s string) *Image {
 // call. Chain methods return new instances (immutable); skipped
 // terminals live in hand-written text.go / image.go.
 type Agent struct {
-	client            *Client
-	caching           bool
-	frequencyPenalty  *float64
-	maxTokens         *int
+	client *Client
+	caching bool
+	frequencyPenalty *float64
+	maxTokens *int
 	maxToolIterations *int
-	middleware        []MiddlewareFn
-	model             string
-	presencePenalty   *float64
-	reasoningEffort   string
-	seed              *int64
-	stopSequences     []string
-	system            string
-	temperature       *float64
-	thinkingBudget    *int
-	tools             []Tool
-	topK              *int
-	topP              *float64
-	state             *agentState
+	middleware []MiddlewareFn
+	model string
+	presencePenalty *float64
+	reasoningEffort string
+	seed *int64
+	stopSequences []string
+	system string
+	temperature *float64
+	thinkingBudget *int
+	tools []Tool
+	topK *int
+	topP *float64
+	state *agentState
 }
 
 func (b *Agent) Caching() *Agent { out := *b; out.caching = true; out.state = nil; return &out }
-func (b *Agent) FrequencyPenalty(v float64) *Agent {
-	out := *b
-	x := v
-	out.frequencyPenalty = &x
-	out.state = nil
-	return &out
-}
-func (b *Agent) MaxTokens(n int) *Agent {
-	out := *b
-	v := n
-	out.maxTokens = &v
-	out.state = nil
-	return &out
-}
-func (b *Agent) MaxToolIterations(n int) *Agent {
-	out := *b
-	v := n
-	out.maxToolIterations = &v
-	out.state = nil
-	return &out
-}
-func (b *Agent) Middleware(fns ...MiddlewareFn) *Agent {
-	out := *b
-	out.middleware = append(out.middleware, fns...)
-	out.state = nil
-	return &out
-}
+func (b *Agent) FrequencyPenalty(v float64) *Agent { out := *b; x := v; out.frequencyPenalty = &x; out.state = nil; return &out }
+func (b *Agent) MaxTokens(n int) *Agent { out := *b; v := n; out.maxTokens = &v; out.state = nil; return &out }
+func (b *Agent) MaxToolIterations(n int) *Agent { out := *b; v := n; out.maxToolIterations = &v; out.state = nil; return &out }
+func (b *Agent) Middleware(fns ...MiddlewareFn) *Agent { out := *b; out.middleware = append(out.middleware, fns...); out.state = nil; return &out }
 func (b *Agent) Model(name string) *Agent { out := *b; out.model = name; out.state = nil; return &out }
-func (b *Agent) PresencePenalty(v float64) *Agent {
-	out := *b
-	x := v
-	out.presencePenalty = &x
-	out.state = nil
-	return &out
-}
-func (b *Agent) ReasoningEffort(level string) *Agent {
-	out := *b
-	out.reasoningEffort = level
-	out.state = nil
-	return &out
-}
+func (b *Agent) PresencePenalty(v float64) *Agent { out := *b; x := v; out.presencePenalty = &x; out.state = nil; return &out }
+func (b *Agent) ReasoningEffort(level string) *Agent { out := *b; out.reasoningEffort = level; out.state = nil; return &out }
 func (b *Agent) Seed(n int64) *Agent { out := *b; v := n; out.seed = &v; out.state = nil; return &out }
-func (b *Agent) StopSequences(seqs ...string) *Agent {
-	out := *b
-	out.stopSequences = seqs
-	out.state = nil
-	return &out
-}
+func (b *Agent) StopSequences(seqs ...string) *Agent { out := *b; out.stopSequences = seqs; out.state = nil; return &out }
 func (b *Agent) System(s string) *Agent { out := *b; out.system = s; out.state = nil; return &out }
-func (b *Agent) Temperature(t float64) *Agent {
-	out := *b
-	v := t
-	out.temperature = &v
-	out.state = nil
-	return &out
-}
-func (b *Agent) ThinkingBudget(n int) *Agent {
-	out := *b
-	v := n
-	out.thinkingBudget = &v
-	out.state = nil
-	return &out
-}
-func (b *Agent) Tool(t Tool) *Agent {
-	out := *b
-	out.tools = append(out.tools, t)
-	out.state = nil
-	return &out
-}
+func (b *Agent) Temperature(t float64) *Agent { out := *b; v := t; out.temperature = &v; out.state = nil; return &out }
+func (b *Agent) ThinkingBudget(n int) *Agent { out := *b; v := n; out.thinkingBudget = &v; out.state = nil; return &out }
+func (b *Agent) Tool(t Tool) *Agent { out := *b; out.tools = append(out.tools, t); out.state = nil; return &out }
 func (b *Agent) TopK(n int) *Agent { out := *b; v := n; out.topK = &v; out.state = nil; return &out }
-func (b *Agent) TopP(v float64) *Agent {
-	out := *b
-	x := v
-	out.topP = &x
-	out.state = nil
-	return &out
-}
+func (b *Agent) TopP(v float64) *Agent { out := *b; x := v; out.topP = &x; out.state = nil; return &out }
+
 
 // === *Upload — FileUpload builder ===
 
@@ -306,20 +206,18 @@ func (b *Agent) TopP(v float64) *Agent {
 // call. Chain methods return new instances (immutable); skipped
 // terminals live in hand-written text.go / image.go.
 type Upload struct {
-	client     *Client
-	bytes      []byte
-	filename   string
+	client *Client
+	bytes []byte
+	filename string
 	middleware []MiddlewareFn
-	mimeType   string
-	path       string
+	mimeType string
+	path string
 }
 
-func (b *Upload) Bytes(data []byte) *Upload    { out := *b; out.bytes = data; return &out }
+func (b *Upload) Bytes(data []byte) *Upload { out := *b; out.bytes = data; return &out }
 func (b *Upload) Filename(name string) *Upload { out := *b; out.filename = name; return &out }
-func (b *Upload) Middleware(fns ...MiddlewareFn) *Upload {
-	out := *b
-	out.middleware = append(out.middleware, fns...)
-	return &out
-}
+func (b *Upload) Middleware(fns ...MiddlewareFn) *Upload { out := *b; out.middleware = append(out.middleware, fns...); return &out }
 func (b *Upload) MimeType(mime string) *Upload { out := *b; out.mimeType = mime; return &out }
-func (b *Upload) Path(p string) *Upload        { out := *b; out.path = p; return &out }
+func (b *Upload) Path(p string) *Upload { out := *b; out.path = p; return &out }
+
+
