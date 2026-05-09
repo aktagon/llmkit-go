@@ -77,7 +77,6 @@ func TestSurface_Chains(t *testing.T) {
 
 	img := c.Image.
 		AspectRatio("16:9").
-		Caching().
 		Image("image/png", []byte{0xff}).
 		ImageSize("2K").
 		IncludeText().
