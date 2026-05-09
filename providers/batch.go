@@ -2,10 +2,9 @@
 
 package providers
 
-
 // Batch input mode discriminators.
 const (
-	BatchInlineRequests    = "InlineRequests"
+	BatchInlineRequests     = "InlineRequests"
 	BatchFileReferenceInput = "FileReferenceInput"
 )
 
@@ -35,18 +34,18 @@ func BatchConfig(provider string) *BatchDef {
 			EndpointPath:     "",
 			ItemBodyField:    "params",
 			ResultBodyPath:   "result.message",
-		Lifecycle: &ResourceLifecycleDef{
-			CreateEndpoint:   "/v1/messages/batches",
-			ResponseIdPath:   "id",
-			ReferenceField:   "",
-			PollingEndpoint:  "",
-			PollingStatusPath: "processing_status",
-			PollingDoneValue: "ended",
-			ResultEndpoint:      "/v1/messages/batches/{id}/results",
-			ResultResponsePath:  "",
-			ResultFileIdPath:    "",
-			FileContentEndpoint: "",
-		},
+			Lifecycle: &ResourceLifecycleDef{
+				CreateEndpoint:      "/v1/messages/batches",
+				ResponseIdPath:      "id",
+				ReferenceField:      "",
+				PollingEndpoint:     "",
+				PollingStatusPath:   "processing_status",
+				PollingDoneValue:    "ended",
+				ResultEndpoint:      "/v1/messages/batches/{id}/results",
+				ResultResponsePath:  "",
+				ResultFileIdPath:    "",
+				FileContentEndpoint: "",
+			},
 		}
 	case Google:
 		return &BatchDef{
@@ -69,18 +68,18 @@ func BatchConfig(provider string) *BatchDef {
 			EndpointPath:     "/v1/chat/completions",
 			ItemBodyField:    "",
 			ResultBodyPath:   "response.body",
-		Lifecycle: &ResourceLifecycleDef{
-			CreateEndpoint:   "/v1/batches",
-			ResponseIdPath:   "id",
-			ReferenceField:   "",
-			PollingEndpoint:  "",
-			PollingStatusPath: "status",
-			PollingDoneValue: "completed",
-			ResultEndpoint:      "",
-			ResultResponsePath:  "",
-			ResultFileIdPath:    "output_file_id",
-			FileContentEndpoint: "/v1/files/{id}/content",
-		},
+			Lifecycle: &ResourceLifecycleDef{
+				CreateEndpoint:      "/v1/batches",
+				ResponseIdPath:      "id",
+				ReferenceField:      "",
+				PollingEndpoint:     "",
+				PollingStatusPath:   "status",
+				PollingDoneValue:    "completed",
+				ResultEndpoint:      "",
+				ResultResponsePath:  "",
+				ResultFileIdPath:    "output_file_id",
+				FileContentEndpoint: "/v1/files/{id}/content",
+			},
 		}
 	default:
 		return nil
