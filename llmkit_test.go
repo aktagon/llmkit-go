@@ -257,7 +257,7 @@ func TestPromptStreamOpenAI(t *testing.T) {
 	c := New(providers.OpenAI, "key")
 	c.provider.baseURL = server.URL
 	var chunks []string
-	for chunk, err := range c.Text.Stream(context.Background(), "Hi") {
+	for chunk, err := range c.Text.Stream(context.Background(), "Hi").Chunks() {
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -300,7 +300,7 @@ func TestPromptStreamAnthropic(t *testing.T) {
 	c := New(providers.Anthropic, "key")
 	c.provider.baseURL = server.URL
 	var chunks []string
-	for chunk, err := range c.Text.Stream(context.Background(), "Hi") {
+	for chunk, err := range c.Text.Stream(context.Background(), "Hi").Chunks() {
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -369,7 +369,7 @@ func TestPromptStreamWithCachingAnthropic(t *testing.T) {
 	c := New(providers.Anthropic, "key")
 	c.provider.baseURL = server.URL
 	var chunks []string
-	for chunk, err := range c.Text.System("You are helpful").Caching().Stream(context.Background(), "Hi") {
+	for chunk, err := range c.Text.System("You are helpful").Caching().Stream(context.Background(), "Hi").Chunks() {
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -385,7 +385,7 @@ func TestPromptStreamWithCachingAnthropic(t *testing.T) {
 
 func TestPromptStreamWithCachingUnsupported(t *testing.T) {
 	var got error
-	for _, err := range New(providers.Groq, "key").Text.Caching().Stream(context.Background(), "Hi") {
+	for _, err := range New(providers.Groq, "key").Text.Caching().Stream(context.Background(), "Hi").Chunks() {
 		if err != nil {
 			got = err
 			break

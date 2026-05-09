@@ -4,6 +4,7 @@
 
 package providers_test
 
+
 import (
 	"context"
 	"os"
@@ -39,7 +40,8 @@ func TestIntegrationAi21Stream(t *testing.T) {
 	var chunks int
 	var text string
 	c := llmkit.New(providers.Ai21, key)
-	for chunk, err := range c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping") {
+	stream := c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping")
+	for chunk, err := range stream.Chunks() {
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -80,7 +82,8 @@ func TestIntegrationAnthropicStream(t *testing.T) {
 	var chunks int
 	var text string
 	c := llmkit.New(providers.Anthropic, key)
-	for chunk, err := range c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping") {
+	stream := c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping")
+	for chunk, err := range stream.Chunks() {
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -121,7 +124,8 @@ func TestIntegrationCerebrasStream(t *testing.T) {
 	var chunks int
 	var text string
 	c := llmkit.New(providers.Cerebras, key)
-	for chunk, err := range c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping") {
+	stream := c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping")
+	for chunk, err := range stream.Chunks() {
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -162,7 +166,8 @@ func TestIntegrationCohereStream(t *testing.T) {
 	var chunks int
 	var text string
 	c := llmkit.New(providers.Cohere, key)
-	for chunk, err := range c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping") {
+	stream := c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping")
+	for chunk, err := range stream.Chunks() {
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -203,7 +208,8 @@ func TestIntegrationDeepseekStream(t *testing.T) {
 	var chunks int
 	var text string
 	c := llmkit.New(providers.Deepseek, key)
-	for chunk, err := range c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping") {
+	stream := c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping")
+	for chunk, err := range stream.Chunks() {
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -244,7 +250,8 @@ func TestIntegrationDoubaoStream(t *testing.T) {
 	var chunks int
 	var text string
 	c := llmkit.New(providers.Doubao, key)
-	for chunk, err := range c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping") {
+	stream := c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping")
+	for chunk, err := range stream.Chunks() {
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -285,7 +292,8 @@ func TestIntegrationErnieStream(t *testing.T) {
 	var chunks int
 	var text string
 	c := llmkit.New(providers.Ernie, key)
-	for chunk, err := range c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping") {
+	stream := c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping")
+	for chunk, err := range stream.Chunks() {
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -326,7 +334,8 @@ func TestIntegrationFireworksStream(t *testing.T) {
 	var chunks int
 	var text string
 	c := llmkit.New(providers.Fireworks, key)
-	for chunk, err := range c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping") {
+	stream := c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping")
+	for chunk, err := range stream.Chunks() {
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -367,7 +376,8 @@ func TestIntegrationGoogleStream(t *testing.T) {
 	var chunks int
 	var text string
 	c := llmkit.New(providers.Google, key)
-	for chunk, err := range c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping") {
+	stream := c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping")
+	for chunk, err := range stream.Chunks() {
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -408,7 +418,8 @@ func TestIntegrationGrokStream(t *testing.T) {
 	var chunks int
 	var text string
 	c := llmkit.New(providers.Grok, key)
-	for chunk, err := range c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping") {
+	stream := c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping")
+	for chunk, err := range stream.Chunks() {
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -449,7 +460,8 @@ func TestIntegrationGroqStream(t *testing.T) {
 	var chunks int
 	var text string
 	c := llmkit.New(providers.Groq, key)
-	for chunk, err := range c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping") {
+	stream := c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping")
+	for chunk, err := range stream.Chunks() {
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -490,7 +502,8 @@ func TestIntegrationMinimaxStream(t *testing.T) {
 	var chunks int
 	var text string
 	c := llmkit.New(providers.Minimax, key)
-	for chunk, err := range c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping") {
+	stream := c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping")
+	for chunk, err := range stream.Chunks() {
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -531,7 +544,8 @@ func TestIntegrationMistralStream(t *testing.T) {
 	var chunks int
 	var text string
 	c := llmkit.New(providers.Mistral, key)
-	for chunk, err := range c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping") {
+	stream := c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping")
+	for chunk, err := range stream.Chunks() {
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -572,7 +586,8 @@ func TestIntegrationMoonshotStream(t *testing.T) {
 	var chunks int
 	var text string
 	c := llmkit.New(providers.Moonshot, key)
-	for chunk, err := range c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping") {
+	stream := c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping")
+	for chunk, err := range stream.Chunks() {
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -613,7 +628,8 @@ func TestIntegrationOpenAIStream(t *testing.T) {
 	var chunks int
 	var text string
 	c := llmkit.New(providers.OpenAI, key)
-	for chunk, err := range c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping") {
+	stream := c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping")
+	for chunk, err := range stream.Chunks() {
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -654,7 +670,8 @@ func TestIntegrationOpenrouterStream(t *testing.T) {
 	var chunks int
 	var text string
 	c := llmkit.New(providers.Openrouter, key)
-	for chunk, err := range c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping") {
+	stream := c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping")
+	for chunk, err := range stream.Chunks() {
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -695,7 +712,8 @@ func TestIntegrationPerplexityStream(t *testing.T) {
 	var chunks int
 	var text string
 	c := llmkit.New(providers.Perplexity, key)
-	for chunk, err := range c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping") {
+	stream := c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping")
+	for chunk, err := range stream.Chunks() {
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -736,7 +754,8 @@ func TestIntegrationQwenStream(t *testing.T) {
 	var chunks int
 	var text string
 	c := llmkit.New(providers.Qwen, key)
-	for chunk, err := range c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping") {
+	stream := c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping")
+	for chunk, err := range stream.Chunks() {
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -777,7 +796,8 @@ func TestIntegrationSambanovaStream(t *testing.T) {
 	var chunks int
 	var text string
 	c := llmkit.New(providers.Sambanova, key)
-	for chunk, err := range c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping") {
+	stream := c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping")
+	for chunk, err := range stream.Chunks() {
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -818,7 +838,8 @@ func TestIntegrationTogetherStream(t *testing.T) {
 	var chunks int
 	var text string
 	c := llmkit.New(providers.Together, key)
-	for chunk, err := range c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping") {
+	stream := c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping")
+	for chunk, err := range stream.Chunks() {
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -859,7 +880,8 @@ func TestIntegrationYiStream(t *testing.T) {
 	var chunks int
 	var text string
 	c := llmkit.New(providers.Yi, key)
-	for chunk, err := range c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping") {
+	stream := c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping")
+	for chunk, err := range stream.Chunks() {
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -900,7 +922,8 @@ func TestIntegrationZhipuStream(t *testing.T) {
 	var chunks int
 	var text string
 	c := llmkit.New(providers.Zhipu, key)
-	for chunk, err := range c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping") {
+	stream := c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping")
+	for chunk, err := range stream.Chunks() {
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -946,3 +969,4 @@ func TestIntegrationOpenAICaching(t *testing.T) {
 	}
 	t.Logf("cache_read=%d cache_write=%d", resp.Tokens.CacheRead, resp.Tokens.CacheWrite)
 }
+
