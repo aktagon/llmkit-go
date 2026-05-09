@@ -308,7 +308,7 @@ func TestMiddlewareStreamBracketsEntireStream(t *testing.T) {
 	c := New(providers.OpenAI, "test-key")
 	c.provider.baseURL = server.URL
 	chunks := []string{}
-	for chunk, err := range c.Text.Middleware(mw).Stream(context.Background(), "Hi") {
+	for chunk, err := range c.Text.Middleware(mw).Stream(context.Background(), "Hi").Chunks() {
 		if err != nil {
 			t.Fatal(err)
 		}

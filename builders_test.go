@@ -262,7 +262,7 @@ func TestStream_Coverage(t *testing.T) {
 	c := Openai("k")
 
 	var sawError bool
-	for chunk, err := range c.Text.System("x").Stream(ctx, "hi") {
+	for chunk, err := range c.Text.System("x").Stream(ctx, "hi").Chunks() {
 		if err != nil {
 			sawError = true
 			break
@@ -291,7 +291,7 @@ func TestStream_EarlyBreak(t *testing.T) {
 	cancel()
 	c := Openai("k")
 
-	for chunk, err := range c.Text.Stream(ctx, "hi") {
+	for chunk, err := range c.Text.Stream(ctx, "hi").Chunks() {
 		_ = chunk
 		_ = err
 		break
@@ -327,7 +327,8 @@ func TestStream_RealBridge(t *testing.T) {
 	c.provider.baseURL = server.URL // package-private field; tests are in-package
 
 	var got []string
-	for chunk, err := range c.Text.Stream(context.Background(), "hi") {
+	stream := c.Text.Stream(context.Background(), "hi")
+	for chunk, err := range stream.Chunks() {
 		if err != nil {
 			t.Fatalf("stream error: %v", err)
 		}
@@ -337,6 +338,19 @@ func TestStream_RealBridge(t *testing.T) {
 	want := []string{"Hel", "lo ", "world"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("chunks: got %v want %v", got, want)
+	}
+
+	// Trailing handle: Response() carries the accumulated text + token
+	// counts after the range loop ends.
+	resp := stream.Response()
+	if resp.Text != "Hello world" {
+		t.Errorf("Response().Text: got %q want %q", resp.Text, "Hello world")
+	}
+	if resp.Tokens.Input != 1 || resp.Tokens.Output != 3 {
+		t.Errorf("Response().Tokens: got %+v want {Input:1, Output:3}", resp.Tokens)
+	}
+	if err := stream.Err(); err != nil {
+		t.Errorf("Err(): got %v want nil", err)
 	}
 	_ = strings.Join // keep import alive when other tests evolve
 }
@@ -369,7 +383,7 @@ func TestStream_BoundedBuffer(t *testing.T) {
 	c.provider.baseURL = server.URL
 
 	var got []string
-	for chunk, err := range c.Text.Stream(context.Background(), "hi") {
+	for chunk, err := range c.Text.Stream(context.Background(), "hi").Chunks() {
 		if err != nil {
 			t.Fatalf("stream error: %v", err)
 		}
