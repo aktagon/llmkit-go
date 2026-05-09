@@ -50,6 +50,30 @@ func (b *Agent) initAgent() {
 	if b.temperature != nil {
 		opts = append(opts, WithTemperature(*b.temperature))
 	}
+	if b.topP != nil {
+		opts = append(opts, WithTopP(*b.topP))
+	}
+	if b.topK != nil {
+		opts = append(opts, WithTopK(*b.topK))
+	}
+	if b.frequencyPenalty != nil {
+		opts = append(opts, WithFrequencyPenalty(*b.frequencyPenalty))
+	}
+	if b.presencePenalty != nil {
+		opts = append(opts, WithPresencePenalty(*b.presencePenalty))
+	}
+	if b.seed != nil {
+		opts = append(opts, WithSeed(*b.seed))
+	}
+	if len(b.stopSequences) > 0 {
+		opts = append(opts, WithStopSequences(b.stopSequences...))
+	}
+	if b.thinkingBudget != nil {
+		opts = append(opts, WithThinkingBudget(*b.thinkingBudget))
+	}
+	if b.reasoningEffort != "" {
+		opts = append(opts, WithReasoningEffort(b.reasoningEffort))
+	}
 	if b.caching {
 		opts = append(opts, WithCaching())
 	}
