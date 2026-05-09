@@ -2,7 +2,6 @@
 
 package providers
 
-
 // ResponseTextPath returns the JSON path to extract text from a provider response.
 func ResponseTextPath(provider string) string {
 	switch provider {

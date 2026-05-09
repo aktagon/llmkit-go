@@ -2,7 +2,6 @@
 
 package providers
 
-
 // Image input/output mode discriminators.
 const (
 	ImageInputInlineParts   = "InlineParts"
@@ -15,22 +14,22 @@ const (
 // aspect ratios and output sizes. Values are the strings sent to the provider
 // (e.g., "16:9", "1K") and surfaced unchanged in the runtime API.
 type ImageModelDef struct {
-	ModelID       string
-	Label         string
-	AspectRatios  []string
-	ImageSizes    []string
+	ModelID      string
+	Label        string
+	AspectRatios []string
+	ImageSizes   []string
 }
 
 // ImageGenDef holds one provider's image-generation configuration.
 // GenEndpoint and EditEndpoint are forward-compat overrides; empty means
 // reuse the provider's main endpoint template (Google).
 type ImageGenDef struct {
-	InputMode       string // ImageInputInlineParts | ImageInputMultipartForm
-	OutputMode      string // ImageOutputBase64Inline | ImageOutputURLOrBase64
-	MaxInputCount   int    // max reference images per request
-	GenEndpoint     string // override; empty = use provider main endpoint
-	EditEndpoint    string // override; empty = use GenEndpoint
-	Models          []ImageModelDef
+	InputMode     string // ImageInputInlineParts | ImageInputMultipartForm
+	OutputMode    string // ImageOutputBase64Inline | ImageOutputURLOrBase64
+	MaxInputCount int    // max reference images per request
+	GenEndpoint   string // override; empty = use provider main endpoint
+	EditEndpoint  string // override; empty = use GenEndpoint
+	Models        []ImageModelDef
 }
 
 // ImageGenConfig returns the image-generation config for a provider, or nil
@@ -63,4 +62,3 @@ func ImageGenConfig(provider string) *ImageGenDef {
 		return nil
 	}
 }
-
