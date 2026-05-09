@@ -44,6 +44,7 @@ func APIOptions() []APIOptionDef {
 		{GoFunc: "WithImageSize", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithIncludeText", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithMaxTokens", SubOptions: []APISubOptionDef{}},
+		{GoFunc: "WithMaxToolIterations", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithMimeType", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithModel", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithPath", SubOptions: []APISubOptionDef{}},
