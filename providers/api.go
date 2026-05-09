@@ -2,7 +2,6 @@
 
 package providers
 
-
 // APIOptionDef describes a functional option.
 type APIOptionDef struct {
 	GoFunc     string
@@ -32,61 +31,35 @@ type APIResponseFieldDef struct {
 // APIOptions returns all functional options.
 func APIOptions() []APIOptionDef {
 	return []APIOptionDef{
-		{GoFunc: "WithAspectRatio", SubOptions: []APISubOptionDef{
-		}},
-		{GoFunc: "WithBytes", SubOptions: []APISubOptionDef{
-		}},
+		{GoFunc: "WithAspectRatio", SubOptions: []APISubOptionDef{}},
+		{GoFunc: "WithBytes", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithCaching", SubOptions: []APISubOptionDef{
 			{GoFunc: "CacheTTL", GoParamType: "time.Duration"},
 		}},
-		{GoFunc: "WithFile", SubOptions: []APISubOptionDef{
-		}},
-		{GoFunc: "WithFilename", SubOptions: []APISubOptionDef{
-		}},
-		{GoFunc: "WithFrequencyPenalty", SubOptions: []APISubOptionDef{
-		}},
-		{GoFunc: "WithHistory", SubOptions: []APISubOptionDef{
-		}},
-		{GoFunc: "WithImage", SubOptions: []APISubOptionDef{
-		}},
-		{GoFunc: "WithImageSize", SubOptions: []APISubOptionDef{
-		}},
-		{GoFunc: "WithIncludeText", SubOptions: []APISubOptionDef{
-		}},
-		{GoFunc: "WithMaxTokens", SubOptions: []APISubOptionDef{
-		}},
-		{GoFunc: "WithMaxToolIterations", SubOptions: []APISubOptionDef{
-		}},
-		{GoFunc: "WithMimeType", SubOptions: []APISubOptionDef{
-		}},
-		{GoFunc: "WithModel", SubOptions: []APISubOptionDef{
-		}},
-		{GoFunc: "WithPath", SubOptions: []APISubOptionDef{
-		}},
-		{GoFunc: "WithPresencePenalty", SubOptions: []APISubOptionDef{
-		}},
-		{GoFunc: "WithReasoningEffort", SubOptions: []APISubOptionDef{
-		}},
-		{GoFunc: "WithSchema", SubOptions: []APISubOptionDef{
-		}},
-		{GoFunc: "WithSeed", SubOptions: []APISubOptionDef{
-		}},
-		{GoFunc: "WithStopSequences", SubOptions: []APISubOptionDef{
-		}},
-		{GoFunc: "WithSystem", SubOptions: []APISubOptionDef{
-		}},
-		{GoFunc: "WithTemperature", SubOptions: []APISubOptionDef{
-		}},
-		{GoFunc: "WithText", SubOptions: []APISubOptionDef{
-		}},
-		{GoFunc: "WithThinkingBudget", SubOptions: []APISubOptionDef{
-		}},
-		{GoFunc: "WithTool", SubOptions: []APISubOptionDef{
-		}},
-		{GoFunc: "WithTopK", SubOptions: []APISubOptionDef{
-		}},
-		{GoFunc: "WithTopP", SubOptions: []APISubOptionDef{
-		}},
+		{GoFunc: "WithFile", SubOptions: []APISubOptionDef{}},
+		{GoFunc: "WithFilename", SubOptions: []APISubOptionDef{}},
+		{GoFunc: "WithFrequencyPenalty", SubOptions: []APISubOptionDef{}},
+		{GoFunc: "WithHistory", SubOptions: []APISubOptionDef{}},
+		{GoFunc: "WithImage", SubOptions: []APISubOptionDef{}},
+		{GoFunc: "WithImageSize", SubOptions: []APISubOptionDef{}},
+		{GoFunc: "WithIncludeText", SubOptions: []APISubOptionDef{}},
+		{GoFunc: "WithMaxTokens", SubOptions: []APISubOptionDef{}},
+		{GoFunc: "WithMaxToolIterations", SubOptions: []APISubOptionDef{}},
+		{GoFunc: "WithMimeType", SubOptions: []APISubOptionDef{}},
+		{GoFunc: "WithModel", SubOptions: []APISubOptionDef{}},
+		{GoFunc: "WithPath", SubOptions: []APISubOptionDef{}},
+		{GoFunc: "WithPresencePenalty", SubOptions: []APISubOptionDef{}},
+		{GoFunc: "WithReasoningEffort", SubOptions: []APISubOptionDef{}},
+		{GoFunc: "WithSchema", SubOptions: []APISubOptionDef{}},
+		{GoFunc: "WithSeed", SubOptions: []APISubOptionDef{}},
+		{GoFunc: "WithStopSequences", SubOptions: []APISubOptionDef{}},
+		{GoFunc: "WithSystem", SubOptions: []APISubOptionDef{}},
+		{GoFunc: "WithTemperature", SubOptions: []APISubOptionDef{}},
+		{GoFunc: "WithText", SubOptions: []APISubOptionDef{}},
+		{GoFunc: "WithThinkingBudget", SubOptions: []APISubOptionDef{}},
+		{GoFunc: "WithTool", SubOptions: []APISubOptionDef{}},
+		{GoFunc: "WithTopK", SubOptions: []APISubOptionDef{}},
+		{GoFunc: "WithTopP", SubOptions: []APISubOptionDef{}},
 	}
 }
 
