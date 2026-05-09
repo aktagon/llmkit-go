@@ -396,6 +396,10 @@ func TestUpload_Coverage(t *testing.T) {
 	// Path branch — exercises the wired path.
 	_, _ = c.Upload.Path("/nonexistent").Middleware(noopMiddleware).Run(ctx)
 
+	// Bytes branch — exercises the wired path (cancelled ctx forces
+	// the call to bail out before the network).
+	_, _ = c.Upload.Bytes([]byte("hi")).Filename("note.txt").MimeType("text/plain").Run(ctx)
+
 	// Validation branches — exercised without going to the network.
 	if _, err := c.Upload.Run(ctx); err == nil {
 		t.Error("expected error for empty Path+Bytes")
@@ -404,7 +408,7 @@ func TestUpload_Coverage(t *testing.T) {
 		t.Error("expected error for both Path and Bytes")
 	}
 	if _, err := c.Upload.Bytes([]byte("y")).Run(ctx); err == nil {
-		t.Error("expected error for Bytes-only (not yet wired)")
+		t.Error("expected error for Bytes without Filename")
 	}
 }
 

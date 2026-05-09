@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -134,8 +133,11 @@ func buildStreamURL(p Provider, cfg providers.ProviderConfig, streamCfg *provide
 }
 
 // uploadFile is the internal upload implementation; the public
-// surface is (*Upload).Run in upload.go (plan-018 D1.3d).
-func uploadFile(ctx context.Context, p Provider, path string, opts ...Option) (File, error) {
+// surface is (*Upload).Run in upload.go. Caller supplies bytes
+// directly along with the filename used in the multipart form and
+// (optionally) the explicit MIME type. If mime is empty,
+// Content-Type is derived from the filename extension.
+func uploadFile(ctx context.Context, p Provider, data []byte, name, mime string, opts ...Option) (File, error) {
 	if err := validateProvider(p); err != nil {
 		return File{}, err
 	}
@@ -161,17 +163,6 @@ func uploadFile(ctx context.Context, p Provider, path string, opts ...Option) (F
 	if err := firePre(ctx, o.middleware, baseEvent); err != nil {
 		return File{}, err
 	}
-
-	data, err := os.ReadFile(path)
-	if err != nil {
-		postEv := baseEvent
-		postEv.Err = err
-		postEv.Duration = time.Since(start)
-		firePost(ctx, o.middleware, postEv)
-		return File{}, err
-	}
-
-	name := filepath.Base(path)
 
 	// Build upload URL
 	base := p.BaseURL
@@ -215,7 +206,7 @@ func uploadFile(ctx context.Context, p Provider, path string, opts ...Option) (F
 		headers["X-Goog-Upload-Protocol"] = "multipart"
 	}
 
-	respBody, statusCode, err := doMultipartPost(ctx, o.httpClient, uploadURL, fuDef.FieldName, name, data, extraFields, headers)
+	respBody, statusCode, err := doMultipartPost(ctx, o.httpClient, uploadURL, fuDef.FieldName, name, mime, data, extraFields, headers)
 	if err != nil {
 		postEv := baseEvent
 		postEv.Err = err
@@ -242,8 +233,12 @@ func uploadFile(ctx context.Context, p Provider, path string, opts ...Option) (F
 		return File{}, fmt.Errorf("unmarshal upload response: %w", err)
 	}
 
+	resolvedMime := mime
+	if resolvedMime == "" {
+		resolvedMime = detectMimeType(name)
+	}
 	file := File{
-		MimeType: detectMimeType(path),
+		MimeType: resolvedMime,
 	}
 	if fuDef.ResponseIdPath != "" {
 		file.ID = extractPath(raw, fuDef.ResponseIdPath)
