@@ -226,7 +226,7 @@ func uploadBatchFile(ctx context.Context, client *http.Client, base string, json
 	uploadURL := base + "/v1/files"
 	fields := map[string]string{"purpose": bc.FilePurpose}
 
-	respData, statusCode, err := doMultipartPost(ctx, client, uploadURL, "file", "batch_input.jsonl", jsonl, fields, headers)
+	respData, statusCode, err := doMultipartPost(ctx, client, uploadURL, "file", "batch_input.jsonl", "", jsonl, fields, headers)
 	if err != nil {
 		return "", fmt.Errorf("batch file upload: %w", err)
 	}
