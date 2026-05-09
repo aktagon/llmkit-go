@@ -61,8 +61,9 @@ func doPostRaw(ctx context.Context, client *http.Client, url string, body []byte
 
 //
 //
+//
 func doMultipartPost(ctx context.Context, client *http.Client, url string,
-	fieldName, filename string, data []byte, fields map[string]string, headers map[string]string) ([]byte, int, error) {
+	fieldName, filename, mimeType string, data []byte, fields map[string]string, headers map[string]string) ([]byte, int, error) {
 
 	var buf bytes.Buffer
 	w := multipart.NewWriter(&buf)
@@ -74,8 +75,9 @@ func doMultipartPost(ctx context.Context, client *http.Client, url string,
 		}
 	}
 
-	//
-	mimeType := detectMimeType(filename)
+	if mimeType == "" {
+		mimeType = detectMimeType(filename)
+	}
 	h := make(textproto.MIMEHeader)
 	h.Set("Content-Disposition", fmt.Sprintf(`form-data; name="%s"; filename="%s"`, fieldName, filename))
 	h.Set("Content-Type", mimeType)
