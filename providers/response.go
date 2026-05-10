@@ -5,7 +5,7 @@ package providers
 // ResponseTextPath returns the JSON path to extract text from a provider response.
 func ResponseTextPath(provider string) string {
 	switch provider {
-	case Ai21:
+	case AI21:
 		return "choices[0].message.content"
 	case Anthropic:
 		return "content[0].text"
@@ -67,7 +67,7 @@ func ResponseTextPath(provider string) string {
 // UsagePaths returns the JSON paths for input and output token counts.
 func UsagePaths(provider string) (inputPath, outputPath string) {
 	switch provider {
-	case Ai21:
+	case AI21:
 		return "usage.prompt_tokens", "usage.completion_tokens"
 	case Anthropic:
 		return "usage.input_tokens", "usage.output_tokens"

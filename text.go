@@ -81,8 +81,12 @@ func (b *Text) Prompt(ctx context.Context, finalText string) (Response, error) {
 		postEv.Err = err
 		postEv.Duration = time.Since(start)
 		firePost(ctx, o.middleware, postEv)
-		if respBody != nil {
-			return Response{}, parseError(p.Name, err.(*APIError).StatusCode, respBody, nil)
+		// Re-parse the body only when the underlying error is an
+		// *APIError. Transport-layer errors (network blip, ctx cancel,
+		// *url.Error) can leave respBody non-nil — propagate them as-is
+		// instead of panicking on the type assertion.
+		if apiErr, ok := err.(*APIError); ok && respBody != nil {
+			return Response{}, parseError(p.Name, apiErr.StatusCode, respBody, nil)
 		}
 		return Response{}, err
 	}
