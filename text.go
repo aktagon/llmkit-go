@@ -81,8 +81,12 @@ func (b *Text) Prompt(ctx context.Context, finalText string) (Response, error) {
 		postEv.Err = err
 		postEv.Duration = time.Since(start)
 		firePost(ctx, o.middleware, postEv)
-		if respBody != nil {
-			return Response{}, parseError(p.Name, err.(*APIError).StatusCode, respBody, nil)
+		//
+		//
+		//
+		//
+		if apiErr, ok := err.(*APIError); ok && respBody != nil {
+			return Response{}, parseError(p.Name, apiErr.StatusCode, respBody, nil)
 		}
 		return Response{}, err
 	}

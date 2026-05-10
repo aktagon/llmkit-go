@@ -20,7 +20,7 @@ type StreamDef struct {
 //
 func StreamConfig(provider string) *StreamDef {
 	switch provider {
-	case Ai21:
+	case AI21:
 		return &StreamDef{
 			Endpoint:        "",
 			Param:           "stream",

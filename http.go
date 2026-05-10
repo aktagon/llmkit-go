@@ -183,6 +183,12 @@ func doStreamPost(ctx context.Context, client *http.Client, url string, body []b
 	var usage Usage
 	var currentEvent string
 	scanner := bufio.NewScanner(resp.Body)
+	//
+	//
+	//
+	//
+	//
+	scanner.Buffer(make([]byte, 0, 64*1024), 10*1024*1024)
 
 	for scanner.Scan() {
 		line := scanner.Text()

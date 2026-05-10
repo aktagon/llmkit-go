@@ -268,9 +268,15 @@ func validateProvider(p Provider) error {
 }
 
 //
+//
+//
+//
 func validateRequest(req Request) error {
-	if req.User == "" && len(req.Messages) == 0 {
-		return &ValidationError{Field: "user", Message: "required"}
+	if req.User == "" && len(req.Messages) == 0 && len(req.Images) == 0 {
+		return &ValidationError{
+			Field:   "user",
+			Message: "set Text(), Parts, History, or Image() before calling Prompt",
+		}
 	}
 	return nil
 }

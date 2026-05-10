@@ -3,6 +3,7 @@ package llmkit
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -44,7 +45,21 @@ func (b *Upload) Run(ctx context.Context) (File, error) {
 	var name string
 
 	if hasPath {
-		var err error
+		//
+		//
+		//
+		//
+		const maxUploadBytes = 1 << 30 // 1GB
+		info, err := os.Stat(b.path)
+		if err != nil {
+			return File{}, err
+		}
+		if info.Size() > maxUploadBytes {
+			return File{}, &ValidationError{
+				Field:   "path",
+				Message: fmt.Sprintf("file too large: %d bytes exceeds %d limit", info.Size(), maxUploadBytes),
+			}
+		}
 		data, err = os.ReadFile(b.path)
 		if err != nil {
 			return File{}, err
