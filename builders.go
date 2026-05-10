@@ -113,7 +113,7 @@ type Text struct {
 func (b *Text) Caching() *Text { out := *b; out.caching = true; return &out }
 func (b *Text) File(id string) *Text {
 	out := *b
-	out.files = append(out.files, File{ID: id})
+	out.files = append(append([]File{}, b.files...), File{ID: id})
 	return &out
 } // ordered
 func (b *Text) FrequencyPenalty(v float64) *Text {
@@ -122,16 +122,20 @@ func (b *Text) FrequencyPenalty(v float64) *Text {
 	out.frequencyPenalty = &x
 	return &out
 }
-func (b *Text) History(msgs ...Message) *Text { out := *b; out.history = msgs; return &out }
+func (b *Text) History(msgs ...Message) *Text {
+	out := *b
+	out.history = append([]Message{}, msgs...)
+	return &out
+}
 func (b *Text) Image(mime string, data []byte) *Text {
 	out := *b
-	out.parts = append(out.parts, Part{Image: &MediaRef{MimeType: mime, Bytes: data}})
+	out.parts = append(append([]Part{}, b.parts...), Part{Image: &MediaRef{MimeType: mime, Bytes: data}})
 	return &out
 }                                     // ordered
 func (b *Text) MaxTokens(n int) *Text { out := *b; v := n; out.maxTokens = &v; return &out }
 func (b *Text) Middleware(fns ...MiddlewareFn) *Text {
 	out := *b
-	out.middleware = append(out.middleware, fns...)
+	out.middleware = append(append([]MiddlewareFn{}, b.middleware...), fns...)
 	return &out
 }
 func (b *Text) Model(name string) *Text { out := *b; out.model = name; return &out }
@@ -146,14 +150,18 @@ func (b *Text) ReasoningEffort(level string) *Text {
 	out.reasoningEffort = level
 	return &out
 }
-func (b *Text) Schema(s string) *Text              { out := *b; out.schema = s; return &out }
-func (b *Text) Seed(n int64) *Text                 { out := *b; v := n; out.seed = &v; return &out }
-func (b *Text) StopSequences(seqs ...string) *Text { out := *b; out.stopSequences = seqs; return &out }
-func (b *Text) System(s string) *Text              { out := *b; out.system = s; return &out }
-func (b *Text) Temperature(t float64) *Text        { out := *b; v := t; out.temperature = &v; return &out }
+func (b *Text) Schema(s string) *Text { out := *b; out.schema = s; return &out }
+func (b *Text) Seed(n int64) *Text    { out := *b; v := n; out.seed = &v; return &out }
+func (b *Text) StopSequences(seqs ...string) *Text {
+	out := *b
+	out.stopSequences = append([]string{}, seqs...)
+	return &out
+}
+func (b *Text) System(s string) *Text       { out := *b; out.system = s; return &out }
+func (b *Text) Temperature(t float64) *Text { out := *b; v := t; out.temperature = &v; return &out }
 func (b *Text) Text(s string) *Text {
 	out := *b
-	out.parts = append(out.parts, Part{Text: s})
+	out.parts = append(append([]Part{}, b.parts...), Part{Text: s})
 	return &out
 }                                          // ordered
 func (b *Text) ThinkingBudget(n int) *Text { out := *b; v := n; out.thinkingBudget = &v; return &out }
@@ -178,20 +186,20 @@ type Image struct {
 func (b *Image) AspectRatio(r string) *Image { out := *b; out.aspectRatio = r; return &out }
 func (b *Image) Image(mime string, data []byte) *Image {
 	out := *b
-	out.parts = append(out.parts, Part{Image: &MediaRef{MimeType: mime, Bytes: data}})
+	out.parts = append(append([]Part{}, b.parts...), Part{Image: &MediaRef{MimeType: mime, Bytes: data}})
 	return &out
 }                                          // ordered
 func (b *Image) ImageSize(s string) *Image { out := *b; out.imageSize = s; return &out }
 func (b *Image) IncludeText() *Image       { out := *b; out.includeText = true; return &out }
 func (b *Image) Middleware(fns ...MiddlewareFn) *Image {
 	out := *b
-	out.middleware = append(out.middleware, fns...)
+	out.middleware = append(append([]MiddlewareFn{}, b.middleware...), fns...)
 	return &out
 }
 func (b *Image) Model(name string) *Image { out := *b; out.model = name; return &out }
 func (b *Image) Text(s string) *Image {
 	out := *b
-	out.parts = append(out.parts, Part{Text: s})
+	out.parts = append(append([]Part{}, b.parts...), Part{Text: s})
 	return &out
 } // ordered
 
@@ -245,7 +253,7 @@ func (b *Agent) MaxToolIterations(n int) *Agent {
 }
 func (b *Agent) Middleware(fns ...MiddlewareFn) *Agent {
 	out := *b
-	out.middleware = append(out.middleware, fns...)
+	out.middleware = append(append([]MiddlewareFn{}, b.middleware...), fns...)
 	out.state = nil
 	return &out
 }
@@ -266,7 +274,7 @@ func (b *Agent) ReasoningEffort(level string) *Agent {
 func (b *Agent) Seed(n int64) *Agent { out := *b; v := n; out.seed = &v; out.state = nil; return &out }
 func (b *Agent) StopSequences(seqs ...string) *Agent {
 	out := *b
-	out.stopSequences = seqs
+	out.stopSequences = append([]string{}, seqs...)
 	out.state = nil
 	return &out
 }
@@ -287,7 +295,7 @@ func (b *Agent) ThinkingBudget(n int) *Agent {
 }
 func (b *Agent) Tool(t Tool) *Agent {
 	out := *b
-	out.tools = append(out.tools, t)
+	out.tools = append(append([]Tool{}, b.tools...), t)
 	out.state = nil
 	return &out
 }
@@ -314,11 +322,15 @@ type Upload struct {
 	path       string
 }
 
-func (b *Upload) Bytes(data []byte) *Upload    { out := *b; out.bytes = data; return &out }
+func (b *Upload) Bytes(data []byte) *Upload {
+	out := *b
+	out.bytes = append([]byte(nil), data...)
+	return &out
+}
 func (b *Upload) Filename(name string) *Upload { out := *b; out.filename = name; return &out }
 func (b *Upload) Middleware(fns ...MiddlewareFn) *Upload {
 	out := *b
-	out.middleware = append(out.middleware, fns...)
+	out.middleware = append(append([]MiddlewareFn{}, b.middleware...), fns...)
 	return &out
 }
 func (b *Upload) MimeType(mime string) *Upload { out := *b; out.mimeType = mime; return &out }

@@ -4,7 +4,7 @@ package providers
 
 // Provider name constants.
 const (
-	Ai21       = "ai21"
+	AI21       = "ai21"
 	Anthropic  = "anthropic"
 	Azure      = "azure"
 	Bedrock    = "bedrock"
@@ -67,7 +67,7 @@ type ProviderConfig struct {
 // Providers returns the provider config registry.
 func Providers() map[string]ProviderConfig {
 	return map[string]ProviderConfig{
-		Ai21: {
+		AI21: {
 			Name:                "ai21",
 			BaseURL:             "https://api.ai21.com",
 			Endpoint:            "/v1/chat/completions",

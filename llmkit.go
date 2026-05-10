@@ -267,10 +267,16 @@ func validateProvider(p Provider) error {
 	return nil
 }
 
-// validateRequest checks that required fields are present.
+// validateRequest checks that required fields are present. Accepts
+// any of: a User string, a Messages history, or at least one Image
+// part — image-only multimodal calls are valid even when no text is
+// supplied.
 func validateRequest(req Request) error {
-	if req.User == "" && len(req.Messages) == 0 {
-		return &ValidationError{Field: "user", Message: "required"}
+	if req.User == "" && len(req.Messages) == 0 && len(req.Images) == 0 {
+		return &ValidationError{
+			Field:   "user",
+			Message: "set Text(), Parts, History, or Image() before calling Prompt",
+		}
 	}
 	return nil
 }
