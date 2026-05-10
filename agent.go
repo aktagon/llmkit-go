@@ -116,8 +116,12 @@ func (a *legacyAgent) runToolLoop(ctx context.Context) (Response, error) {
 			postEv.Err = err
 			postEv.Duration = time.Since(llmStart)
 			firePost(ctx, a.opts.middleware, postEv)
-			if respBody != nil {
-				return Response{}, parseError(a.provider.Name, err.(*APIError).StatusCode, respBody, nil)
+			// Re-parse the body only when the underlying error is an
+			// *APIError. Transport errors leave respBody non-nil but
+			// `err` is e.g. *url.Error — propagate as-is rather than
+			// panicking on the type assertion.
+			if apiErr, ok := err.(*APIError); ok && respBody != nil {
+				return Response{}, parseError(a.provider.Name, apiErr.StatusCode, respBody, nil)
 			}
 			return Response{}, err
 		}

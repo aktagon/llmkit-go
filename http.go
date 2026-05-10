@@ -183,6 +183,12 @@ func doStreamPost(ctx context.Context, client *http.Client, url string, body []b
 	var usage Usage
 	var currentEvent string
 	scanner := bufio.NewScanner(resp.Body)
+	// Default Scanner buffer is 64KB. SSE frames carrying large
+	// structured-output JSON or tool-call arguments routinely exceed
+	// that and would silently truncate (Scanner.Err returns
+	// bufio.ErrTooLong, partial data surfaces as final response). Bump
+	// to 10MB to match the largest event sizes in practice.
+	scanner.Buffer(make([]byte, 0, 64*1024), 10*1024*1024)
 
 	for scanner.Scan() {
 		line := scanner.Text()
