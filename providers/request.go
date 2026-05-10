@@ -99,7 +99,7 @@ type ToolCallDef struct {
 // ToolCallConfig returns the tool call config for a provider.
 func ToolCallConfig(provider string) *ToolCallDef {
 	switch provider {
-	case Ai21:
+	case AI21:
 		return &ToolCallDef{
 			ArgsFormat: "json_string",
 			ResultRole: "tool",
