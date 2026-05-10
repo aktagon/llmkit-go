@@ -13,12 +13,12 @@ import (
 	"github.com/aktagon/llmkit-go/providers"
 )
 
-func TestIntegrationAi21(t *testing.T) {
+func TestIntegrationAI21(t *testing.T) {
 	key := os.Getenv("AI21_API_KEY")
 	if key == "" {
 		t.Skip("AI21_API_KEY not set")
 	}
-	c := llmkit.New(providers.Ai21, key)
+	c := llmkit.New(providers.AI21, key)
 	resp, err := c.Text.System("Reply with only the word pong").Prompt(context.Background(), "ping")
 	if err != nil {
 		t.Fatal(err)
@@ -31,14 +31,14 @@ func TestIntegrationAi21(t *testing.T) {
 	}
 }
 
-func TestIntegrationAi21Stream(t *testing.T) {
+func TestIntegrationAI21Stream(t *testing.T) {
 	key := os.Getenv("AI21_API_KEY")
 	if key == "" {
 		t.Skip("AI21_API_KEY not set")
 	}
 	var chunks int
 	var text string
-	c := llmkit.New(providers.Ai21, key)
+	c := llmkit.New(providers.AI21, key)
 	stream := c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping")
 	for chunk, err := range stream.Chunks() {
 		if err != nil {

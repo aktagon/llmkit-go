@@ -52,7 +52,7 @@ func AllOptions() []OptionDef {
 // with provider-specific JSON key overrides applied.
 func SupportedOptions(provider string) map[OptionKey]string {
 	switch provider {
-	case Ai21:
+	case AI21:
 		return map[OptionKey]string{
 			OptionMaxTokens:     "max_tokens",
 			OptionStopSequences: "stop",
