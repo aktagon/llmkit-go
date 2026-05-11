@@ -269,6 +269,10 @@ func SupportedOptions(provider string) map[OptionKey]string {
 			OptionTopK:             "top_k",
 			OptionTopP:             "top_p",
 		}
+	case Vertex:
+		return map[OptionKey]string{
+			OptionMaxTokens: "max_tokens",
+		}
 	case Vllm:
 		return map[OptionKey]string{
 			OptionFrequencyPenalty: "frequency_penalty",
