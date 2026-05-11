@@ -277,6 +277,16 @@ func generateImage(ctx context.Context, p Provider, req ImageRequest, opts ...Im
 		if o.mask != nil && imageCount == 0 {
 			return ImageResponse{}, &ValidationError{Field: "mask", Message: "requires at least one image part (edits branch only)"}
 		}
+	case providers.ImageInputJSONPredict: // Vertex Imagen
+		if o.quality != "" {
+			return ImageResponse{}, &ValidationError{Field: "quality", Message: "not supported by " + p.Name}
+		}
+		if o.outputFormat != "" {
+			return ImageResponse{}, &ValidationError{Field: "output_format", Message: "not supported by " + p.Name}
+		}
+		if o.background != "" {
+			return ImageResponse{}, &ValidationError{Field: "background", Message: "not supported by " + p.Name}
+		}
 	}
 
 	baseEvent := providers.Event{
@@ -368,6 +378,16 @@ func dispatchImageHTTP(
 			return nil, fmt.Errorf("marshal image request: %w", err)
 		}
 		return doPost(ctx, client, url, jsonBody, headers)
+	}
+
+	if imgCfg.InputMode == providers.ImageInputJSONPredict {
+		body := buildVertexBody(parts, o)
+		jsonBody, err := json.Marshal(body)
+		if err != nil {
+			return nil, fmt.Errorf("marshal image request: %w", err)
+		}
+		endpoint := strings.ReplaceAll(cfg.Endpoint, "{model}", model)
+		return doPost(ctx, client, base+endpoint, jsonBody, headers)
 	}
 
 	if imgCfg.InputMode == providers.ImageInputMultipartForm {
@@ -565,6 +585,52 @@ func buildXAIEditBody(parts []Part, model string, o *imageOptions) map[string]an
 	return body
 }
 
+// buildVertexBody assembles the Vertex AI Imagen :predict request body.
+// Vertex uses an instances/parameters envelope: instance carries the
+// per-call inputs (prompt, image ref for editing, mask for inpainting);
+// parameters carries config (sampleCount, aspectRatio). Extra fields
+// like negativePrompt and safetySetting spread into parameters via
+// imageOptions.extraFields so callers can reach Imagen-specific knobs
+// without typed chain methods.
+func buildVertexBody(parts []Part, o *imageOptions) map[string]any {
+	instance := map[string]any{
+		"prompt": joinTextParts(parts),
+	}
+	for _, part := range parts {
+		if part.Image != nil {
+			instance["image"] = map[string]any{
+				"bytesBase64Encoded": base64.StdEncoding.EncodeToString(part.Image.Bytes),
+			}
+			break // Vertex Imagen takes a single edit-target image
+		}
+	}
+	if o.mask != nil {
+		instance["mask"] = map[string]any{
+			"image": map[string]any{
+				"bytesBase64Encoded": base64.StdEncoding.EncodeToString(o.mask.Bytes),
+			},
+		}
+	}
+
+	parameters := map[string]any{}
+	if o.count != nil {
+		parameters["sampleCount"] = *o.count
+	} else {
+		parameters["sampleCount"] = 1
+	}
+	if o.aspectRatio != "" {
+		parameters["aspectRatio"] = o.aspectRatio
+	}
+	for k, v := range o.extraFields {
+		parameters[k] = v
+	}
+
+	return map[string]any{
+		"instances":  []map[string]any{instance},
+		"parameters": parameters,
+	}
+}
+
 func joinTextParts(parts []Part) string {
 	var texts []string
 	for _, part := range parts {
@@ -719,6 +785,8 @@ func parseImageResponse(provider string, body []byte) (ImageResponse, error) {
 		// values). The cost field is reachable via extra-data parsing if
 		// callers need it (future enhancement).
 		return parseImageResponseDataArray(raw, "", ""), nil
+	case providers.Vertex:
+		return parseVertexImageResponse(raw), nil
 	}
 
 	images, text := extractGoogleImageParts(raw)
@@ -778,6 +846,35 @@ func parseImageResponseDataArray(raw map[string]any, inputPath, outputPath strin
 		Text:   strings.Join(revised, "\n"),
 		Tokens: tokens,
 	}
+}
+
+// parseVertexImageResponse decodes Vertex AI Imagen :predict responses.
+// Shape: {"predictions": [{"bytesBase64Encoded": "...", "mimeType": "..."}]}.
+// Vertex does not return token counts in the predict response, so Usage
+// stays zero.
+func parseVertexImageResponse(raw map[string]any) ImageResponse {
+	preds, _ := raw["predictions"].([]any)
+	var images []ImageData
+	for _, item := range preds {
+		entry, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		b64, _ := entry["bytesBase64Encoded"].(string)
+		if b64 == "" {
+			continue
+		}
+		mime, _ := entry["mimeType"].(string)
+		if mime == "" {
+			mime = "image/png"
+		}
+		decoded, err := base64.StdEncoding.DecodeString(b64)
+		if err != nil {
+			continue
+		}
+		images = append(images, ImageData{MimeType: mime, Bytes: decoded})
+	}
+	return ImageResponse{Images: images}
 }
 
 // extractGoogleImageParts walks candidates[0].content.parts, returning every

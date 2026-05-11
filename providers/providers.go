@@ -28,6 +28,7 @@ const (
 	Qwen       = "qwen"
 	Sambanova  = "sambanova"
 	Together   = "together"
+	Vertex     = "vertex"
 	Vllm       = "vllm"
 	Yi         = "yi"
 	Zhipu      = "zhipu"
@@ -870,6 +871,37 @@ func Providers() map[string]ProviderConfig {
 			ModelInBody:         true,
 			ErrorMessagePath:    "error.message",
 			ErrorTypePath:       "error.type",
+			AccessKeyEnvVar:     "",
+			SecretKeyEnvVar:     "",
+			SessionTokenEnvVar:  "",
+			RegionEnvVar:        "",
+			ServiceName:         "",
+		},
+		Vertex: {
+			Name:                "vertex",
+			BaseURL:             "https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/models",
+			Endpoint:            "/{model}:predict",
+			DefaultModel:        "imagen-3.0-generate-002",
+			EnvVar:              "VERTEX_BEARER_TOKEN",
+			DefaultMaxTokens:    0,
+			ResponseTextPath:    "",
+			AuthScheme:          "BearerToken",
+			AuthHeader:          "Authorization",
+			AuthPrefix:          "Bearer",
+			AuthQueryParam:      "",
+			RequiredHeader:      "",
+			RequiredHeaderValue: "",
+			SystemPlacement:     "MessageInArray",
+			RoleMappings: map[string]string{
+				"user": "user",
+			},
+			UsageInputPath:      "",
+			UsageOutputPath:     "",
+			ReasoningTokensPath: "",
+			WrapsOptionsIn:      "",
+			ModelInBody:         false,
+			ErrorMessagePath:    "error.message",
+			ErrorTypePath:       "error.status",
 			AccessKeyEnvVar:     "",
 			SecretKeyEnvVar:     "",
 			SessionTokenEnvVar:  "",
