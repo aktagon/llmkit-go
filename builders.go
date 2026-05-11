@@ -79,6 +79,7 @@ func Perplexity(apiKey string) *Client { return newClient("perplexity", apiKey) 
 func Qwen(apiKey string) *Client       { return newClient("qwen", apiKey) }
 func Sambanova(apiKey string) *Client  { return newClient("sambanova", apiKey) }
 func Together(apiKey string) *Client   { return newClient("together", apiKey) }
+func Vertex(apiKey string) *Client     { return newClient("vertex", apiKey) }
 func Vllm(apiKey string) *Client       { return newClient("vllm", apiKey) }
 func Yi(apiKey string) *Client         { return newClient("yi", apiKey) }
 func Zhipu(apiKey string) *Client      { return newClient("zhipu", apiKey) }
