@@ -154,8 +154,8 @@ func TestSurface_Constructors(t *testing.T) {
 		Cohere("k"), Deepseek("k"), Doubao("k"), Ernie("k"), Fireworks("k"),
 		Google("k"), Grok("k"), Groq("k"), Lmstudio("k"), Minimax("k"),
 		Mistral("k"), Moonshot("k"), Ollama("k"), Openai("k"), Openrouter("k"),
-		Perplexity("k"), Qwen("k"), Sambanova("k"), Together("k"), Vllm("k"),
-		Yi("k"), Zhipu("k"),
+		Perplexity("k"), Qwen("k"), Sambanova("k"), Together("k"), Vertex("k"),
+		Vllm("k"), Yi("k"), Zhipu("k"),
 	}
 	for i, c := range clients {
 		if c == nil {

@@ -1291,3 +1291,248 @@ func TestGenerateImageMaskRejectedOnGoogleAndGrok(t *testing.T) {
 		}
 	}
 }
+
+// =============================================================================
+// Vertex Imagen (plan 021) — JSONPredict input mode, bearer auth
+// =============================================================================
+
+const vertexImagen3 = "imagen-3.0-generate-002"
+
+func vertexImageResponse(b64 string, n int, mime string) map[string]any {
+	preds := make([]map[string]any, n)
+	for i := range preds {
+		entry := map[string]any{"bytesBase64Encoded": b64}
+		if mime != "" {
+			entry["mimeType"] = mime
+		}
+		preds[i] = entry
+	}
+	return map[string]any{"predictions": preds}
+}
+
+func TestGenerateImageVertexGenerationsHappyPath(t *testing.T) {
+	encoded := base64.StdEncoding.EncodeToString(fakePNG)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Path; got != "/"+vertexImagen3+":predict" {
+			t.Errorf("expected /%s:predict, got %s", vertexImagen3, got)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
+			t.Errorf("missing/incorrect bearer auth: %q", got)
+		}
+		body, _ := io.ReadAll(r.Body)
+		var req map[string]any
+		if err := json.Unmarshal(body, &req); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		instances, ok := req["instances"].([]any)
+		if !ok || len(instances) != 1 {
+			t.Fatalf("expected 1 instance, got %v", req["instances"])
+		}
+		inst := instances[0].(map[string]any)
+		if inst["prompt"] != "A red circle" {
+			t.Errorf("expected prompt 'A red circle', got %v", inst["prompt"])
+		}
+		// Generation path has no `image` field on the instance.
+		if _, ok := inst["image"]; ok {
+			t.Errorf("generation path must not carry instances[0].image")
+		}
+		params, ok := req["parameters"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected parameters object, got %v", req["parameters"])
+		}
+		// sampleCount defaults to 1 when Count() is not chained.
+		if got := params["sampleCount"]; got != float64(1) {
+			t.Errorf("expected sampleCount=1, got %v", got)
+		}
+		json.NewEncoder(w).Encode(vertexImageResponse(encoded, 1, "image/png"))
+	}))
+	defer server.Close()
+
+	c := New(providers.Vertex, "test-token")
+	c.provider.baseURL = server.URL
+	resp, err := c.Image.Model(vertexImagen3).Generate(context.Background(), "A red circle")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Images) != 1 {
+		t.Fatalf("expected 1 image, got %d", len(resp.Images))
+	}
+	if !bytes.Equal(resp.Images[0].Bytes, fakePNG) {
+		t.Errorf("image bytes did not round-trip through base64")
+	}
+	if resp.Images[0].MimeType != "image/png" {
+		t.Errorf("expected mime_type echoed back, got %q", resp.Images[0].MimeType)
+	}
+	// Vertex predict response does not carry token counts.
+	if resp.Tokens.Input != 0 || resp.Tokens.Output != 0 {
+		t.Errorf("Vertex usage shape has no token counts; expected 0/0, got %d/%d",
+			resp.Tokens.Input, resp.Tokens.Output)
+	}
+}
+
+func TestGenerateImageVertexEditCarriesImageOnInstance(t *testing.T) {
+	encoded := base64.StdEncoding.EncodeToString(fakePNG)
+	refBytes := []byte{0x01, 0x02, 0x03, 0x04}
+	expectedRefB64 := base64.StdEncoding.EncodeToString(refBytes)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var req map[string]any
+		json.Unmarshal(body, &req)
+		inst := req["instances"].([]any)[0].(map[string]any)
+		img, ok := inst["image"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected instances[0].image object, got %v", inst["image"])
+		}
+		if img["bytesBase64Encoded"] != expectedRefB64 {
+			t.Errorf("reference image base64 mismatch")
+		}
+		json.NewEncoder(w).Encode(vertexImageResponse(encoded, 1, "image/png"))
+	}))
+	defer server.Close()
+
+	c := New(providers.Vertex, "test-token")
+	c.provider.baseURL = server.URL
+	_, err := c.Image.Model(vertexImagen3).
+		Image("image/png", refBytes).
+		Generate(context.Background(), "Make it winter")
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestGenerateImageVertexMaskAttachesToInstance(t *testing.T) {
+	encoded := base64.StdEncoding.EncodeToString(fakePNG)
+	maskBytes := []byte{0xAA, 0xBB, 0xCC}
+	expectedMaskB64 := base64.StdEncoding.EncodeToString(maskBytes)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var req map[string]any
+		json.Unmarshal(body, &req)
+		inst := req["instances"].([]any)[0].(map[string]any)
+		mask, ok := inst["mask"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected instances[0].mask object, got %v", inst["mask"])
+		}
+		maskImg, ok := mask["image"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected mask.image object, got %v", mask["image"])
+		}
+		if maskImg["bytesBase64Encoded"] != expectedMaskB64 {
+			t.Errorf("mask base64 mismatch")
+		}
+		json.NewEncoder(w).Encode(vertexImageResponse(encoded, 1, "image/png"))
+	}))
+	defer server.Close()
+
+	c := New(providers.Vertex, "test-token")
+	c.provider.baseURL = server.URL
+	_, err := c.Image.Model(vertexImagen3).
+		Image("image/png", []byte{0x01}).
+		Mask("image/png", maskBytes).
+		Generate(context.Background(), "Inpaint here")
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestGenerateImageVertexCountMapsToSampleCount(t *testing.T) {
+	encoded := base64.StdEncoding.EncodeToString(fakePNG)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var req map[string]any
+		json.Unmarshal(body, &req)
+		params := req["parameters"].(map[string]any)
+		if got := params["sampleCount"]; got != float64(4) {
+			t.Errorf("expected sampleCount=4, got %v", got)
+		}
+		json.NewEncoder(w).Encode(vertexImageResponse(encoded, 4, "image/png"))
+	}))
+	defer server.Close()
+
+	c := New(providers.Vertex, "test-token")
+	c.provider.baseURL = server.URL
+	resp, err := c.Image.Model(vertexImagen3).
+		Count(4).
+		Generate(context.Background(), "x")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Images) != 4 {
+		t.Errorf("expected 4 images, got %d", len(resp.Images))
+	}
+}
+
+func TestGenerateImageVertexAspectRatioMapsToParameters(t *testing.T) {
+	encoded := base64.StdEncoding.EncodeToString(fakePNG)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var req map[string]any
+		json.Unmarshal(body, &req)
+		params := req["parameters"].(map[string]any)
+		if got := params["aspectRatio"]; got != "16:9" {
+			t.Errorf("expected aspectRatio=16:9 in parameters, got %v", got)
+		}
+		json.NewEncoder(w).Encode(vertexImageResponse(encoded, 1, "image/png"))
+	}))
+	defer server.Close()
+
+	c := New(providers.Vertex, "test-token")
+	c.provider.baseURL = server.URL
+	_, err := c.Image.Model(vertexImagen3).
+		AspectRatio("16:9").
+		Generate(context.Background(), "x")
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestGenerateImageVertexExtraFieldsSpreadIntoParameters(t *testing.T) {
+	encoded := base64.StdEncoding.EncodeToString(fakePNG)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var req map[string]any
+		json.Unmarshal(body, &req)
+		params := req["parameters"].(map[string]any)
+		if got := params["negativePrompt"]; got != "ugly" {
+			t.Errorf("expected negativePrompt='ugly' in parameters, got %v", got)
+		}
+		json.NewEncoder(w).Encode(vertexImageResponse(encoded, 1, "image/png"))
+	}))
+	defer server.Close()
+
+	c := New(providers.Vertex, "test-token")
+	c.provider.baseURL = server.URL
+	_, err := c.Image.Model(vertexImagen3).
+		ExtraFields(map[string]any{"negativePrompt": "ugly"}).
+		Generate(context.Background(), "x")
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestGenerateImageVertexRejectsQualityOutputFormatBackground(t *testing.T) {
+	cases := []struct {
+		field string
+		apply func(*Image) *Image
+	}{
+		{"quality", func(b *Image) *Image { return b.Quality("high") }},
+		{"output_format", func(b *Image) *Image { return b.OutputFormat("png") }},
+		{"background", func(b *Image) *Image { return b.Background("transparent") }},
+	}
+	for _, tc := range cases {
+		c := New(providers.Vertex, "test-token")
+		c.provider.baseURL = "http://unused"
+		_, err := tc.apply(c.Image.Model(vertexImagen3)).Generate(context.Background(), "x")
+		var verr *ValidationError
+		if !errors.As(err, &verr) {
+			t.Errorf("%s: expected ValidationError, got %v", tc.field, err)
+			continue
+		}
+		if verr.Field != tc.field {
+			t.Errorf("expected field=%s, got %q", tc.field, verr.Field)
+		}
+	}
+}

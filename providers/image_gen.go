@@ -7,6 +7,7 @@ const (
 	ImageInputInlineParts    = "InlineParts"
 	ImageInputMultipartForm  = "MultipartForm"
 	ImageInputJSONInlineRefs = "JSONInlineRefs"
+	ImageInputJSONPredict    = "JSONPredict"
 	ImageOutputBase64Inline  = "Base64Inline"
 	ImageOutputURLOrBase64   = "URLOrBase64"
 )
@@ -25,7 +26,7 @@ type ImageModelDef struct {
 // GenEndpoint and EditEndpoint are forward-compat overrides; empty means
 // reuse the provider's main endpoint template (Google).
 type ImageGenDef struct {
-	InputMode     string // ImageInputInlineParts | ImageInputMultipartForm | ImageInputJSONInlineRefs
+	InputMode     string // ImageInputInlineParts | ImageInputMultipartForm | ImageInputJSONInlineRefs | ImageInputJSONPredict
 	OutputMode    string // ImageOutputBase64Inline | ImageOutputURLOrBase64
 	MaxInputCount int    // max reference images per request
 	GenEndpoint   string // override; empty = use provider main endpoint
@@ -105,6 +106,34 @@ func ImageGenConfig(provider string) *ImageGenDef {
 					ModelID:      "gpt-image-2",
 					Label:        "GPT Image 2",
 					AspectRatios: []string{},
+					ImageSizes:   []string{},
+				},
+			},
+		}
+	case Vertex:
+		return &ImageGenDef{
+			InputMode:     "JSONPredict",
+			OutputMode:    "Base64Inline",
+			MaxInputCount: 1,
+			GenEndpoint:   "",
+			EditEndpoint:  "",
+			Models: []ImageModelDef{
+				{
+					ModelID:      "imagen-3.0-fast-generate-001",
+					Label:        "Imagen 3 Fast",
+					AspectRatios: []string{"16:9", "1:1", "3:4", "4:3", "9:16"},
+					ImageSizes:   []string{},
+				},
+				{
+					ModelID:      "imagen-3.0-generate-002",
+					Label:        "Imagen 3",
+					AspectRatios: []string{"16:9", "1:1", "3:4", "4:3", "9:16"},
+					ImageSizes:   []string{},
+				},
+				{
+					ModelID:      "imagen-4.0-generate-preview-06-06",
+					Label:        "Imagen 4 Preview",
+					AspectRatios: []string{"16:9", "1:1", "3:4", "4:3", "9:16"},
 					ImageSizes:   []string{},
 				},
 			},
