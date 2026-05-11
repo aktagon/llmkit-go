@@ -32,10 +32,12 @@ type APIResponseFieldDef struct {
 func APIOptions() []APIOptionDef {
 	return []APIOptionDef{
 		{GoFunc: "WithAspectRatio", SubOptions: []APISubOptionDef{}},
+		{GoFunc: "WithBackground", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithBytes", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithCaching", SubOptions: []APISubOptionDef{
 			{GoFunc: "CacheTTL", GoParamType: "time.Duration"},
 		}},
+		{GoFunc: "WithCount", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithFile", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithFilename", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithFrequencyPenalty", SubOptions: []APISubOptionDef{}},
@@ -43,12 +45,15 @@ func APIOptions() []APIOptionDef {
 		{GoFunc: "WithImage", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithImageSize", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithIncludeText", SubOptions: []APISubOptionDef{}},
+		{GoFunc: "WithMask", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithMaxTokens", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithMaxToolIterations", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithMimeType", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithModel", SubOptions: []APISubOptionDef{}},
+		{GoFunc: "WithOutputFormat", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithPath", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithPresencePenalty", SubOptions: []APISubOptionDef{}},
+		{GoFunc: "WithQuality", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithReasoningEffort", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithSchema", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithSeed", SubOptions: []APISubOptionDef{}},

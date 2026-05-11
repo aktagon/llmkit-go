@@ -174,16 +174,24 @@ func (b *Text) TopP(v float64) *Text       { out := *b; x := v; out.topP = &x; r
 // call. Chain methods return new instances (immutable); skipped
 // terminals live in hand-written text.go / image.go.
 type Image struct {
-	client      *Client
-	aspectRatio string
-	parts       []Part
-	imageSize   string
-	includeText bool
-	middleware  []MiddlewareFn
-	model       string
+	client       *Client
+	aspectRatio  string
+	background   string
+	count        *int
+	parts        []Part
+	imageSize    string
+	includeText  bool
+	mask         *MediaRef
+	middleware   []MiddlewareFn
+	model        string
+	outputFormat string
+	quality      string
+	extraFields  map[string]any
 }
 
 func (b *Image) AspectRatio(r string) *Image { out := *b; out.aspectRatio = r; return &out }
+func (b *Image) Background(s string) *Image  { out := *b; out.background = s; return &out }
+func (b *Image) Count(n int) *Image          { out := *b; v := n; out.count = &v; return &out }
 func (b *Image) Image(mime string, data []byte) *Image {
 	out := *b
 	out.parts = append(append([]Part{}, b.parts...), Part{Image: &MediaRef{MimeType: mime, Bytes: data}})
@@ -191,12 +199,19 @@ func (b *Image) Image(mime string, data []byte) *Image {
 }                                          // ordered
 func (b *Image) ImageSize(s string) *Image { out := *b; out.imageSize = s; return &out }
 func (b *Image) IncludeText() *Image       { out := *b; out.includeText = true; return &out }
+func (b *Image) Mask(mime string, data []byte) *Image {
+	out := *b
+	out.mask = &MediaRef{MimeType: mime, Bytes: append([]byte(nil), data...)}
+	return &out
+}
 func (b *Image) Middleware(fns ...MiddlewareFn) *Image {
 	out := *b
 	out.middleware = append(append([]MiddlewareFn{}, b.middleware...), fns...)
 	return &out
 }
-func (b *Image) Model(name string) *Image { out := *b; out.model = name; return &out }
+func (b *Image) Model(name string) *Image     { out := *b; out.model = name; return &out }
+func (b *Image) OutputFormat(s string) *Image { out := *b; out.outputFormat = s; return &out }
+func (b *Image) Quality(s string) *Image      { out := *b; out.quality = s; return &out }
 func (b *Image) Text(s string) *Image {
 	out := *b
 	out.parts = append(append([]Part{}, b.parts...), Part{Text: s})

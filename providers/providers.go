@@ -440,7 +440,7 @@ func Providers() map[string]ProviderConfig {
 			BaseURL:             "https://api.x.ai",
 			Endpoint:            "/v1/chat/completions",
 			DefaultModel:        "grok-3-fast",
-			EnvVar:              "GROK_API_KEY",
+			EnvVar:              "XAI_API_KEY",
 			DefaultMaxTokens:    4096,
 			ResponseTextPath:    "choices[0].message.content",
 			AuthScheme:          "BearerToken",
