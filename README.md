@@ -131,59 +131,82 @@ resp, err := llmkit.Prompt(ctx, provider, llmkit.Request{
 ### GenerateImage
 
 Generate images from text, optionally conditioned on reference images for
-editing or composition. Currently supports Google's Nano Banana 2
-(`gemini-3.1-flash-image-preview`) and Pro (`gemini-3-pro-image-preview`).
-
-Text-to-image — pass `Prompt` for the terse hot path:
+editing or composition. Use the typed-builder chain on `c.Image`:
 
 ```go
-resp, err := llmkit.GenerateImage(ctx,
-    llmkit.Provider{Name: providers.Google, APIKey: key},
-    llmkit.ImageRequest{
-        Model:  "gemini-3.1-flash-image-preview",
-        Prompt: "A nano banana dish in a fancy restaurant",
-    },
-    llmkit.WithAspectRatio("16:9"),
-    llmkit.WithImageSize("2K"),
-)
+c := llmkit.New(providers.Google, key)
+resp, err := c.Image.Model("gemini-3.1-flash-image-preview").
+    AspectRatio("16:9").ImageSize("2K").
+    Generate(ctx, "A nano banana dish in a fancy restaurant")
 os.WriteFile("out.png", resp.Images[0].Bytes, 0o644)
 ```
 
-For editing or compositional generation, pass `Parts` — an ordered
-sequence of text and image parts. The `Text(...)` and `Image(...)`
-constructors build each part; the on-wire ordering matches the slice
-order, so the model attends to descriptions and references in the
-pairing you intend:
+For editing or compositional generation, accumulate text and image
+parts on the chain — the on-wire ordering matches the call order:
 
 ```go
-resp, err := llmkit.GenerateImage(ctx, provider,
-    llmkit.ImageRequest{
-        Model: "gemini-3.1-flash-image-preview",
-        Parts: []llmkit.Part{
-            llmkit.Text("Person:"),
-            llmkit.Image("image/png", personBytes),
-            llmkit.Text("Outfit:"),
-            llmkit.Image("image/png", outfitBytes),
-            llmkit.Text("Generate the person wearing the outfit."),
-        },
-    },
-)
+resp, err := c.Image.Model("gemini-3.1-flash-image-preview").
+    Text("Person:").Image("image/png", personBytes).
+    Text("Outfit:").Image("image/png", outfitBytes).
+    Generate(ctx, "Generate the person wearing the outfit.")
 ```
 
-Set exactly one of `Prompt` or `Parts` — both empty or both set returns
-a `*ValidationError`.
+The trailing `Generate(ctx, msg)` argument is desugared into a final
+text Part appended to the chain — pass `""` to omit it when every Part
+is already supplied.
 
-Aspect ratios and sizes are validated against a per-model whitelist before
-the HTTP request — `WithImageSize("512")` on Pro returns `*ValidationError`
-without paying for a 4xx round-trip.
+Empty whitelists mean "no client-side check; pass through" — providers
+like OpenAI accept arbitrary sizes within documented bounds, so the SDK
+trusts the API boundary instead of carrying a stale list.
 
-| Model                 | Aspect ratios                                                               | Sizes           |
-| --------------------- | --------------------------------------------------------------------------- | --------------- |
-| Nano Banana 2 (Flash) | 1:1, 2:3, 3:2, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9, 21:9, **1:4, 4:1, 1:8, 8:1** | 512, 1K, 2K, 4K |
-| Nano Banana Pro       | 1:1, 2:3, 3:2, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9, 21:9                         | 1K, 2K, 4K      |
+| Provider | Model                          | Aspect ratios                                                                   | Sizes                               |
+| -------- | ------------------------------ | ------------------------------------------------------------------------------- | ----------------------------------- |
+| Google   | Nano Banana 2 (Flash)          | 1:1, 2:3, 3:2, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9, 21:9, **1:4, 4:1, 1:8, 8:1**     | 512, 1K, 2K, 4K                     |
+| Google   | Nano Banana Pro                | 1:1, 2:3, 3:2, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9, 21:9                             | 1K, 2K, 4K                          |
+| OpenAI   | gpt-image-2 / 1.5 / 1 / 1-mini | n/a (size only)                                                                 | any (e.g. `1024x1024`, `1536x1024`) |
+| xAI      | grok-imagine-image-quality     | 1:1, 2:3, 3:2, 3:4, 4:3, 9:16, 16:9, 1:2, 2:1, 19.5:9, 9:19.5, 20:9, 9:20, auto | 1k, 2k                              |
 
-Up to 14 reference images per request. See `examples/image-gen` for a
-text-to-image + edit pass.
+OpenAI gpt-image-\* models accept arbitrary sizes within documented
+bounds (max edge ≤3840, both edges multiples of 16, ratio ≤3:1, total
+pixels 655K–8.3M). They always return base64-encoded images, so
+`resp.Images[0].Bytes` works the same on both providers.
+
+Provider knobs are typed chain methods on `*Image`:
+
+| Method              | Provider support            | Wire field       |
+| ------------------- | --------------------------- | ---------------- |
+| `Quality(s)`        | OpenAI gpt-image-\*         | `quality`        |
+| `OutputFormat(s)`   | OpenAI gpt-image-\*         | `output_format`  |
+| `Background(s)`     | OpenAI gpt-image-\*         | `background`     |
+| `Count(n)`          | OpenAI + xAI Grok           | `n`              |
+| `Mask(mime, bytes)` | OpenAI gpt-image-\* (edits) | multipart `mask` |
+
+The chain validates per provider — calling `Quality(...)` on a Google
+or xAI builder returns `ValidationError` immediately, without an HTTP
+round-trip. Provider knobs that don't yet have typed methods (OpenAI:
+`output_compression`, `moderation`) remain reachable via `ExtraFields`,
+which is unvalidated and freeform.
+
+```go
+c := llmkit.New(providers.OpenAI, key)
+resp, err := c.Image.Model("gpt-image-2").
+    ImageSize("1024x1024").
+    Quality("high").
+    Count(4).
+    Generate(ctx, "A red circle on a white background")
+```
+
+The dispatch is automatic: chains without image parts hit OpenAI's
+`/v1/images/generations` (JSON); chains carrying one or more `Image(...)`
+parts hit `/v1/images/edits` (multipart/form-data with one `image[]`
+field per reference, in caller order).
+
+OpenAI gpt-image-\* models require organization verification — see
+[platform.openai.com/docs/guides/your-data#organization-verification](https://platform.openai.com/docs/guides/your-data#organization-verification).
+
+Up to 14 reference images per Google request, 16 per OpenAI request.
+See `examples/image-gen` (Google) and `examples/image-gen-openai` (OpenAI)
+for end-to-end runnable samples.
 
 ## Options
 
