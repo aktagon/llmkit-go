@@ -66,11 +66,17 @@ type ImageResponse struct {
 type ImageOption func(*imageOptions)
 
 type imageOptions struct {
-	aspectRatio string
-	imageSize   string
-	includeText bool
-	middleware  []providers.MiddlewareFn
-	httpClient  *http.Client
+	aspectRatio  string
+	imageSize    string
+	includeText  bool
+	quality      string
+	outputFormat string
+	background   string
+	count        *int
+	mask         *MediaRef
+	extraFields  map[string]any
+	middleware   []providers.MiddlewareFn
+	httpClient   *http.Client
 }
 
 //
@@ -101,6 +107,58 @@ func WithIncludeText() ImageOption {
 //
 func WithImageMiddleware(fns ...providers.MiddlewareFn) ImageOption {
 	return func(o *imageOptions) { o.middleware = append(o.middleware, fns...) }
+}
+
+//
+//
+//
+//
+//
+//
+func WithImageExtraFields(extras map[string]any) ImageOption {
+	return func(o *imageOptions) {
+		if o.extraFields == nil {
+			o.extraFields = map[string]any{}
+		}
+		for k, v := range extras {
+			o.extraFields[k] = v
+		}
+	}
+}
+
+//
+//
+func WithImageQuality(s string) ImageOption {
+	return func(o *imageOptions) { o.quality = s }
+}
+
+//
+//
+func WithImageOutputFormat(s string) ImageOption {
+	return func(o *imageOptions) { o.outputFormat = s }
+}
+
+//
+//
+func WithImageBackground(s string) ImageOption {
+	return func(o *imageOptions) { o.background = s }
+}
+
+//
+//
+//
+func WithImageCount(n int) ImageOption {
+	return func(o *imageOptions) { v := n; o.count = &v }
+}
+
+//
+//
+//
+//
+func WithImageMask(mime string, data []byte) ImageOption {
+	return func(o *imageOptions) {
+		o.mask = &MediaRef{MimeType: mime, Bytes: append([]byte(nil), data...)}
+	}
 }
 
 func resolveImageOptions(opts []ImageOption) *imageOptions {
@@ -155,10 +213,14 @@ func generateImage(ctx context.Context, p Provider, req ImageRequest, opts ...Im
 	if model == nil {
 		return ImageResponse{}, &ValidationError{Field: "model", Message: req.Model + " is not a known image-generation model for " + p.Name}
 	}
-	if o.aspectRatio != "" && !contains(model.AspectRatios, o.aspectRatio) {
+	//
+	//
+	//
+	//
+	if o.aspectRatio != "" && len(model.AspectRatios) > 0 && !contains(model.AspectRatios, o.aspectRatio) {
 		return ImageResponse{}, &ValidationError{Field: "aspect_ratio", Message: o.aspectRatio + " not supported by " + req.Model}
 	}
-	if o.imageSize != "" && !contains(model.ImageSizes, o.imageSize) {
+	if o.imageSize != "" && len(model.ImageSizes) > 0 && !contains(model.ImageSizes, o.imageSize) {
 		return ImageResponse{}, &ValidationError{Field: "image_size", Message: o.imageSize + " not supported by " + req.Model}
 	}
 	imageCount := 0
@@ -174,6 +236,49 @@ func generateImage(ctx context.Context, p Provider, req ImageRequest, opts ...Im
 		}
 	}
 
+	//
+	//
+	//
+	//
+	//
+	//
+	//
+	switch imgCfg.InputMode {
+	case providers.ImageInputInlineParts: // Google
+		if o.quality != "" {
+			return ImageResponse{}, &ValidationError{Field: "quality", Message: "not supported by " + p.Name}
+		}
+		if o.outputFormat != "" {
+			return ImageResponse{}, &ValidationError{Field: "output_format", Message: "not supported by " + p.Name}
+		}
+		if o.background != "" {
+			return ImageResponse{}, &ValidationError{Field: "background", Message: "not supported by " + p.Name}
+		}
+		if o.count != nil {
+			return ImageResponse{}, &ValidationError{Field: "count", Message: "not supported by " + p.Name}
+		}
+		if o.mask != nil {
+			return ImageResponse{}, &ValidationError{Field: "mask", Message: "not supported by " + p.Name}
+		}
+	case providers.ImageInputJSONInlineRefs: // xAI Grok
+		if o.quality != "" {
+			return ImageResponse{}, &ValidationError{Field: "quality", Message: "not supported by " + p.Name}
+		}
+		if o.outputFormat != "" {
+			return ImageResponse{}, &ValidationError{Field: "output_format", Message: "not supported by " + p.Name}
+		}
+		if o.background != "" {
+			return ImageResponse{}, &ValidationError{Field: "background", Message: "not supported by " + p.Name}
+		}
+		if o.mask != nil {
+			return ImageResponse{}, &ValidationError{Field: "mask", Message: "not supported by " + p.Name}
+		}
+	case providers.ImageInputMultipartForm: // OpenAI
+		if o.mask != nil && imageCount == 0 {
+			return ImageResponse{}, &ValidationError{Field: "mask", Message: "requires at least one image part (edits branch only)"}
+		}
+	}
+
 	baseEvent := providers.Event{
 		Op:       providers.OpImageGeneration,
 		Provider: p.Name,
@@ -184,24 +289,13 @@ func generateImage(ctx context.Context, p Provider, req ImageRequest, opts ...Im
 		return ImageResponse{}, err
 	}
 
-	body := buildImageBody(parts, o)
-	jsonBody, err := json.Marshal(body)
-	if err != nil {
-		postEv := baseEvent
-		postEv.Err = err
-		postEv.Duration = time.Since(start)
-		firePost(ctx, o.middleware, postEv)
-		return ImageResponse{}, fmt.Errorf("marshal image request: %w", err)
-	}
-
-	url := buildImageURL(p, cfg, req.Model)
-	headers := imageAuthHeaders(p, cfg)
-
 	client := o.httpClient
 	if client == nil {
 		client = http.DefaultClient
 	}
-	respBody, err := doPost(ctx, client, url, jsonBody, headers)
+	headers := imageAuthHeaders(p, cfg)
+
+	respBody, err := dispatchImageHTTP(ctx, client, p, cfg, imgCfg, req.Model, parts, o, headers)
 	if err != nil {
 		postEv := baseEvent
 		postEv.Err = err
@@ -220,6 +314,278 @@ func generateImage(ctx context.Context, p Provider, req ImageRequest, opts ...Im
 	postEv.Duration = time.Since(start)
 	firePost(ctx, o.middleware, postEv)
 	return resp, parseErr
+}
+
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+func dispatchImageHTTP(
+	ctx context.Context,
+	client *http.Client,
+	p Provider,
+	cfg providers.ProviderConfig,
+	imgCfg *providers.ImageGenDef,
+	model string,
+	parts []Part,
+	o *imageOptions,
+	headers map[string]string,
+) ([]byte, error) {
+	hasImages := false
+	for _, part := range parts {
+		if part.Image != nil {
+			hasImages = true
+			break
+		}
+	}
+	base := p.BaseURL
+	if base == "" {
+		base = cfg.BaseURL
+	}
+
+	if imgCfg.InputMode == providers.ImageInputJSONInlineRefs {
+		var body map[string]any
+		var url string
+		if hasImages {
+			body = buildXAIEditBody(parts, model, o)
+			url = base + imgCfg.EditEndpoint
+		} else {
+			body = buildXAIGenBody(parts, model, o)
+			url = base + imgCfg.GenEndpoint
+		}
+		jsonBody, err := json.Marshal(body)
+		if err != nil {
+			return nil, fmt.Errorf("marshal image request: %w", err)
+		}
+		return doPost(ctx, client, url, jsonBody, headers)
+	}
+
+	if imgCfg.InputMode == providers.ImageInputMultipartForm {
+		if hasImages {
+			files, fields := buildOpenAIEditMultipart(parts, model, o)
+			return doMultipartPostMulti(ctx, client, base+imgCfg.EditEndpoint, files, fields, headers)
+		}
+		body := buildOpenAIGenBody(parts, model, o)
+		jsonBody, err := json.Marshal(body)
+		if err != nil {
+			return nil, fmt.Errorf("marshal image request: %w", err)
+		}
+		return doPost(ctx, client, base+imgCfg.GenEndpoint, jsonBody, headers)
+	}
+
+	//
+	body := buildImageBody(parts, o)
+	jsonBody, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("marshal image request: %w", err)
+	}
+	return doPost(ctx, client, buildImageURL(p, cfg, model), jsonBody, headers)
+}
+
+//
+//
+//
+//
+//
+//
+//
+//
+func buildOpenAIGenBody(parts []Part, model string, o *imageOptions) map[string]any {
+	body := map[string]any{
+		"model":  model,
+		"prompt": joinTextParts(parts),
+	}
+	if o.imageSize != "" {
+		body["size"] = o.imageSize
+	}
+	if o.quality != "" {
+		body["quality"] = o.quality
+	}
+	if o.outputFormat != "" {
+		body["output_format"] = o.outputFormat
+	}
+	if o.background != "" {
+		body["background"] = o.background
+	}
+	if o.count != nil {
+		body["n"] = *o.count
+	}
+	for k, v := range o.extraFields {
+		body[k] = v
+	}
+	return body
+}
+
+//
+//
+//
+//
+func buildOpenAIEditMultipart(parts []Part, model string, o *imageOptions) ([]multipartFile, map[string]string) {
+	files := make([]multipartFile, 0)
+	idx := 0
+	for _, part := range parts {
+		if part.Image == nil {
+			continue
+		}
+		mime := part.Image.MimeType
+		if mime == "" {
+			mime = "image/png"
+		}
+		files = append(files, multipartFile{
+			fieldName: "image[]",
+			filename:  fmt.Sprintf("image-%d%s", idx, extFromMime(mime)),
+			mimeType:  mime,
+			bytes:     part.Image.Bytes,
+		})
+		idx++
+	}
+	if o.mask != nil {
+		mime := o.mask.MimeType
+		if mime == "" {
+			mime = "image/png"
+		}
+		files = append(files, multipartFile{
+			fieldName: "mask",
+			filename:  "mask" + extFromMime(mime),
+			mimeType:  mime,
+			bytes:     o.mask.Bytes,
+		})
+	}
+	fields := map[string]string{
+		"model":  model,
+		"prompt": joinTextParts(parts),
+	}
+	if o.imageSize != "" {
+		fields["size"] = o.imageSize
+	}
+	if o.quality != "" {
+		fields["quality"] = o.quality
+	}
+	if o.outputFormat != "" {
+		fields["output_format"] = o.outputFormat
+	}
+	if o.background != "" {
+		fields["background"] = o.background
+	}
+	if o.count != nil {
+		fields["n"] = fmt.Sprintf("%d", *o.count)
+	}
+	for k, v := range o.extraFields {
+		switch s := v.(type) {
+		case string:
+			fields[k] = s
+		default:
+			if encoded, err := json.Marshal(v); err == nil {
+				fields[k] = string(encoded)
+			}
+		}
+	}
+	return files, fields
+}
+
+//
+//
+//
+func buildXAIGenBody(parts []Part, model string, o *imageOptions) map[string]any {
+	body := map[string]any{
+		"model":           model,
+		"prompt":          joinTextParts(parts),
+		"response_format": "b64_json",
+	}
+	if o.aspectRatio != "" {
+		body["aspect_ratio"] = o.aspectRatio
+	}
+	if o.imageSize != "" {
+		body["resolution"] = o.imageSize
+	}
+	if o.count != nil {
+		body["n"] = *o.count
+	}
+	for k, v := range o.extraFields {
+		body[k] = v
+	}
+	return body
+}
+
+//
+//
+//
+//
+func buildXAIEditBody(parts []Part, model string, o *imageOptions) map[string]any {
+	body := map[string]any{
+		"model":           model,
+		"prompt":          joinTextParts(parts),
+		"response_format": "b64_json",
+	}
+	if o.aspectRatio != "" {
+		body["aspect_ratio"] = o.aspectRatio
+	}
+	if o.imageSize != "" {
+		body["resolution"] = o.imageSize
+	}
+	if o.count != nil {
+		body["n"] = *o.count
+	}
+
+	refs := make([]map[string]any, 0)
+	for _, part := range parts {
+		if part.Image == nil {
+			continue
+		}
+		mime := part.Image.MimeType
+		if mime == "" {
+			mime = "image/png"
+		}
+		dataURL := "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(part.Image.Bytes)
+		refs = append(refs, map[string]any{"url": dataURL})
+	}
+	switch len(refs) {
+	case 0:
+		//
+		//
+	case 1:
+		body["image"] = refs[0]
+	default:
+		body["images"] = refs
+	}
+
+	for k, v := range o.extraFields {
+		body[k] = v
+	}
+	return body
+}
+
+func joinTextParts(parts []Part) string {
+	var texts []string
+	for _, part := range parts {
+		if part.Image == nil && part.Text != "" {
+			texts = append(texts, part.Text)
+		}
+	}
+	return strings.Join(texts, "\n")
+}
+
+func extFromMime(mime string) string {
+	switch mime {
+	case "image/png":
+		return ".png"
+	case "image/jpeg", "image/jpg":
+		return ".jpg"
+	case "image/webp":
+		return ".webp"
+	default:
+		return ".bin"
+	}
 }
 
 //
@@ -337,25 +703,81 @@ func imageAuthHeaders(p Provider, cfg providers.ProviderConfig) map[string]strin
 //
 //
 //
+//
 func parseImageResponse(provider string, body []byte) (ImageResponse, error) {
 	var raw map[string]any
 	if err := json.Unmarshal(body, &raw); err != nil {
 		return ImageResponse{}, fmt.Errorf("unmarshal image response: %w", err)
 	}
 
-	images, text := extractGoogleImageParts(raw)
-
-	inputPath, outputPath := providers.UsagePaths(provider)
-	tokens := Usage{
-		Input:  extractIntPath(raw, inputPath),
-		Output: extractIntPath(raw, outputPath),
+	switch provider {
+	case providers.OpenAI:
+		return parseImageResponseDataArray(raw, "usage.input_tokens", "usage.output_tokens"), nil
+	case providers.Grok:
+		//
+		//
+		//
+		//
+		return parseImageResponseDataArray(raw, "", ""), nil
 	}
 
+	images, text := extractGoogleImageParts(raw)
+	inputPath, outputPath := providers.UsagePaths(provider)
 	return ImageResponse{
 		Images: images,
 		Text:   text,
-		Tokens: tokens,
+		Tokens: Usage{
+			Input:  extractIntPath(raw, inputPath),
+			Output: extractIntPath(raw, outputPath),
+		},
 	}, nil
+}
+
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+func parseImageResponseDataArray(raw map[string]any, inputPath, outputPath string) ImageResponse {
+	data, _ := raw["data"].([]any)
+	var images []ImageData
+	var revised []string
+	for _, item := range data {
+		entry, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		if b64, ok := entry["b64_json"].(string); ok && b64 != "" {
+			mime := "image/png"
+			if echoed, ok := entry["mime_type"].(string); ok && echoed != "" {
+				mime = echoed
+			}
+			if decoded, err := base64.StdEncoding.DecodeString(b64); err == nil {
+				images = append(images, ImageData{MimeType: mime, Bytes: decoded})
+			}
+		}
+		if rp, ok := entry["revised_prompt"].(string); ok && rp != "" {
+			revised = append(revised, rp)
+		}
+	}
+	tokens := Usage{}
+	if inputPath != "" {
+		tokens.Input = extractIntPath(raw, inputPath)
+	}
+	if outputPath != "" {
+		tokens.Output = extractIntPath(raw, outputPath)
+	}
+	return ImageResponse{
+		Images: images,
+		Text:   strings.Join(revised, "\n"),
+		Tokens: tokens,
+	}
 }
 
 //
