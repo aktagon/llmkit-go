@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"mime"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -357,5 +359,935 @@ func TestGenerateImageMiddlewareCanVeto(t *testing.T) {
 	var veto *MiddlewareVetoError
 	if !errors.As(err, &veto) {
 		t.Fatalf("expected MiddlewareVetoError, got %v", err)
+	}
+}
+
+// === OpenAI image generation ===
+//
+// Plan 020 phase 3: OpenAI Image API has two endpoints
+// (/v1/images/generations and /v1/images/edits) selected at runtime
+// based on whether the input includes any image parts. Output is always
+// b64_json (forced) so the response shape stays uniform.
+
+const openaiImage2 = "gpt-image-2"
+
+func openaiImageResponse(b64 string, n int) map[string]any {
+	data := make([]map[string]any, n)
+	for i := range data {
+		data[i] = map[string]any{"b64_json": b64}
+	}
+	return map[string]any{
+		"created": 1700000000,
+		"data":    data,
+		"usage": map[string]any{
+			"input_tokens":  7,
+			"output_tokens": 1500,
+		},
+	}
+}
+
+func TestGenerateImageOpenAIGenerationsHappyPath(t *testing.T) {
+	encoded := base64.StdEncoding.EncodeToString(fakePNG)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/images/generations" {
+			t.Errorf("expected /v1/images/generations, got %s", r.URL.Path)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer test-key" {
+			t.Errorf("missing/incorrect bearer auth: %q", got)
+		}
+		body, _ := io.ReadAll(r.Body)
+		var req map[string]any
+		if err := json.Unmarshal(body, &req); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		if req["model"] != openaiImage2 {
+			t.Errorf("expected model %s, got %v", openaiImage2, req["model"])
+		}
+		if req["prompt"] != "A red circle" {
+			t.Errorf("expected prompt 'A red circle', got %v", req["prompt"])
+		}
+		// gpt-image-* always returns b64_json and rejects the
+		// response_format parameter — must be absent on the wire.
+		if _, ok := req["response_format"]; ok {
+			t.Errorf("response_format must not be set for gpt-image-*; got %v", req["response_format"])
+		}
+		if _, ok := req["size"]; ok {
+			t.Errorf("size should be absent when not set, got %v", req["size"])
+		}
+		json.NewEncoder(w).Encode(openaiImageResponse(encoded, 1))
+	}))
+	defer server.Close()
+
+	c := New(providers.OpenAI, "test-key")
+	c.provider.baseURL = server.URL
+	resp, err := c.Image.Model(openaiImage2).Generate(context.Background(), "A red circle")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Images) != 1 {
+		t.Fatalf("expected 1 image, got %d", len(resp.Images))
+	}
+	if !bytes.Equal(resp.Images[0].Bytes, fakePNG) {
+		t.Errorf("image bytes did not round-trip through base64")
+	}
+	if resp.Tokens.Input != 7 || resp.Tokens.Output != 1500 {
+		t.Errorf("usage mismatch: input=%d output=%d", resp.Tokens.Input, resp.Tokens.Output)
+	}
+}
+
+func TestGenerateImageOpenAIEditsSingleReference(t *testing.T) {
+	encoded := base64.StdEncoding.EncodeToString(fakePNG)
+	refBytes := []byte{0x89, 'P', 'N', 'G', 'A'}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/images/edits" {
+			t.Errorf("expected /v1/images/edits, got %s", r.URL.Path)
+		}
+		fields, files, err := parseMultipart(r)
+		if err != nil {
+			t.Fatalf("parseMultipart: %v", err)
+		}
+		if fields["model"] != openaiImage2 {
+			t.Errorf("expected model field %s, got %q", openaiImage2, fields["model"])
+		}
+		if fields["prompt"] != "Add a hat" {
+			t.Errorf("expected prompt='Add a hat', got %q", fields["prompt"])
+		}
+		if len(files["image[]"]) != 1 {
+			t.Fatalf("expected 1 image[] file, got %d", len(files["image[]"]))
+		}
+		if !bytes.Equal(files["image[]"][0].bytes, refBytes) {
+			t.Errorf("ref image bytes did not round-trip")
+		}
+		if files["image[]"][0].mimeType != "image/png" {
+			t.Errorf("expected image/png Content-Type, got %q", files["image[]"][0].mimeType)
+		}
+		json.NewEncoder(w).Encode(openaiImageResponse(encoded, 1))
+	}))
+	defer server.Close()
+
+	c := New(providers.OpenAI, "test-key")
+	c.provider.baseURL = server.URL
+	resp, err := c.Image.Model(openaiImage2).
+		Image("image/png", refBytes).
+		Generate(context.Background(), "Add a hat")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Images) != 1 {
+		t.Fatalf("expected 1 image, got %d", len(resp.Images))
+	}
+}
+
+func TestGenerateImageOpenAIEditsThreeReferencesInOrder(t *testing.T) {
+	encoded := base64.StdEncoding.EncodeToString(fakePNG)
+	refA := []byte{0x89, 'P', 'N', 'G', 'A'}
+	refB := []byte{0x89, 'P', 'N', 'G', 'B'}
+	refC := []byte{0x89, 'P', 'N', 'G', 'C'}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, files, err := parseMultipart(r)
+		if err != nil {
+			t.Fatalf("parseMultipart: %v", err)
+		}
+		images := files["image[]"]
+		if len(images) != 3 {
+			t.Fatalf("expected 3 image[] fields, got %d", len(images))
+		}
+		if !bytes.Equal(images[0].bytes, refA) {
+			t.Errorf("image[0] bytes mismatch (caller order not preserved)")
+		}
+		if !bytes.Equal(images[1].bytes, refB) {
+			t.Errorf("image[1] bytes mismatch (caller order not preserved)")
+		}
+		if !bytes.Equal(images[2].bytes, refC) {
+			t.Errorf("image[2] bytes mismatch (caller order not preserved)")
+		}
+		json.NewEncoder(w).Encode(openaiImageResponse(encoded, 1))
+	}))
+	defer server.Close()
+
+	c := New(providers.OpenAI, "test-key")
+	c.provider.baseURL = server.URL
+	_, err := c.Image.Model(openaiImage2).
+		Image("image/png", refA).
+		Image("image/png", refB).
+		Image("image/png", refC).
+		Generate(context.Background(), "Combine them")
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestGenerateImageOpenAIExtraFieldsQuality(t *testing.T) {
+	encoded := base64.StdEncoding.EncodeToString(fakePNG)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var req map[string]any
+		json.Unmarshal(body, &req)
+		if req["quality"] != "high" {
+			t.Errorf("expected quality=high in JSON body, got %v", req["quality"])
+		}
+		json.NewEncoder(w).Encode(openaiImageResponse(encoded, 1))
+	}))
+	defer server.Close()
+
+	c := New(providers.OpenAI, "test-key")
+	c.provider.baseURL = server.URL
+	_, err := c.Image.Model(openaiImage2).
+		ExtraFields(map[string]any{"quality": "high"}).
+		Generate(context.Background(), "x")
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestGenerateImageOpenAIExtraFieldsNReturnsNImages(t *testing.T) {
+	encoded := base64.StdEncoding.EncodeToString(fakePNG)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var req map[string]any
+		json.Unmarshal(body, &req)
+		if n, ok := req["n"].(float64); !ok || int(n) != 4 {
+			t.Errorf("expected n=4 in JSON body, got %v", req["n"])
+		}
+		json.NewEncoder(w).Encode(openaiImageResponse(encoded, 4))
+	}))
+	defer server.Close()
+
+	c := New(providers.OpenAI, "test-key")
+	c.provider.baseURL = server.URL
+	resp, err := c.Image.Model(openaiImage2).
+		ExtraFields(map[string]any{"n": 4}).
+		Generate(context.Background(), "x")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Images) != 4 {
+		t.Fatalf("expected 4 images, got %d", len(resp.Images))
+	}
+}
+
+func TestGenerateImageOpenAIArbitrarySizeAccepted(t *testing.T) {
+	// OpenAI's models carry empty ImageSizes whitelists per plan 020 q1:
+	// trust the API boundary, accept any size at the SDK layer.
+	encoded := base64.StdEncoding.EncodeToString(fakePNG)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var req map[string]any
+		json.Unmarshal(body, &req)
+		if req["size"] != "1536x1024" {
+			t.Errorf("expected size=1536x1024 forwarded as-is, got %v", req["size"])
+		}
+		json.NewEncoder(w).Encode(openaiImageResponse(encoded, 1))
+	}))
+	defer server.Close()
+
+	c := New(providers.OpenAI, "test-key")
+	c.provider.baseURL = server.URL
+	_, err := c.Image.Model(openaiImage2).ImageSize("1536x1024").Generate(context.Background(), "x")
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestGenerateImageOpenAIMiddlewareFiresBothBranches(t *testing.T) {
+	encoded := base64.StdEncoding.EncodeToString(fakePNG)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(openaiImageResponse(encoded, 1))
+	}))
+	defer server.Close()
+
+	for _, branch := range []string{"generations", "edits"} {
+		var ops []providers.MiddlewareOp
+		var phases []providers.MiddlewarePhase
+		mw := func(_ context.Context, ev providers.Event) error {
+			ops = append(ops, ev.Op)
+			phases = append(phases, ev.Phase)
+			return nil
+		}
+		c := New(providers.OpenAI, "test-key")
+		c.provider.baseURL = server.URL
+		b := c.Image.Model(openaiImage2).Middleware(mw)
+		if branch == "edits" {
+			b = b.Image("image/png", []byte{0x89, 'P', 'N', 'G'})
+		}
+		if _, err := b.Generate(context.Background(), "x"); err != nil {
+			t.Fatalf("%s: %v", branch, err)
+		}
+		if len(ops) != 2 || ops[0] != providers.OpImageGeneration || ops[1] != providers.OpImageGeneration {
+			t.Errorf("%s: expected 2 image_generation ops, got %v", branch, ops)
+		}
+		if phases[0] != providers.PhasePre || phases[1] != providers.PhasePost {
+			t.Errorf("%s: expected pre,post, got %v", branch, phases)
+		}
+	}
+}
+
+func TestGenerateImageOpenAIMiddlewareVetoStopsHTTP(t *testing.T) {
+	httpHit := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		httpHit = true
+	}))
+	defer server.Close()
+
+	mw := func(_ context.Context, ev providers.Event) error {
+		if ev.Phase == providers.PhasePre {
+			return errors.New("blocked")
+		}
+		return nil
+	}
+	c := New(providers.OpenAI, "test-key")
+	c.provider.baseURL = server.URL
+	_, err := c.Image.Model(openaiImage2).Middleware(mw).Generate(context.Background(), "x")
+	var veto *MiddlewareVetoError
+	if !errors.As(err, &veto) {
+		t.Fatalf("expected MiddlewareVetoError, got %v", err)
+	}
+	if httpHit {
+		t.Errorf("HTTP request fired despite pre-phase veto")
+	}
+}
+
+// parseMultipart reads a multipart/form-data request and splits it into
+// (string fields, files-by-fieldname). Files within the same field name
+// are returned in the order they appeared in the body — required to
+// verify caller-controlled ordering on image[] arrays.
+type multipartTestFile struct {
+	filename string
+	mimeType string
+	bytes    []byte
+}
+
+func parseMultipart(r *http.Request) (map[string]string, map[string][]multipartTestFile, error) {
+	contentType := r.Header.Get("Content-Type")
+	_, params, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		return nil, nil, err
+	}
+	mr := multipart.NewReader(r.Body, params["boundary"])
+	fields := map[string]string{}
+	files := map[string][]multipartTestFile{}
+	for {
+		part, err := mr.NextPart()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, nil, err
+		}
+		data, err := io.ReadAll(part)
+		if err != nil {
+			return nil, nil, err
+		}
+		if part.FileName() != "" {
+			files[part.FormName()] = append(files[part.FormName()], multipartTestFile{
+				filename: part.FileName(),
+				mimeType: part.Header.Get("Content-Type"),
+				bytes:    data,
+			})
+		} else {
+			fields[part.FormName()] = string(data)
+		}
+	}
+	return fields, files, nil
+}
+
+// === xAI Grok Imagine ===
+//
+// Plan G (post-020): xAI Image API is JSON throughout — both endpoints
+// use JSON, image refs travel as data URLs in the body. response_format
+// must be forced to b64_json (xAI defaults to URL).
+
+const grokImagineQuality = "grok-imagine-image-quality"
+
+func grokImageResponse(b64 string, n int, mime string) map[string]any {
+	data := make([]map[string]any, n)
+	for i := range data {
+		entry := map[string]any{"b64_json": b64}
+		if mime != "" {
+			entry["mime_type"] = mime
+		}
+		data[i] = entry
+	}
+	return map[string]any{
+		"data":  data,
+		"usage": map[string]any{"cost_in_usd_ticks": 1234567},
+	}
+}
+
+func TestGenerateImageGrokGenerationsForcesB64Json(t *testing.T) {
+	encoded := base64.StdEncoding.EncodeToString(fakePNG)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/images/generations" {
+			t.Errorf("expected /v1/images/generations, got %s", r.URL.Path)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer test-key" {
+			t.Errorf("missing/incorrect bearer auth: %q", got)
+		}
+		body, _ := io.ReadAll(r.Body)
+		var req map[string]any
+		if err := json.Unmarshal(body, &req); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		if req["model"] != grokImagineQuality {
+			t.Errorf("expected model %s, got %v", grokImagineQuality, req["model"])
+		}
+		if req["prompt"] != "A red circle" {
+			t.Errorf("expected prompt 'A red circle', got %v", req["prompt"])
+		}
+		// xAI defaults to URL response — must be forced to b64_json so the
+		// runtime can decode the bytes uniformly.
+		if req["response_format"] != "b64_json" {
+			t.Errorf("expected response_format=b64_json (forced), got %v", req["response_format"])
+		}
+		// No image parts — `image` / `images` must be absent.
+		if _, ok := req["image"]; ok {
+			t.Errorf("image field must not be set on generations path")
+		}
+		if _, ok := req["images"]; ok {
+			t.Errorf("images field must not be set on generations path")
+		}
+		json.NewEncoder(w).Encode(grokImageResponse(encoded, 1, "image/png"))
+	}))
+	defer server.Close()
+
+	c := New(providers.Grok, "test-key")
+	c.provider.baseURL = server.URL
+	resp, err := c.Image.Model(grokImagineQuality).Generate(context.Background(), "A red circle")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Images) != 1 {
+		t.Fatalf("expected 1 image, got %d", len(resp.Images))
+	}
+	if !bytes.Equal(resp.Images[0].Bytes, fakePNG) {
+		t.Errorf("image bytes did not round-trip through base64")
+	}
+	if resp.Images[0].MimeType != "image/png" {
+		t.Errorf("expected mime_type echoed back, got %q", resp.Images[0].MimeType)
+	}
+	// xAI doesn't report token counts (only cost_in_usd_ticks); both
+	// fields should remain zero rather than fabricated.
+	if resp.Tokens.Input != 0 || resp.Tokens.Output != 0 {
+		t.Errorf("xAI usage shape has no token counts; expected 0/0, got %d/%d",
+			resp.Tokens.Input, resp.Tokens.Output)
+	}
+}
+
+func TestGenerateImageGrokAspectRatioAndResolution(t *testing.T) {
+	encoded := base64.StdEncoding.EncodeToString(fakePNG)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var req map[string]any
+		json.Unmarshal(body, &req)
+		if req["aspect_ratio"] != "16:9" {
+			t.Errorf("expected aspect_ratio=16:9, got %v", req["aspect_ratio"])
+		}
+		if req["resolution"] != "2k" {
+			t.Errorf("expected resolution=2k (xAI's name for size), got %v", req["resolution"])
+		}
+		json.NewEncoder(w).Encode(grokImageResponse(encoded, 1, "image/png"))
+	}))
+	defer server.Close()
+
+	c := New(providers.Grok, "test-key")
+	c.provider.baseURL = server.URL
+	_, err := c.Image.Model(grokImagineQuality).
+		AspectRatio("16:9").
+		ImageSize("2k").
+		Generate(context.Background(), "x")
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestGenerateImageGrokRejectsUnsupportedAspectRatio(t *testing.T) {
+	// xAI's whitelist excludes 4:5 (Google has it; xAI does not).
+	c := New(providers.Grok, "test-key")
+	c.provider.baseURL = "http://unused"
+	_, err := c.Image.Model(grokImagineQuality).
+		AspectRatio("4:5").
+		Generate(context.Background(), "x")
+	var verr *ValidationError
+	if !errors.As(err, &verr) {
+		t.Fatalf("expected ValidationError for 4:5, got %v", err)
+	}
+	if verr.Field != "aspect_ratio" {
+		t.Errorf("expected Field=aspect_ratio, got %q", verr.Field)
+	}
+}
+
+func TestGenerateImageGrokAcceptsAutoAspectRatio(t *testing.T) {
+	// `auto` is xAI's special sentinel — let the model pick the ratio.
+	encoded := base64.StdEncoding.EncodeToString(fakePNG)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var req map[string]any
+		json.Unmarshal(body, &req)
+		if req["aspect_ratio"] != "auto" {
+			t.Errorf("expected aspect_ratio=auto, got %v", req["aspect_ratio"])
+		}
+		json.NewEncoder(w).Encode(grokImageResponse(encoded, 1, ""))
+	}))
+	defer server.Close()
+	c := New(providers.Grok, "test-key")
+	c.provider.baseURL = server.URL
+	_, err := c.Image.Model(grokImagineQuality).
+		AspectRatio("auto").
+		Generate(context.Background(), "x")
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestGenerateImageGrokEditsSingleReferenceAsDataURL(t *testing.T) {
+	encoded := base64.StdEncoding.EncodeToString(fakePNG)
+	refBytes := []byte{0x89, 'P', 'N', 'G', 'A'}
+	expectedDataURL := "data:image/png;base64," + base64.StdEncoding.EncodeToString(refBytes)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/images/edits" {
+			t.Errorf("expected /v1/images/edits, got %s", r.URL.Path)
+		}
+		body, _ := io.ReadAll(r.Body)
+		var req map[string]any
+		json.Unmarshal(body, &req)
+		// Single image → `image: {url: "data:..."}` (not `images: [...]`).
+		image, ok := req["image"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected `image` object on single-ref edit, got %v", req["image"])
+		}
+		if image["url"] != expectedDataURL {
+			t.Errorf("ref data URL mismatch:\nwant: %s\ngot:  %v", expectedDataURL, image["url"])
+		}
+		if _, ok := req["images"]; ok {
+			t.Errorf("`images` array must not be set when only one ref present")
+		}
+		json.NewEncoder(w).Encode(grokImageResponse(encoded, 1, "image/png"))
+	}))
+	defer server.Close()
+
+	c := New(providers.Grok, "test-key")
+	c.provider.baseURL = server.URL
+	_, err := c.Image.Model(grokImagineQuality).
+		Image("image/png", refBytes).
+		Generate(context.Background(), "Add a hat")
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestGenerateImageGrokEditsThreeReferencesAsImagesArrayInOrder(t *testing.T) {
+	encoded := base64.StdEncoding.EncodeToString(fakePNG)
+	refA := []byte{0x89, 'A'}
+	refB := []byte{0x89, 'B'}
+	refC := []byte{0x89, 'C'}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var req map[string]any
+		json.Unmarshal(body, &req)
+		images, ok := req["images"].([]any)
+		if !ok {
+			t.Fatalf("expected `images` array on multi-ref edit, got %v", req["images"])
+		}
+		if len(images) != 3 {
+			t.Fatalf("expected 3 image refs, got %d", len(images))
+		}
+		check := func(i int, want []byte) {
+			entry, _ := images[i].(map[string]any)
+			expected := "data:image/png;base64," + base64.StdEncoding.EncodeToString(want)
+			if entry["url"] != expected {
+				t.Errorf("images[%d]: caller order not preserved", i)
+			}
+		}
+		check(0, refA)
+		check(1, refB)
+		check(2, refC)
+		if _, ok := req["image"]; ok {
+			t.Errorf("`image` field must not be set when multiple refs present")
+		}
+		json.NewEncoder(w).Encode(grokImageResponse(encoded, 1, ""))
+	}))
+	defer server.Close()
+
+	c := New(providers.Grok, "test-key")
+	c.provider.baseURL = server.URL
+	_, err := c.Image.Model(grokImagineQuality).
+		Image("image/png", refA).
+		Image("image/png", refB).
+		Image("image/png", refC).
+		Generate(context.Background(), "Combine them")
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestGenerateImageGrokExtraFieldsNReturnsNImages(t *testing.T) {
+	encoded := base64.StdEncoding.EncodeToString(fakePNG)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var req map[string]any
+		json.Unmarshal(body, &req)
+		if n, ok := req["n"].(float64); !ok || int(n) != 4 {
+			t.Errorf("expected n=4 in JSON body, got %v", req["n"])
+		}
+		json.NewEncoder(w).Encode(grokImageResponse(encoded, 4, "image/png"))
+	}))
+	defer server.Close()
+
+	c := New(providers.Grok, "test-key")
+	c.provider.baseURL = server.URL
+	resp, err := c.Image.Model(grokImagineQuality).
+		ExtraFields(map[string]any{"n": 4}).
+		Generate(context.Background(), "x")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Images) != 4 {
+		t.Fatalf("expected 4 images, got %d", len(resp.Images))
+	}
+}
+
+func TestGenerateImageGrokMiddlewareFiresBothBranches(t *testing.T) {
+	encoded := base64.StdEncoding.EncodeToString(fakePNG)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(grokImageResponse(encoded, 1, "image/png"))
+	}))
+	defer server.Close()
+
+	for _, branch := range []string{"generations", "edits"} {
+		var ops []providers.MiddlewareOp
+		var phases []providers.MiddlewarePhase
+		mw := func(_ context.Context, ev providers.Event) error {
+			ops = append(ops, ev.Op)
+			phases = append(phases, ev.Phase)
+			return nil
+		}
+		c := New(providers.Grok, "test-key")
+		c.provider.baseURL = server.URL
+		b := c.Image.Model(grokImagineQuality).Middleware(mw)
+		if branch == "edits" {
+			b = b.Image("image/png", []byte{0x89, 'P', 'N', 'G'})
+		}
+		if _, err := b.Generate(context.Background(), "x"); err != nil {
+			t.Fatalf("%s: %v", branch, err)
+		}
+		if len(ops) != 2 || ops[0] != providers.OpImageGeneration || ops[1] != providers.OpImageGeneration {
+			t.Errorf("%s: expected 2 image_generation ops, got %v", branch, ops)
+		}
+		if phases[0] != providers.PhasePre || phases[1] != providers.PhasePost {
+			t.Errorf("%s: expected pre,post, got %v", branch, phases)
+		}
+	}
+}
+
+// =============================================================================
+// Plan 020 phase 2 — typed image-gen knob tests
+// =============================================================================
+
+func TestGenerateImageOpenAITypedQuality(t *testing.T) {
+	encoded := base64.StdEncoding.EncodeToString(fakePNG)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var req map[string]any
+		json.Unmarshal(body, &req)
+		if req["quality"] != "high" {
+			t.Errorf("expected quality=high in JSON body, got %v", req["quality"])
+		}
+		json.NewEncoder(w).Encode(openaiImageResponse(encoded, 1))
+	}))
+	defer server.Close()
+
+	c := New(providers.OpenAI, "test-key")
+	c.provider.baseURL = server.URL
+	if _, err := c.Image.Model(openaiImage2).Quality("high").Generate(context.Background(), "x"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestGenerateImageOpenAITypedOutputFormat(t *testing.T) {
+	encoded := base64.StdEncoding.EncodeToString(fakePNG)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var req map[string]any
+		json.Unmarshal(body, &req)
+		if req["output_format"] != "webp" {
+			t.Errorf("expected output_format=webp in JSON body, got %v", req["output_format"])
+		}
+		json.NewEncoder(w).Encode(openaiImageResponse(encoded, 1))
+	}))
+	defer server.Close()
+
+	c := New(providers.OpenAI, "test-key")
+	c.provider.baseURL = server.URL
+	if _, err := c.Image.Model(openaiImage2).OutputFormat("webp").Generate(context.Background(), "x"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestGenerateImageOpenAITypedBackground(t *testing.T) {
+	encoded := base64.StdEncoding.EncodeToString(fakePNG)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var req map[string]any
+		json.Unmarshal(body, &req)
+		if req["background"] != "transparent" {
+			t.Errorf("expected background=transparent in JSON body, got %v", req["background"])
+		}
+		json.NewEncoder(w).Encode(openaiImageResponse(encoded, 1))
+	}))
+	defer server.Close()
+
+	c := New(providers.OpenAI, "test-key")
+	c.provider.baseURL = server.URL
+	if _, err := c.Image.Model(openaiImage2).Background("transparent").Generate(context.Background(), "x"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestGenerateImageOpenAITypedCount(t *testing.T) {
+	encoded := base64.StdEncoding.EncodeToString(fakePNG)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var req map[string]any
+		json.Unmarshal(body, &req)
+		if n, ok := req["n"].(float64); !ok || int(n) != 3 {
+			t.Errorf("expected n=3 in JSON body, got %v", req["n"])
+		}
+		json.NewEncoder(w).Encode(openaiImageResponse(encoded, 3))
+	}))
+	defer server.Close()
+
+	c := New(providers.OpenAI, "test-key")
+	c.provider.baseURL = server.URL
+	resp, err := c.Image.Model(openaiImage2).Count(3).Generate(context.Background(), "x")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Images) != 3 {
+		t.Fatalf("expected 3 images, got %d", len(resp.Images))
+	}
+}
+
+// Multipart edit branch: typed knobs propagate as form fields, not JSON keys.
+func TestGenerateImageOpenAITypedKnobsInEditMultipart(t *testing.T) {
+	encoded := base64.StdEncoding.EncodeToString(fakePNG)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fields, _, err := parseMultipart(r)
+		if err != nil {
+			t.Fatalf("parse multipart: %v", err)
+		}
+		if fields["quality"] != "medium" {
+			t.Errorf("expected quality=medium form field, got %q", fields["quality"])
+		}
+		if fields["output_format"] != "png" {
+			t.Errorf("expected output_format=png form field, got %q", fields["output_format"])
+		}
+		if fields["background"] != "auto" {
+			t.Errorf("expected background=auto form field, got %q", fields["background"])
+		}
+		if fields["n"] != "2" {
+			t.Errorf("expected n=2 form field, got %q", fields["n"])
+		}
+		json.NewEncoder(w).Encode(openaiImageResponse(encoded, 2))
+	}))
+	defer server.Close()
+
+	c := New(providers.OpenAI, "test-key")
+	c.provider.baseURL = server.URL
+	_, err := c.Image.Model(openaiImage2).
+		Quality("medium").
+		OutputFormat("png").
+		Background("auto").
+		Count(2).
+		Image("image/png", fakePNG).
+		Generate(context.Background(), "edit it")
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestGenerateImageGoogleRejectsOpenAIKnobs(t *testing.T) {
+	c := New(providers.Google, "test-key")
+
+	cases := []struct {
+		name  string
+		build func(*Image) *Image
+		field string
+	}{
+		{"quality", func(b *Image) *Image { return b.Quality("high") }, "quality"},
+		{"output_format", func(b *Image) *Image { return b.OutputFormat("png") }, "output_format"},
+		{"background", func(b *Image) *Image { return b.Background("transparent") }, "background"},
+		{"count", func(b *Image) *Image { return b.Count(2) }, "count"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			b := c.Image.Model(flashModel)
+			b = tc.build(b)
+			_, err := b.Generate(context.Background(), "x")
+			var verr *ValidationError
+			if !errors.As(err, &verr) {
+				t.Fatalf("expected ValidationError, got %v", err)
+			}
+			if verr.Field != tc.field {
+				t.Errorf("expected field=%q, got %q", tc.field, verr.Field)
+			}
+		})
+	}
+}
+
+func TestGenerateImageGrokTypedCount(t *testing.T) {
+	encoded := base64.StdEncoding.EncodeToString(fakePNG)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var req map[string]any
+		json.Unmarshal(body, &req)
+		if n, ok := req["n"].(float64); !ok || int(n) != 2 {
+			t.Errorf("expected n=2 in JSON body, got %v", req["n"])
+		}
+		json.NewEncoder(w).Encode(grokImageResponse(encoded, 2, "image/png"))
+	}))
+	defer server.Close()
+
+	c := New(providers.Grok, "test-key")
+	c.provider.baseURL = server.URL
+	resp, err := c.Image.Model(grokImagineQuality).Count(2).Generate(context.Background(), "x")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Images) != 2 {
+		t.Fatalf("expected 2 images, got %d", len(resp.Images))
+	}
+}
+
+func TestGenerateImageGrokRejectsOpenAIKnobs(t *testing.T) {
+	c := New(providers.Grok, "test-key")
+
+	cases := []struct {
+		name  string
+		build func(*Image) *Image
+		field string
+	}{
+		{"quality", func(b *Image) *Image { return b.Quality("high") }, "quality"},
+		{"output_format", func(b *Image) *Image { return b.OutputFormat("png") }, "output_format"},
+		{"background", func(b *Image) *Image { return b.Background("transparent") }, "background"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			b := c.Image.Model(grokImagineQuality)
+			b = tc.build(b)
+			_, err := b.Generate(context.Background(), "x")
+			var verr *ValidationError
+			if !errors.As(err, &verr) {
+				t.Fatalf("expected ValidationError, got %v", err)
+			}
+			if verr.Field != tc.field {
+				t.Errorf("expected field=%q, got %q", tc.field, verr.Field)
+			}
+		})
+	}
+}
+
+// Direct option-function smoke tests so the public WithImage* functions
+// have at least one caller (coverage gate).
+func TestImageWithOptionsSetFields(t *testing.T) {
+	o := resolveImageOptions([]ImageOption{
+		WithImageQuality("high"),
+		WithImageOutputFormat("webp"),
+		WithImageBackground("opaque"),
+		WithImageCount(5),
+		WithImageMask("image/png", []byte{0xDE, 0xAD}),
+	})
+	if o.quality != "high" {
+		t.Errorf("quality: expected high, got %q", o.quality)
+	}
+	if o.outputFormat != "webp" {
+		t.Errorf("outputFormat: expected webp, got %q", o.outputFormat)
+	}
+	if o.background != "opaque" {
+		t.Errorf("background: expected opaque, got %q", o.background)
+	}
+	if o.count == nil || *o.count != 5 {
+		t.Errorf("count: expected *5, got %v", o.count)
+	}
+	if o.mask == nil || o.mask.MimeType != "image/png" || string(o.mask.Bytes) != "\xDE\xAD" {
+		t.Errorf("mask: expected image/png + DE AD bytes, got %+v", o.mask)
+	}
+}
+
+// Mask attaches a `mask` field to the OpenAI edit multipart form.
+func TestGenerateImageOpenAIMaskInEditMultipart(t *testing.T) {
+	encoded := base64.StdEncoding.EncodeToString(fakePNG)
+	maskBytes := []byte{0xDE, 0xAD, 0xBE, 0xEF}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, files, err := parseMultipart(r)
+		if err != nil {
+			t.Fatalf("parse multipart: %v", err)
+		}
+		masks, ok := files["mask"]
+		if !ok || len(masks) != 1 {
+			t.Fatalf("expected one mask file, got %v", files)
+		}
+		if string(masks[0].bytes) != string(maskBytes) {
+			t.Errorf("mask bytes round-trip: expected %x, got %x", maskBytes, masks[0].bytes)
+		}
+		if masks[0].mimeType != "image/png" {
+			t.Errorf("mask mime: expected image/png, got %q", masks[0].mimeType)
+		}
+		json.NewEncoder(w).Encode(openaiImageResponse(encoded, 1))
+	}))
+	defer server.Close()
+
+	c := New(providers.OpenAI, "test-key")
+	c.provider.baseURL = server.URL
+	_, err := c.Image.Model(openaiImage2).
+		Image("image/png", fakePNG).
+		Mask("image/png", maskBytes).
+		Generate(context.Background(), "patch the hat region")
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Mask without any image part on OpenAI is rejected (edits-only branch).
+func TestGenerateImageOpenAIMaskRejectedWithoutImageParts(t *testing.T) {
+	c := New(providers.OpenAI, "test-key")
+	_, err := c.Image.Model(openaiImage2).
+		Mask("image/png", []byte{0xDE, 0xAD}).
+		Generate(context.Background(), "x")
+	var verr *ValidationError
+	if !errors.As(err, &verr) {
+		t.Fatalf("expected ValidationError, got %v", err)
+	}
+	if verr.Field != "mask" {
+		t.Errorf("expected field=mask, got %q", verr.Field)
+	}
+}
+
+// Mask on Google + Grok is rejected (not supported on the wire at all).
+func TestGenerateImageMaskRejectedOnGoogleAndGrok(t *testing.T) {
+	for _, p := range []struct {
+		provider string
+		model    string
+	}{
+		{providers.Google, flashModel},
+		{providers.Grok, grokImagineQuality},
+	} {
+		c := New(p.provider, "test-key")
+		_, err := c.Image.Model(p.model).
+			Mask("image/png", []byte{0xDE, 0xAD}).
+			Generate(context.Background(), "x")
+		var verr *ValidationError
+		if !errors.As(err, &verr) {
+			t.Errorf("%s: expected ValidationError, got %v", p.provider, err)
+			continue
+		}
+		if verr.Field != "mask" {
+			t.Errorf("%s: expected field=mask, got %q", p.provider, verr.Field)
+		}
 	}
 }
