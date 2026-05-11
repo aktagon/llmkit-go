@@ -117,6 +117,79 @@ func doMultipartPost(ctx context.Context, client *http.Client, url string,
 	return respData, resp.StatusCode, nil
 }
 
+// multipartFile is one file part inside a multipart/form-data request.
+// fieldName is the form field name (use a trailing "[]" when the API
+// expects an array of files, e.g. OpenAI's "image[]").
+type multipartFile struct {
+	fieldName string
+	filename  string
+	mimeType  string
+	bytes     []byte
+}
+
+// doMultipartPostMulti sends a multipart POST with one or more file parts
+// and zero-or-more plain string fields. Mirrors doMultipartPost's wire
+// shape — extra fields written first, then files in the given order. On
+// non-2xx the body is returned alongside an *APIError so callers can hand
+// it to parseError.
+func doMultipartPostMulti(ctx context.Context, client *http.Client, url string,
+	files []multipartFile, fields map[string]string, headers map[string]string) ([]byte, error) {
+
+	var buf bytes.Buffer
+	w := multipart.NewWriter(&buf)
+
+	for k, v := range fields {
+		if err := w.WriteField(k, v); err != nil {
+			return nil, err
+		}
+	}
+
+	for _, f := range files {
+		mime := f.mimeType
+		if mime == "" {
+			mime = detectMimeType(f.filename)
+		}
+		h := make(textproto.MIMEHeader)
+		h.Set("Content-Disposition", fmt.Sprintf(`form-data; name="%s"; filename="%s"`, f.fieldName, f.filename))
+		h.Set("Content-Type", mime)
+		fw, err := w.CreatePart(h)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := fw.Write(f.bytes); err != nil {
+			return nil, err
+		}
+	}
+
+	if err := w.Close(); err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", url, &buf)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", w.FormDataContentType())
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode >= 400 {
+		return data, &APIError{StatusCode: resp.StatusCode}
+	}
+	return data, nil
+}
+
 // doSigV4Post sends a POST request signed with AWS SigV4.
 func doSigV4Post(ctx context.Context, client *http.Client, url string, body []byte,
 	accessKey, secretKey, sessionToken, region, service string) ([]byte, error) {

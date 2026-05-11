@@ -392,9 +392,9 @@ func TestIntegrationGoogleStream(t *testing.T) {
 }
 
 func TestIntegrationGrok(t *testing.T) {
-	key := os.Getenv("GROK_API_KEY")
+	key := os.Getenv("XAI_API_KEY")
 	if key == "" {
-		t.Skip("GROK_API_KEY not set")
+		t.Skip("XAI_API_KEY not set")
 	}
 	c := llmkit.New(providers.Grok, key)
 	resp, err := c.Text.System("Reply with only the word pong").Prompt(context.Background(), "ping")
@@ -410,9 +410,9 @@ func TestIntegrationGrok(t *testing.T) {
 }
 
 func TestIntegrationGrokStream(t *testing.T) {
-	key := os.Getenv("GROK_API_KEY")
+	key := os.Getenv("XAI_API_KEY")
 	if key == "" {
-		t.Skip("GROK_API_KEY not set")
+		t.Skip("XAI_API_KEY not set")
 	}
 	var chunks int
 	var text string

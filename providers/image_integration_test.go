@@ -57,3 +57,114 @@ func TestIntegrationImageGoogleGemini31FlashImagePreview(t *testing.T) {
 		t.Error("no output tokens reported (image-output tokens should land in candidatesTokenCount)")
 	}
 }
+
+func TestIntegrationImageGrokGrokImagineImageQuality(t *testing.T) {
+	key := os.Getenv("XAI_API_KEY")
+	if key == "" {
+		t.Skip("XAI_API_KEY not set")
+	}
+	c := llmkit.New(providers.Grok, key)
+	resp, err := c.Image.Model("grok-imagine-image-quality").AspectRatio("1:1").Generate(context.Background(), "A simple red circle on a white background.")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Images) == 0 {
+		t.Fatal("no images returned")
+	}
+	if len(resp.Images[0].Bytes) == 0 {
+		t.Error("first image has zero bytes")
+	}
+}
+
+func TestIntegrationImageOpenAIGptImage1(t *testing.T) {
+	key := os.Getenv("OPENAI_API_KEY")
+	if key == "" {
+		t.Skip("OPENAI_API_KEY not set")
+	}
+	if os.Getenv("LLMKIT_RUN_SLOW_IMAGE") == "" {
+		t.Skip("LLMKIT_RUN_SLOW_IMAGE not set; skipping gpt-image-1 smoke")
+	}
+	c := llmkit.New(providers.OpenAI, key)
+	resp, err := c.Image.Model("gpt-image-1").Generate(context.Background(), "A simple red circle on a white background.")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Images) == 0 {
+		t.Fatal("no images returned")
+	}
+	if len(resp.Images[0].Bytes) == 0 {
+		t.Error("first image has zero bytes")
+	}
+	if resp.Tokens.Output == 0 {
+		t.Error("no output tokens reported (image-output tokens should land in candidatesTokenCount)")
+	}
+}
+
+func TestIntegrationImageOpenAIGptImage1Mini(t *testing.T) {
+	key := os.Getenv("OPENAI_API_KEY")
+	if key == "" {
+		t.Skip("OPENAI_API_KEY not set")
+	}
+	if os.Getenv("LLMKIT_RUN_SLOW_IMAGE") == "" {
+		t.Skip("LLMKIT_RUN_SLOW_IMAGE not set; skipping gpt-image-1-mini smoke")
+	}
+	c := llmkit.New(providers.OpenAI, key)
+	resp, err := c.Image.Model("gpt-image-1-mini").Generate(context.Background(), "A simple red circle on a white background.")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Images) == 0 {
+		t.Fatal("no images returned")
+	}
+	if len(resp.Images[0].Bytes) == 0 {
+		t.Error("first image has zero bytes")
+	}
+	if resp.Tokens.Output == 0 {
+		t.Error("no output tokens reported (image-output tokens should land in candidatesTokenCount)")
+	}
+}
+
+func TestIntegrationImageOpenAIGptImage15(t *testing.T) {
+	key := os.Getenv("OPENAI_API_KEY")
+	if key == "" {
+		t.Skip("OPENAI_API_KEY not set")
+	}
+	if os.Getenv("LLMKIT_RUN_SLOW_IMAGE") == "" {
+		t.Skip("LLMKIT_RUN_SLOW_IMAGE not set; skipping gpt-image-1.5 smoke")
+	}
+	c := llmkit.New(providers.OpenAI, key)
+	resp, err := c.Image.Model("gpt-image-1.5").Generate(context.Background(), "A simple red circle on a white background.")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Images) == 0 {
+		t.Fatal("no images returned")
+	}
+	if len(resp.Images[0].Bytes) == 0 {
+		t.Error("first image has zero bytes")
+	}
+	if resp.Tokens.Output == 0 {
+		t.Error("no output tokens reported (image-output tokens should land in candidatesTokenCount)")
+	}
+}
+
+func TestIntegrationImageOpenAIGptImage2(t *testing.T) {
+	key := os.Getenv("OPENAI_API_KEY")
+	if key == "" {
+		t.Skip("OPENAI_API_KEY not set")
+	}
+	c := llmkit.New(providers.OpenAI, key)
+	resp, err := c.Image.Model("gpt-image-2").Generate(context.Background(), "A simple red circle on a white background.")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Images) == 0 {
+		t.Fatal("no images returned")
+	}
+	if len(resp.Images[0].Bytes) == 0 {
+		t.Error("first image has zero bytes")
+	}
+	if resp.Tokens.Output == 0 {
+		t.Error("no output tokens reported (image-output tokens should land in candidatesTokenCount)")
+	}
+}
