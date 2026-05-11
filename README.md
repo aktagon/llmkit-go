@@ -165,6 +165,7 @@ trusts the API boundary instead of carrying a stale list.
 | Google   | Nano Banana Pro                | 1:1, 2:3, 3:2, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9, 21:9                             | 1K, 2K, 4K                          |
 | OpenAI   | gpt-image-2 / 1.5 / 1 / 1-mini | n/a (size only)                                                                 | any (e.g. `1024x1024`, `1536x1024`) |
 | xAI      | grok-imagine-image-quality     | 1:1, 2:3, 3:2, 3:4, 4:3, 9:16, 16:9, 1:2, 2:1, 19.5:9, 9:19.5, 20:9, 9:20, auto | 1k, 2k                              |
+| Vertex   | imagen-3.0 / 4.0               | 1:1, 9:16, 16:9, 3:4, 4:3                                                       | fixed per model                     |
 
 OpenAI gpt-image-\* models accept arbitrary sizes within documented
 bounds (max edge ≤3840, both edges multiples of 16, ratio ≤3:1, total
@@ -207,6 +208,35 @@ OpenAI gpt-image-\* models require organization verification — see
 Up to 14 reference images per Google request, 16 per OpenAI request.
 See `examples/image-gen` (Google) and `examples/image-gen-openai` (OpenAI)
 for end-to-end runnable samples.
+
+#### Vertex AI Imagen (Google Cloud)
+
+Vertex Imagen uses a different endpoint family (`:predict`) and OAuth
+auth instead of API keys. The SDK takes a bearer token (string); caller
+manages OAuth refresh externally (e.g. `gcloud auth print-access-token`,
+service-account JSON, or workload identity).
+
+```go
+// Caller substitutes {project_id} and {location} before passing the URL.
+const baseURL = "https://us-central1-aiplatform.googleapis.com" +
+    "/v1/projects/my-gcp-project/locations/us-central1/publishers/google/models"
+
+token := os.Getenv("VERTEX_BEARER_TOKEN") // e.g. `gcloud auth print-access-token`
+c := llmkit.Vertex(token)
+c.WithBaseURL(baseURL)
+
+resp, err := c.Image.Model("imagen-3.0-generate-002").
+    AspectRatio("16:9").
+    Count(2).
+    Generate(ctx, "A red circle")
+```
+
+Edit-mode (single image into `instances[0].image`) and inpainting
+(`Mask(mime, bytes)` into `instances[0].mask.image`) work the same way.
+Imagen-specific knobs like `negativePrompt` and `safetySetting` are
+reachable through `ExtraFields(...)` — they spread into the request's
+`parameters` block. Vertex's `:predict` response does not carry token
+counts; `resp.Tokens` stays zero.
 
 ## Options
 

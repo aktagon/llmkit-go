@@ -168,3 +168,66 @@ func TestIntegrationImageOpenAIGptImage2(t *testing.T) {
 		t.Error("no output tokens reported (image-output tokens should land in candidatesTokenCount)")
 	}
 }
+
+func TestIntegrationImageVertexImagen30FastGenerate001(t *testing.T) {
+	key := os.Getenv("VERTEX_BEARER_TOKEN")
+	if key == "" {
+		t.Skip("VERTEX_BEARER_TOKEN not set")
+	}
+	c := llmkit.New(providers.Vertex, key)
+	resp, err := c.Image.Model("imagen-3.0-fast-generate-001").AspectRatio("1:1").Generate(context.Background(), "A simple red circle on a white background.")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Images) == 0 {
+		t.Fatal("no images returned")
+	}
+	if len(resp.Images[0].Bytes) == 0 {
+		t.Error("first image has zero bytes")
+	}
+	if resp.Tokens.Output == 0 {
+		t.Error("no output tokens reported (image-output tokens should land in candidatesTokenCount)")
+	}
+}
+
+func TestIntegrationImageVertexImagen30Generate002(t *testing.T) {
+	key := os.Getenv("VERTEX_BEARER_TOKEN")
+	if key == "" {
+		t.Skip("VERTEX_BEARER_TOKEN not set")
+	}
+	c := llmkit.New(providers.Vertex, key)
+	resp, err := c.Image.Model("imagen-3.0-generate-002").AspectRatio("1:1").Generate(context.Background(), "A simple red circle on a white background.")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Images) == 0 {
+		t.Fatal("no images returned")
+	}
+	if len(resp.Images[0].Bytes) == 0 {
+		t.Error("first image has zero bytes")
+	}
+	if resp.Tokens.Output == 0 {
+		t.Error("no output tokens reported (image-output tokens should land in candidatesTokenCount)")
+	}
+}
+
+func TestIntegrationImageVertexImagen40GeneratePreview0606(t *testing.T) {
+	key := os.Getenv("VERTEX_BEARER_TOKEN")
+	if key == "" {
+		t.Skip("VERTEX_BEARER_TOKEN not set")
+	}
+	c := llmkit.New(providers.Vertex, key)
+	resp, err := c.Image.Model("imagen-4.0-generate-preview-06-06").AspectRatio("1:1").Generate(context.Background(), "A simple red circle on a white background.")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Images) == 0 {
+		t.Fatal("no images returned")
+	}
+	if len(resp.Images[0].Bytes) == 0 {
+		t.Error("first image has zero bytes")
+	}
+	if resp.Tokens.Output == 0 {
+		t.Error("no output tokens reported (image-output tokens should land in candidatesTokenCount)")
+	}
+}
