@@ -167,6 +167,19 @@ func TestSurface_Constructors(t *testing.T) {
 	}
 }
 
+func TestClient_WithBaseURL_SetsAndReturnsSelf(t *testing.T) {
+	override := "https://example.test/v1"
+	c := Vertex("test-token").WithBaseURL(override)
+	if c.provider.baseURL != override {
+		t.Errorf("baseURL not stored: got %q, want %q", c.provider.baseURL, override)
+	}
+	// Chainability: WithBaseURL must return the same *Client so callers
+	// can write `c := Vertex(t).WithBaseURL(url)` in one line.
+	if Vertex("k").WithBaseURL(override) == nil {
+		t.Error("WithBaseURL returned nil")
+	}
+}
+
 // All phase-3 terminals are wired. The legacy panic-stub assertion is
 // retired; remaining work for v1.0.0 is the *Upload Bytes path
 // (slice 2d, deferred — needs main-package change to UploadFile)
