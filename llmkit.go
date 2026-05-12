@@ -17,6 +17,16 @@ type StreamCallback func(chunk string)
 
 //
 //
+//
+//
+//
+func (c *Client) WithBaseURL(url string) *Client {
+	c.provider.baseURL = url
+	return c
+}
+
+//
+//
 func promptStream(ctx context.Context, p Provider, req Request, callback StreamCallback, opts ...Option) (Response, error) {
 	o := resolveOptions(opts)
 
