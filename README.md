@@ -222,8 +222,7 @@ const baseURL = "https://us-central1-aiplatform.googleapis.com" +
     "/v1/projects/my-gcp-project/locations/us-central1/publishers/google/models"
 
 token := os.Getenv("VERTEX_BEARER_TOKEN") // e.g. `gcloud auth print-access-token`
-c := llmkit.Vertex(token)
-c.WithBaseURL(baseURL)
+c := llmkit.Vertex(token).WithBaseURL(baseURL)
 
 resp, err := c.Image.Model("imagen-3.0-generate-002").
     AspectRatio("16:9").
