@@ -15,6 +15,16 @@ import (
 // StreamCallback is called with each text chunk during streaming.
 type StreamCallback func(chunk string)
 
+// WithBaseURL overrides the provider's default endpoint root for this
+// client. Required for providers whose default base URL is a template
+// (e.g. Vertex AI Imagen, where the caller must substitute the
+// {location} and {project_id} placeholders). Returns the same Client so
+// callers can chain: c := llmkit.Vertex(token).WithBaseURL(url).
+func (c *Client) WithBaseURL(url string) *Client {
+	c.provider.baseURL = url
+	return c
+}
+
 // promptStream is the internal streaming implementation. The
 // public surface is (*Text).Stream in stream.go (plan-018 D1.3b).
 func promptStream(ctx context.Context, p Provider, req Request, callback StreamCallback, opts ...Option) (Response, error) {
