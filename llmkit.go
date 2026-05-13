@@ -689,6 +689,7 @@ func parseResponse(provider string, body []byte) (Response, error) {
 	output := extractIntPath(raw, outputPath)
 	cacheWrite, cacheRead := extractCacheUsage(raw, provider)
 	reasoning := extractReasoningUsage(raw, provider)
+	finishReason, finishMessage := extractFinishSignal(raw, provider)
 
 	return Response{
 		Text: text,
@@ -699,7 +700,66 @@ func parseResponse(provider string, body []byte) (Response, error) {
 			CacheRead:  cacheRead,
 			Reasoning:  reasoning,
 		},
+		FinishReason:  finishReason,
+		FinishMessage: finishMessage,
 	}, nil
+}
+
+// extractFinishSignal pulls the provider stop signal and free-text message
+// from the response using the per-provider JSON paths declared in the
+// ontology. Returns empty strings when the provider declares no path or
+// the path is not present in this response.
+//
+// Uses pathPresent before extractPath because extractPath stringifies a
+// missing value as "<nil>"; treating that as a finish signal would leak
+// a sentinel into user-facing messages.
+func extractFinishSignal(raw map[string]any, provider string) (reason, message string) {
+	cfg, ok := providers.Providers()[provider]
+	if !ok {
+		return "", ""
+	}
+	if cfg.FinishReasonPath != "" && pathPresent(raw, cfg.FinishReasonPath) {
+		reason = extractPath(raw, cfg.FinishReasonPath)
+	}
+	if cfg.FinishMessagePath != "" && pathPresent(raw, cfg.FinishMessagePath) {
+		message = extractPath(raw, cfg.FinishMessagePath)
+	}
+	return reason, message
+}
+
+// pathPresent reports whether the given dot-path navigates to a non-nil
+// value in data. Mirrors extractPath's navigation but does not coerce the
+// final value to a string.
+func pathPresent(data map[string]any, path string) bool {
+	parts := strings.Split(path, ".")
+	var current any = data
+	for _, part := range parts {
+		if idx := strings.Index(part, "["); idx != -1 {
+			field := part[:idx]
+			idxStr := part[idx+1 : len(part)-1]
+			arrIdx, _ := strconv.Atoi(idxStr)
+			m, ok := current.(map[string]any)
+			if !ok {
+				return false
+			}
+			arr, ok := m[field].([]any)
+			if !ok || arrIdx >= len(arr) {
+				return false
+			}
+			current = arr[arrIdx]
+		} else {
+			m, ok := current.(map[string]any)
+			if !ok {
+				return false
+			}
+			v, exists := m[part]
+			if !exists {
+				return false
+			}
+			current = v
+		}
+	}
+	return current != nil
 }
 
 // extractReasoningUsage pulls the reasoning token count if the provider

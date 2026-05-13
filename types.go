@@ -29,6 +29,20 @@ type Request struct {
 type Response struct {
 	Text   string
 	Tokens Usage
+	// FinishReason is the provider stop signal, passed through verbatim.
+	// Empty when the provider response carries no signal or the parser does
+	// not yet read this provider's location.
+	//
+	// Examples per provider:
+	//   Google:    "STOP", "MAX_TOKENS", "SAFETY", "RECITATION"
+	//   OpenAI:    "stop", "length", "content_filter", "tool_calls"
+	//   Anthropic: "end_turn", "max_tokens", "stop_sequence", "tool_use"
+	//   xAI:       "stop", "length", "content_filter"
+	FinishReason string
+	// FinishMessage is a provider-supplied free-text explanation of the
+	// stop signal. Populated by Google when present; OpenAI / Anthropic /
+	// xAI do not carry an equivalent field, so this stays empty for them.
+	FinishMessage string
 }
 
 // Usage holds token consumption metrics.

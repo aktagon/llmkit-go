@@ -154,7 +154,13 @@ func (a *legacyAgent) runToolLoop(ctx context.Context) (Response, error) {
 		if len(calls) == 0 {
 			text := extractPath(raw, providers.ResponseTextPath(a.provider.Name))
 			a.history = append(a.history, internalMessage{role: "assistant", content: text})
-			return Response{Text: text, Tokens: totalUsage}, nil
+			finishReason, finishMessage := extractFinishSignal(raw, a.provider.Name)
+			return Response{
+				Text:          text,
+				Tokens:        totalUsage,
+				FinishReason:  finishReason,
+				FinishMessage: finishMessage,
+			}, nil
 		}
 
 		// Record assistant message with tool calls using selected transform

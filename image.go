@@ -60,6 +60,17 @@ type ImageResponse struct {
 	Images []ImageData
 	Text   string
 	Tokens Usage
+	// FinishReason is the provider stop signal, passed through verbatim.
+	// Examples per provider:
+	//   Google:    "STOP" (ok), "IMAGE_OTHER", "SAFETY", "MAX_TOKENS"
+	//   OpenAI Images API: no equivalent field (always empty)
+	//   xAI Grok:          no equivalent field (always empty)
+	//   Vertex Imagen:     RAI filter reason when content is blocked
+	FinishReason string
+	// FinishMessage is the free-text provider explanation. Gemini
+	// populates this for non-success FinishReason values; other providers
+	// leave it empty. Use as the user-facing message when len(Images) == 0.
+	FinishMessage string
 }
 
 // ImageOption configures GenerateImage.
@@ -791,6 +802,7 @@ func parseImageResponse(provider string, body []byte) (ImageResponse, error) {
 
 	images, text := extractGoogleImageParts(raw)
 	inputPath, outputPath := providers.UsagePaths(provider)
+	finishReason, finishMessage := extractFinishSignal(raw, provider)
 	return ImageResponse{
 		Images: images,
 		Text:   text,
@@ -798,6 +810,8 @@ func parseImageResponse(provider string, body []byte) (ImageResponse, error) {
 			Input:  extractIntPath(raw, inputPath),
 			Output: extractIntPath(raw, outputPath),
 		},
+		FinishReason:  finishReason,
+		FinishMessage: finishMessage,
 	}, nil
 }
 
@@ -855,10 +869,16 @@ func parseImageResponseDataArray(raw map[string]any, inputPath, outputPath strin
 func parseVertexImageResponse(raw map[string]any) ImageResponse {
 	preds, _ := raw["predictions"].([]any)
 	var images []ImageData
+	var finishReason string
 	for _, item := range preds {
 		entry, ok := item.(map[string]any)
 		if !ok {
 			continue
+		}
+		if finishReason == "" {
+			if rai, ok := entry["raiFilteredReason"].(string); ok && rai != "" {
+				finishReason = rai
+			}
 		}
 		b64, _ := entry["bytesBase64Encoded"].(string)
 		if b64 == "" {
@@ -874,7 +894,7 @@ func parseVertexImageResponse(raw map[string]any) ImageResponse {
 		}
 		images = append(images, ImageData{MimeType: mime, Bytes: decoded})
 	}
-	return ImageResponse{Images: images}
+	return ImageResponse{Images: images, FinishReason: finishReason}
 }
 
 // extractGoogleImageParts walks candidates[0].content.parts, returning every
