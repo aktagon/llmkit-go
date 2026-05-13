@@ -1536,3 +1536,65 @@ func TestGenerateImageVertexRejectsQualityOutputFormatBackground(t *testing.T) {
 		}
 	}
 }
+
+// TestGenerateImageGoogleBlockedSurfacesFinishReason verifies that when
+// Gemini returns a candidate without parts but with finishReason +
+// finishMessage (a blocked / declined generation), the parser surfaces
+// both fields on ImageResponse so callers can show a useful message.
+func TestGenerateImageGoogleBlockedSurfacesFinishReason(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{
+			"candidates": []map[string]any{{
+				"finishReason":  "IMAGE_OTHER",
+				"finishMessage": "Could not generate image. Try rephrasing the prompt.",
+			}},
+			"usageMetadata": map[string]any{
+				"promptTokenCount":     8,
+				"candidatesTokenCount": 0,
+			},
+		})
+	}))
+	defer server.Close()
+
+	c := New(providers.Google, "test-key")
+	c.provider.baseURL = server.URL
+	resp, err := c.Image.Model(flashModel).Generate(context.Background(), "blocked prompt")
+	if err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+	if len(resp.Images) != 0 {
+		t.Errorf("expected 0 images, got %d", len(resp.Images))
+	}
+	if resp.FinishReason != "IMAGE_OTHER" {
+		t.Errorf("expected FinishReason=IMAGE_OTHER, got %q", resp.FinishReason)
+	}
+	if resp.FinishMessage != "Could not generate image. Try rephrasing the prompt." {
+		t.Errorf("FinishMessage mismatch: %q", resp.FinishMessage)
+	}
+}
+
+// TestGenerateImageVertexSurfacesRaiFilteredReason confirms Vertex Imagen
+// maps predictions[0].raiFilteredReason onto ImageResponse.FinishReason.
+func TestGenerateImageVertexSurfacesRaiFilteredReason(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{
+			"predictions": []map[string]any{{
+				"raiFilteredReason": "Image filtered by safety system",
+			}},
+		})
+	}))
+	defer server.Close()
+
+	c := New(providers.Vertex, "Bearer fake-token-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+	c.provider.baseURL = server.URL
+	resp, err := c.Image.Model(vertexImagen3).Generate(context.Background(), "blocked")
+	if err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+	if len(resp.Images) != 0 {
+		t.Errorf("expected 0 images, got %d", len(resp.Images))
+	}
+	if resp.FinishReason != "Image filtered by safety system" {
+		t.Errorf("expected raiFilteredReason on FinishReason, got %q", resp.FinishReason)
+	}
+}

@@ -131,6 +131,62 @@ func TestPromptAnthropic(t *testing.T) {
 	}
 }
 
+// TestPromptSurfacesFinishReason confirms the per-provider finish_reason
+// path lifts onto Response.FinishReason. Uses Anthropic's stop_reason
+// because its location (top-level) makes the test small.
+func TestPromptSurfacesFinishReason(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{
+			"content": []map[string]any{{"type": "text", "text": "truncated"}},
+			"usage": map[string]any{
+				"input_tokens":  4,
+				"output_tokens": 10,
+			},
+			"stop_reason": "max_tokens",
+		})
+	}))
+	defer server.Close()
+
+	c := New(providers.Anthropic, "test-key")
+	c.provider.baseURL = server.URL
+	resp, err := c.Text.MaxTokens(10).Prompt(context.Background(), "ping")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.FinishReason != "max_tokens" {
+		t.Errorf("expected FinishReason=max_tokens, got %q", resp.FinishReason)
+	}
+	if resp.FinishMessage != "" {
+		t.Errorf("expected empty FinishMessage on Anthropic, got %q", resp.FinishMessage)
+	}
+}
+
+// TestPromptOmitsFinishReasonWhenAbsent verifies that providers which
+// don't return a stop signal on a normal completion leave the fields empty.
+func TestPromptOmitsFinishReasonWhenAbsent(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{
+			"content": []map[string]any{{"type": "text", "text": "ok"}},
+			"usage": map[string]any{
+				"input_tokens":  1,
+				"output_tokens": 1,
+			},
+		})
+	}))
+	defer server.Close()
+
+	c := New(providers.Anthropic, "test-key")
+	c.provider.baseURL = server.URL
+	resp, err := c.Text.Prompt(context.Background(), "ping")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.FinishReason != "" || resp.FinishMessage != "" {
+		t.Errorf("expected empty finish fields, got reason=%q message=%q",
+			resp.FinishReason, resp.FinishMessage)
+	}
+}
+
 func TestPromptValidation(t *testing.T) {
 	ctx := context.Background()
 
@@ -776,6 +832,68 @@ func TestPromptBatch(t *testing.T) {
 	}
 	if results[1].Text != "response 2" {
 		t.Errorf("expected 'response 2', got %q", results[1].Text)
+	}
+}
+
+// TestBatch_PropagatesChainSamplingOptions verifies ADR-012 REQ-PROP-003 for
+// the Go batch path: every chain field set on *Text reaches the per-request
+// wire body. Go threads options through `(req, opts) := b.buildRequest(...)`,
+// but this test makes the contract assertion explicit so any regression in
+// either the typed-builder layer or the underlying promptBatch signature
+// surfaces immediately rather than silently dropping options.
+func TestBatch_PropagatesChainSamplingOptions(t *testing.T) {
+	var captured map[string]any
+	callCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		switch {
+		case r.Method == "POST":
+			body, _ := io.ReadAll(r.Body)
+			json.Unmarshal(body, &captured)
+			json.NewEncoder(w).Encode(map[string]any{
+				"id":                "batch_opts",
+				"processing_status": "in_progress",
+			})
+		case r.Method == "GET" && callCount == 2:
+			json.NewEncoder(w).Encode(map[string]any{
+				"id":                "batch_opts",
+				"processing_status": "ended",
+			})
+		case r.Method == "GET" && callCount == 3:
+			fmt.Fprintln(w, `{"custom_id":"req-0","result":{"type":"succeeded","message":{"content":[{"type":"text","text":"ok"}],"usage":{"input_tokens":1,"output_tokens":1}}}}`)
+		}
+	}))
+	defer server.Close()
+
+	c := New(providers.Anthropic, "key")
+	c.provider.baseURL = server.URL
+	stops := []string{"END"}
+	_, err := c.Text.
+		System("be terse").
+		MaxTokens(64).
+		Temperature(0.3).
+		TopP(0.9).
+		StopSequences(stops...).
+		Batch(context.Background(), "ping")
+	if err != nil {
+		t.Fatal(err)
+	}
+	items := captured["requests"].([]any)
+	params := items[0].(map[string]any)["params"].(map[string]any)
+	if params["max_tokens"].(float64) != 64 {
+		t.Errorf("max_tokens not propagated: got %v", params["max_tokens"])
+	}
+	if params["temperature"].(float64) != 0.3 {
+		t.Errorf("temperature not propagated: got %v", params["temperature"])
+	}
+	if params["top_p"].(float64) != 0.9 {
+		t.Errorf("top_p not propagated: got %v", params["top_p"])
+	}
+	if seq, ok := params["stop_sequences"].([]any); !ok || len(seq) != 1 || seq[0] != "END" {
+		t.Errorf("stop_sequences not propagated: got %v", params["stop_sequences"])
+	}
+	if params["system"] != "be terse" {
+		t.Errorf("system not propagated: got %v", params["system"])
 	}
 }
 
