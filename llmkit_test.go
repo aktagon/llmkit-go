@@ -452,6 +452,141 @@ func TestPromptStreamWithCachingUnsupported(t *testing.T) {
 	}
 }
 
+// ADR-013: stream-time finish-reason surfaces on the trailing TextStream.Response().
+
+func TestStreamFinishReason_OpenAI(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(200)
+		flusher := w.(http.Flusher)
+		events := []string{
+			`data: {"choices":[{"delta":{"content":"Hi"},"finish_reason":null}]}`,
+			`data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":1,"completion_tokens":1}}`,
+			`data: [DONE]`,
+		}
+		for _, e := range events {
+			fmt.Fprintln(w, e)
+			fmt.Fprintln(w)
+			flusher.Flush()
+		}
+	}))
+	defer server.Close()
+
+	c := New(providers.OpenAI, "key")
+	c.provider.baseURL = server.URL
+	stream := c.Text.Stream(context.Background(), "Hi")
+	for chunk, err := range stream.Chunks() {
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = chunk
+	}
+	if got := stream.Response().FinishReason; got != "stop" {
+		t.Errorf("expected FinishReason 'stop', got %q", got)
+	}
+}
+
+func TestStreamFinishReason_Anthropic(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(200)
+		flusher := w.(http.Flusher)
+		events := []string{
+			"event: content_block_delta",
+			`data: {"delta":{"text":"Hi"}}`,
+			"",
+			"event: message_delta",
+			`data: {"usage":{"output_tokens":1}}`,
+			"",
+			"event: message_stop",
+			`data: {"type":"message_stop","stop_reason":"end_turn"}`,
+		}
+		for _, e := range events {
+			fmt.Fprintln(w, e)
+			flusher.Flush()
+		}
+	}))
+	defer server.Close()
+
+	c := New(providers.Anthropic, "key")
+	c.provider.baseURL = server.URL
+	stream := c.Text.Stream(context.Background(), "Hi")
+	for chunk, err := range stream.Chunks() {
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = chunk
+	}
+	if got := stream.Response().FinishReason; got != "end_turn" {
+		t.Errorf("expected FinishReason 'end_turn', got %q", got)
+	}
+}
+
+func TestStreamFinishReason_Google(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(200)
+		flusher := w.(http.Flusher)
+		// First chunk has the unspecified sentinel — must NOT overwrite the
+		// real terminal value that arrives in the final chunk.
+		events := []string{
+			`data: {"candidates":[{"content":{"parts":[{"text":"Hi"}]},"finishReason":"FINISH_REASON_UNSPECIFIED"}]}`,
+			`data: {"candidates":[{"content":{"parts":[{"text":""}]},"finishReason":"STOP"}]}`,
+		}
+		for _, e := range events {
+			fmt.Fprintln(w, e)
+			fmt.Fprintln(w)
+			flusher.Flush()
+		}
+	}))
+	defer server.Close()
+
+	c := New(providers.Google, "key")
+	c.provider.baseURL = server.URL
+	stream := c.Text.Stream(context.Background(), "Hi")
+	for chunk, err := range stream.Chunks() {
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = chunk
+	}
+	if got := stream.Response().FinishReason; got != "STOP" {
+		t.Errorf("expected FinishReason 'STOP', got %q", got)
+	}
+}
+
+func TestStreamFinishReason_Grok(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(200)
+		flusher := w.(http.Flusher)
+		events := []string{
+			`data: {"choices":[{"delta":{"content":"Hi"},"finish_reason":null}]}`,
+			`data: {"choices":[{"delta":{},"finish_reason":"length"}]}`,
+			`data: [DONE]`,
+		}
+		for _, e := range events {
+			fmt.Fprintln(w, e)
+			fmt.Fprintln(w)
+			flusher.Flush()
+		}
+	}))
+	defer server.Close()
+
+	c := New(providers.Grok, "key")
+	c.provider.baseURL = server.URL
+	stream := c.Text.Stream(context.Background(), "Hi")
+	for chunk, err := range stream.Chunks() {
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = chunk
+	}
+	if got := stream.Response().FinishReason; got != "length" {
+		t.Errorf("expected FinishReason 'length', got %q", got)
+	}
+}
+
 func TestReasoningEffortValidation(t *testing.T) {
 	// Valid value should pass validation (will fail at HTTP level, but that's fine)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

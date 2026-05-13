@@ -224,13 +224,16 @@ func doSigV4Post(ctx context.Context, client *http.Client, url string, body []by
 }
 
 // doStreamPost sends a POST request and processes SSE events via callback.
-// Returns accumulated usage after the stream ends.
+// Returns accumulated usage and the stream-time finish-reason after the
+// stream ends. finishReasonPath uses ADR-013 form: `event_name:json.path`
+// (event-typed SSE — Anthropic message_stop) or bare `json.path`
+// (data-only SSE — OpenAI / Grok / Google). Empty disables capture.
 func doStreamPost(ctx context.Context, client *http.Client, url string, body []byte, headers map[string]string,
-	streamCfg *providers.StreamDef, callback func(string)) (Usage, error) {
+	streamCfg *providers.StreamDef, finishReasonPath string, callback func(string)) (Usage, string, error) {
 
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
 	if err != nil {
-		return Usage{}, err
+		return Usage{}, "", err
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -240,20 +243,23 @@ func doStreamPost(ctx context.Context, client *http.Client, url string, body []b
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return Usage{}, err
+		return Usage{}, "", err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
 		data, _ := io.ReadAll(resp.Body)
-		return Usage{}, &APIError{
+		return Usage{}, "", &APIError{
 			StatusCode: resp.StatusCode,
 			Message:    string(data),
 			Retryable:  resp.StatusCode == 429 || resp.StatusCode >= 500,
 		}
 	}
 
+	finishEvent, finishJSONPath := parseStreamFinishPath(finishReasonPath)
+
 	var usage Usage
+	var finishReason string
 	var currentEvent string
 	scanner := bufio.NewScanner(resp.Body)
 	// Default Scanner buffer is 64KB. SSE frames carrying large
@@ -278,9 +284,26 @@ func doStreamPost(ctx context.Context, client *http.Client, url string, body []b
 		}
 		data := strings.TrimPrefix(line, "data: ")
 
-		// Check done signal (data-level, e.g., OpenAI's [DONE])
+		// Check done signal (data-level, e.g., OpenAI's [DONE]).
+		// [DONE] is the literal sentinel string, not JSON — bail before parsing.
 		if streamCfg.DoneSignal != "" && data == streamCfg.DoneSignal {
 			break
+		}
+
+		// Parse the data frame BEFORE the event-level done break: providers
+		// like Anthropic carry finish_reason on the message_stop event's body,
+		// and dropping the parse here would discard that signal (ADR-013).
+		var parsed map[string]any
+		parseErr := json.Unmarshal([]byte(data), &parsed)
+
+		if parseErr == nil && finishJSONPath != "" {
+			if finishEvent == "" || finishEvent == currentEvent {
+				if pathPresent(parsed, finishJSONPath) {
+					if v := extractPath(parsed, finishJSONPath); v != "" && v != "<nil>" && v != "FINISH_REASON_UNSPECIFIED" {
+						finishReason = v
+					}
+				}
+			}
 		}
 
 		// Check done event (event-level, e.g., Anthropic's message_stop)
@@ -288,8 +311,7 @@ func doStreamPost(ctx context.Context, client *http.Client, url string, body []b
 			break
 		}
 
-		var parsed map[string]any
-		if json.Unmarshal([]byte(data), &parsed) != nil {
+		if parseErr != nil {
 			continue
 		}
 
@@ -326,7 +348,21 @@ func doStreamPost(ctx context.Context, client *http.Client, url string, body []b
 		currentEvent = ""
 	}
 
-	return usage, scanner.Err()
+	return usage, finishReason, scanner.Err()
+}
+
+// parseStreamFinishPath splits an ADR-013 stream-finish locator into its
+// optional event-name prefix and the JSON path. `event_name:json.path`
+// returns (event_name, json.path); bare `json.path` returns ("", json.path);
+// empty returns ("", "").
+func parseStreamFinishPath(p string) (eventName, jsonPath string) {
+	if p == "" {
+		return "", ""
+	}
+	if idx := strings.Index(p, ":"); idx >= 0 {
+		return p[:idx], p[idx+1:]
+	}
+	return "", p
 }
 
 // detectMimeType returns MIME type based on file extension.
