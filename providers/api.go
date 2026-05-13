@@ -87,6 +87,8 @@ func CacheResponseFields() []APIResponseFieldDef {
 	return []APIResponseFieldDef{
 		{GoFieldName: "CacheRead", GoFieldType: "int", SourcePath: "cacheReadTokensPath"},
 		{GoFieldName: "CacheWrite", GoFieldType: "int", SourcePath: "cacheWriteTokensPath"},
+		{GoFieldName: "FinishMessage", GoFieldType: "string", SourcePath: "finishMessagePath"},
+		{GoFieldName: "FinishReason", GoFieldType: "string", SourcePath: "finishReasonPath"},
 		{GoFieldName: "Images", GoFieldType: "[]ImageData", SourcePath: "candidates[0].content.parts[*].inlineData"},
 		{GoFieldName: "Input", GoFieldType: "int", SourcePath: "usageInputPath"},
 		{GoFieldName: "Output", GoFieldType: "int", SourcePath: "usageOutputPath"},
