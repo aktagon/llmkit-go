@@ -555,6 +555,42 @@ func TestStreamFinishReason_Google(t *testing.T) {
 	}
 }
 
+// Negative case: a provider with no stream_finish_reason_path declared
+// must leave FinishReason empty even when the stream emits a frame that
+// would otherwise match (e.g., OpenAI-shaped wire). Guards against an
+// accidental "always-extract" regression that would fan out signals to
+// providers whose A-Box explicitly opted out.
+func TestStreamFinishReason_NoPathLeavesEmpty(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(200)
+		flusher := w.(http.Flusher)
+		events := []string{
+			`data: {"choices":[{"delta":{"content":"Hi"},"finish_reason":"stop"}]}`,
+			`data: [DONE]`,
+		}
+		for _, e := range events {
+			fmt.Fprintln(w, e)
+			fmt.Fprintln(w)
+			flusher.Flush()
+		}
+	}))
+	defer server.Close()
+
+	c := New(providers.Groq, "key")
+	c.provider.baseURL = server.URL
+	stream := c.Text.Stream(context.Background(), "Hi")
+	for chunk, err := range stream.Chunks() {
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = chunk
+	}
+	if got := stream.Response().FinishReason; got != "" {
+		t.Errorf("expected empty FinishReason on path-less provider, got %q", got)
+	}
+}
+
 func TestStreamFinishReason_Grok(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
