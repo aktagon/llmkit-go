@@ -99,7 +99,7 @@ func promptStream(ctx context.Context, p Provider, req Request, callback StreamC
 		callback(chunk)
 	}
 
-	usage, err := doStreamPost(ctx, o.httpClient, url, jsonBody, headers, streamCfg, wrappedCallback)
+	usage, finishReason, err := doStreamPost(ctx, o.httpClient, url, jsonBody, headers, streamCfg, cfg.StreamFinishReasonPath, wrappedCallback)
 	postEv := baseEvent
 	postEv.Usage = usage
 	postEv.Err = err
@@ -110,8 +110,9 @@ func promptStream(ctx context.Context, p Provider, req Request, callback StreamC
 	}
 
 	return Response{
-		Text:   fullText.String(),
-		Tokens: usage,
+		Text:         fullText.String(),
+		Tokens:       usage,
+		FinishReason: finishReason,
 	}, nil
 }
 
