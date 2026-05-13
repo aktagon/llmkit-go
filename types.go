@@ -29,6 +29,20 @@ type Request struct {
 type Response struct {
 	Text   string
 	Tokens Usage
+	//
+	//
+	//
+	//
+	//
+	//
+	//
+	//
+	//
+	FinishReason string
+	//
+	//
+	//
+	FinishMessage string
 }
 
 //
