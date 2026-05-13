@@ -299,6 +299,12 @@ func doStreamPost(ctx context.Context, client *http.Client, url string, body []b
 		if parseErr == nil && finishJSONPath != "" {
 			if finishEvent == "" || finishEvent == currentEvent {
 				if pathPresent(parsed, finishJSONPath) {
+					// pathPresent already vetoes nil; the "<nil>" string
+					// check guards against extractPath's fmt.Sprint
+					// path that stringifies a present-but-nil value
+					// (OpenAI mid-stream `finish_reason: null`). The
+					// TS/Python/Rust parsers return "" for null and
+					// rely on truthiness — Go alone needs the literal.
 					if v := extractPath(parsed, finishJSONPath); v != "" && v != "<nil>" && v != "FINISH_REASON_UNSPECIFIED" {
 						finishReason = v
 					}
