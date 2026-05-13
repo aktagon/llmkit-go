@@ -299,6 +299,12 @@ func doStreamPost(ctx context.Context, client *http.Client, url string, body []b
 		if parseErr == nil && finishJSONPath != "" {
 			if finishEvent == "" || finishEvent == currentEvent {
 				if pathPresent(parsed, finishJSONPath) {
+					//
+					//
+					//
+					//
+					//
+					//
 					if v := extractPath(parsed, finishJSONPath); v != "" && v != "<nil>" && v != "FINISH_REASON_UNSPECIFIED" {
 						finishReason = v
 					}
