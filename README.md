@@ -237,6 +237,33 @@ reachable through `ExtraFields(...)` — they spread into the request's
 `parameters` block. Vertex's `:predict` response does not carry token
 counts; `resp.Tokens` stays zero.
 
+### Safety Settings
+
+Control content filtering for Gemini providers. `SafetySettings` applies to text
+generation, streaming, agents, and Gemini image generation. `SafetyFilter` applies
+to Vertex Imagen only.
+
+```go
+import llmkit "github.com/aktagon/llmkit-go"
+
+// Gemini text or agent
+resp, err := c.Text.
+    SafetySettings([]llmkit.SafetySetting{
+        {Category: llmkit.HarmCategoryDangerousContent, Threshold: llmkit.HarmBlockThresholdNone},
+        {Category: llmkit.HarmCategoryHarassment, Threshold: llmkit.HarmBlockThresholdHighOnly},
+    }).
+    Prompt(ctx, "Write a story")
+
+// Vertex Imagen
+img, err := c.Image.Model("imagen-3.0-generate-002").
+    SafetyFilter(llmkit.ImageSafetyFilterBlockFew).
+    Generate(ctx, "A landscape")
+```
+
+`SafetySettings` on Vertex Imagen and `SafetyFilter` on non-Imagen providers return
+a `*ValidationError`. The `HarmCategory*`, `HarmBlockThreshold*`, and
+`ImageSafetyFilter*` constants cover all documented values; raw strings also work.
+
 ## Options
 
 ```go
