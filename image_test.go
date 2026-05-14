@@ -1632,3 +1632,56 @@ func TestGenerateImageSafetyFilterRejectedOnNonVertex(t *testing.T) {
 		t.Error("expected error for safety_filter on Google (non-Vertex) provider")
 	}
 }
+
+func TestGenerateImageGoogleSafetySettingsWireBody(t *testing.T) {
+	encoded := base64.StdEncoding.EncodeToString(fakePNG)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var req map[string]any
+		json.Unmarshal(body, &req)
+		ss, ok := req["safetySettings"]
+		if !ok {
+			t.Error("expected safetySettings in wire body")
+		}
+		arr := ss.([]any)
+		if len(arr) != 1 {
+			t.Fatalf("expected safetySettings[1], got %d", len(arr))
+		}
+		entry := arr[0].(map[string]any)
+		if entry["category"] != HarmCategoryHarassment {
+			t.Errorf("category: got %v", entry["category"])
+		}
+		if entry["threshold"] != HarmBlockThresholdNone {
+			t.Errorf("threshold: got %v", entry["threshold"])
+		}
+		json.NewEncoder(w).Encode(map[string]any{
+			"candidates": []map[string]any{{
+				"content": map[string]any{
+					"parts": []map[string]any{
+						{"inlineData": map[string]any{"mimeType": "image/png", "data": encoded}},
+					},
+				},
+			}},
+		})
+	}))
+	defer server.Close()
+
+	c := Google("key")
+	c.provider.baseURL = server.URL
+	_, err := c.Image.Model(flashModel).
+		SafetySettings([]SafetySetting{{Category: HarmCategoryHarassment, Threshold: HarmBlockThresholdNone}}).
+		Generate(context.Background(), "a cat")
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestGenerateImageSafetySettingsRejectedOnOpenAI(t *testing.T) {
+	c := Openai("key")
+	_, err := c.Image.Model("gpt-image-1").
+		SafetySettings([]SafetySetting{{Category: HarmCategoryHarassment, Threshold: HarmBlockThresholdNone}}).
+		Generate(context.Background(), "x")
+	if err == nil {
+		t.Error("expected error for safety_settings on OpenAI provider")
+	}
+}
