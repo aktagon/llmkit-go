@@ -449,6 +449,16 @@ func buildRequest(p Provider, req Request, o *options, cfg providers.ProviderCon
 	}
 
 	//
+	//
+	if cfg.SafetySettingsWirePath != "" && len(o.safetySettings) > 0 {
+		ss := make([]map[string]any, len(o.safetySettings))
+		for i, s := range o.safetySettings {
+			ss[i] = map[string]any{"category": s.Category, "threshold": s.Threshold}
+		}
+		body[cfg.SafetySettingsWirePath] = ss
+	}
+
+	//
 	if req.Schema != "" {
 		addStructuredOutput(body, headers, req.Schema, p.Name, cfg)
 	}

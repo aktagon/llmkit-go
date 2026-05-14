@@ -169,6 +169,9 @@ func (b *Text) buildRequest(finalText string) (Request, []Option) {
 	if b.reasoningEffort != "" {
 		opts = append(opts, WithReasoningEffort(b.reasoningEffort))
 	}
+	if len(b.safetySettings) > 0 {
+		opts = append(opts, WithSafetySettings(b.safetySettings...))
+	}
 	return req, opts
 }
 

@@ -89,6 +89,40 @@ type Tool struct {
 }
 
 //
+//
+//
+//
+type SafetySetting struct {
+	Category  string // e.g. "HARM_CATEGORY_DANGEROUS_CONTENT"
+	Threshold string // e.g. "BLOCK_ONLY_HIGH" or "BLOCK_NONE"
+}
+
+//
+const (
+	HarmCategoryHarassment       = "HARM_CATEGORY_HARASSMENT"
+	HarmCategoryHateSpeech       = "HARM_CATEGORY_HATE_SPEECH"
+	HarmCategorySexuallyExplicit = "HARM_CATEGORY_SEXUALLY_EXPLICIT"
+	HarmCategoryDangerousContent = "HARM_CATEGORY_DANGEROUS_CONTENT"
+	HarmCategoryCivicIntegrity   = "HARM_CATEGORY_CIVIC_INTEGRITY"
+)
+
+//
+const (
+	HarmBlockThresholdNone           = "BLOCK_NONE"
+	HarmBlockThresholdLowAndAbove    = "BLOCK_LOW_AND_ABOVE"
+	HarmBlockThresholdMediumAndAbove = "BLOCK_MEDIUM_AND_ABOVE"
+	HarmBlockThresholdHighOnly       = "BLOCK_ONLY_HIGH"
+)
+
+//
+const (
+	ImageSafetyFilterBlockFew      = "block_few"
+	ImageSafetyFilterBlockSome     = "block_some"
+	ImageSafetyFilterBlockMost     = "block_most"
+	ImageSafetyFilterBlockOnlyHigh = "block_only_high"
+)
+
+//
 type Option func(*options)
 
 type options struct {
@@ -107,6 +141,7 @@ type options struct {
 	caching           bool
 	cacheTTL          time.Duration
 	middleware        []providers.MiddlewareFn
+	safetySettings    []SafetySetting
 }
 
 func defaultOptions() *options {
@@ -203,4 +238,10 @@ func WithMaxToolIterations(n int) Option {
 //
 func WithMiddleware(fns ...providers.MiddlewareFn) Option {
 	return func(o *options) { o.middleware = append(o.middleware, fns...) }
+}
+
+//
+//
+func WithSafetySettings(settings ...SafetySetting) Option {
+	return func(o *options) { o.safetySettings = settings }
 }
