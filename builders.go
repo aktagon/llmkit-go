@@ -181,20 +181,21 @@ func (b *Text) TopP(v float64) *Text       { out := *b; x := v; out.topP = &x; r
 // call. Chain methods return new instances (immutable); skipped
 // terminals live in hand-written text.go / image.go.
 type Image struct {
-	client       *Client
-	aspectRatio  string
-	background   string
-	count        *int
-	parts        []Part
-	imageSize    string
-	includeText  bool
-	mask         *MediaRef
-	middleware   []MiddlewareFn
-	model        string
-	outputFormat string
-	quality      string
-	safetyFilter string
-	extraFields  map[string]any
+	client         *Client
+	aspectRatio    string
+	background     string
+	count          *int
+	parts          []Part
+	imageSize      string
+	includeText    bool
+	mask           *MediaRef
+	middleware     []MiddlewareFn
+	model          string
+	outputFormat   string
+	quality        string
+	safetyFilter   string
+	safetySettings []SafetySetting
+	extraFields    map[string]any
 }
 
 func (b *Image) AspectRatio(r string) *Image { out := *b; out.aspectRatio = r; return &out }
@@ -221,6 +222,11 @@ func (b *Image) Model(name string) *Image     { out := *b; out.model = name; ret
 func (b *Image) OutputFormat(s string) *Image { out := *b; out.outputFormat = s; return &out }
 func (b *Image) Quality(s string) *Image      { out := *b; out.quality = s; return &out }
 func (b *Image) SafetyFilter(s string) *Image { out := *b; out.safetyFilter = s; return &out }
+func (b *Image) SafetySettings(s []SafetySetting) *Image {
+	out := *b
+	out.safetySettings = s
+	return &out
+}
 func (b *Image) Text(s string) *Image {
 	out := *b
 	out.parts = append(append([]Part{}, b.parts...), Part{Text: s})
