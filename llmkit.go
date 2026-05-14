@@ -448,6 +448,16 @@ func buildRequest(p Provider, req Request, o *options, cfg providers.ProviderCon
 		addOptions(body, o, p.Name)
 	}
 
+	// Safety settings — top-level field for Gemini (safetySettings array).
+	// cfg.SafetySettingsWirePath is empty for every other provider.
+	if cfg.SafetySettingsWirePath != "" && len(o.safetySettings) > 0 {
+		ss := make([]map[string]any, len(o.safetySettings))
+		for i, s := range o.safetySettings {
+			ss[i] = map[string]any{"category": s.Category, "threshold": s.Threshold}
+		}
+		body[cfg.SafetySettingsWirePath] = ss
+	}
+
 	// Structured output
 	if req.Schema != "" {
 		addStructuredOutput(body, headers, req.Schema, p.Name, cfg)

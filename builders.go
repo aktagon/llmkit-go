@@ -101,6 +101,7 @@ type Text struct {
 	model            string
 	presencePenalty  *float64
 	reasoningEffort  string
+	safetySettings   []SafetySetting
 	schema           string
 	seed             *int64
 	stopSequences    []string
@@ -151,6 +152,11 @@ func (b *Text) ReasoningEffort(level string) *Text {
 	out.reasoningEffort = level
 	return &out
 }
+func (b *Text) SafetySettings(s []SafetySetting) *Text {
+	out := *b
+	out.safetySettings = s
+	return &out
+}
 func (b *Text) Schema(s string) *Text { out := *b; out.schema = s; return &out }
 func (b *Text) Seed(n int64) *Text    { out := *b; v := n; out.seed = &v; return &out }
 func (b *Text) StopSequences(seqs ...string) *Text {
@@ -187,6 +193,7 @@ type Image struct {
 	model        string
 	outputFormat string
 	quality      string
+	safetyFilter string
 	extraFields  map[string]any
 }
 
@@ -213,6 +220,7 @@ func (b *Image) Middleware(fns ...MiddlewareFn) *Image {
 func (b *Image) Model(name string) *Image     { out := *b; out.model = name; return &out }
 func (b *Image) OutputFormat(s string) *Image { out := *b; out.outputFormat = s; return &out }
 func (b *Image) Quality(s string) *Image      { out := *b; out.quality = s; return &out }
+func (b *Image) SafetyFilter(s string) *Image { out := *b; out.safetyFilter = s; return &out }
 func (b *Image) Text(s string) *Image {
 	out := *b
 	out.parts = append(append([]Part{}, b.parts...), Part{Text: s})
@@ -234,6 +242,7 @@ type Agent struct {
 	model             string
 	presencePenalty   *float64
 	reasoningEffort   string
+	safetySettings    []SafetySetting
 	seed              *int64
 	stopSequences     []string
 	system            string
@@ -284,6 +293,12 @@ func (b *Agent) PresencePenalty(v float64) *Agent {
 func (b *Agent) ReasoningEffort(level string) *Agent {
 	out := *b
 	out.reasoningEffort = level
+	out.state = nil
+	return &out
+}
+func (b *Agent) SafetySettings(s []SafetySetting) *Agent {
+	out := *b
+	out.safetySettings = s
 	out.state = nil
 	return &out
 }

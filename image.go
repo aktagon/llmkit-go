@@ -85,6 +85,7 @@ type imageOptions struct {
 	background   string
 	count        *int
 	mask         *MediaRef
+	safetyFilter string
 	extraFields  map[string]any
 	middleware   []providers.MiddlewareFn
 	httpClient   *http.Client
@@ -170,6 +171,13 @@ func WithImageMask(mime string, data []byte) ImageOption {
 	return func(o *imageOptions) {
 		o.mask = &MediaRef{MimeType: mime, Bytes: append([]byte(nil), data...)}
 	}
+}
+
+// WithImageSafetyFilter sets the global safety threshold for Vertex Imagen.
+// Wire field: parameters.safetySetting. Use ImageSafetyFilter* constants or
+// a raw string. ValidationError on all other image-gen providers.
+func WithImageSafetyFilter(threshold string) ImageOption {
+	return func(o *imageOptions) { o.safetyFilter = threshold }
 }
 
 func resolveImageOptions(opts []ImageOption) *imageOptions {
@@ -271,6 +279,9 @@ func generateImage(ctx context.Context, p Provider, req ImageRequest, opts ...Im
 		if o.mask != nil {
 			return ImageResponse{}, &ValidationError{Field: "mask", Message: "not supported by " + p.Name}
 		}
+		if o.safetyFilter != "" {
+			return ImageResponse{}, &ValidationError{Field: "safety_filter", Message: "not supported by " + p.Name + "; use SafetySettings for text-gen"}
+		}
 	case providers.ImageInputJSONInlineRefs: // xAI Grok
 		if o.quality != "" {
 			return ImageResponse{}, &ValidationError{Field: "quality", Message: "not supported by " + p.Name}
@@ -284,9 +295,15 @@ func generateImage(ctx context.Context, p Provider, req ImageRequest, opts ...Im
 		if o.mask != nil {
 			return ImageResponse{}, &ValidationError{Field: "mask", Message: "not supported by " + p.Name}
 		}
+		if o.safetyFilter != "" {
+			return ImageResponse{}, &ValidationError{Field: "safety_filter", Message: "not supported by " + p.Name}
+		}
 	case providers.ImageInputMultipartForm: // OpenAI
 		if o.mask != nil && imageCount == 0 {
 			return ImageResponse{}, &ValidationError{Field: "mask", Message: "requires at least one image part (edits branch only)"}
+		}
+		if o.safetyFilter != "" {
+			return ImageResponse{}, &ValidationError{Field: "safety_filter", Message: "not supported by " + p.Name}
 		}
 	case providers.ImageInputJSONPredict: // Vertex Imagen
 		if o.quality != "" {
@@ -298,6 +315,7 @@ func generateImage(ctx context.Context, p Provider, req ImageRequest, opts ...Im
 		if o.background != "" {
 			return ImageResponse{}, &ValidationError{Field: "background", Message: "not supported by " + p.Name}
 		}
+		// safetyFilter is valid for Vertex Imagen; wired in buildVertexBody
 	}
 
 	baseEvent := providers.Event{
@@ -631,6 +649,9 @@ func buildVertexBody(parts []Part, o *imageOptions) map[string]any {
 	}
 	if o.aspectRatio != "" {
 		parameters["aspectRatio"] = o.aspectRatio
+	}
+	if o.safetyFilter != "" {
+		parameters["safetySetting"] = o.safetyFilter
 	}
 	for k, v := range o.extraFields {
 		parameters[k] = v

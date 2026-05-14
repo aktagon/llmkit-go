@@ -88,6 +88,40 @@ type Tool struct {
 	Run         func(map[string]any) (string, error)
 }
 
+// SafetySetting configures a per-category content safety filter for Gemini providers.
+// Category and Threshold are passed through verbatim to the provider wire body —
+// use the HARM_CATEGORY_* and HARM_BLOCK_THRESHOLD_* constants or Google's latest
+// string values directly.
+type SafetySetting struct {
+	Category  string // e.g. "HARM_CATEGORY_DANGEROUS_CONTENT"
+	Threshold string // e.g. "BLOCK_ONLY_HIGH" or "BLOCK_NONE"
+}
+
+// Harm category constants for SafetySetting.Category.
+const (
+	HarmCategoryHarassment       = "HARM_CATEGORY_HARASSMENT"
+	HarmCategoryHateSpeech       = "HARM_CATEGORY_HATE_SPEECH"
+	HarmCategorySexuallyExplicit = "HARM_CATEGORY_SEXUALLY_EXPLICIT"
+	HarmCategoryDangerousContent = "HARM_CATEGORY_DANGEROUS_CONTENT"
+	HarmCategoryCivicIntegrity   = "HARM_CATEGORY_CIVIC_INTEGRITY"
+)
+
+// Harm block threshold constants for SafetySetting.Threshold.
+const (
+	HarmBlockThresholdNone           = "BLOCK_NONE"
+	HarmBlockThresholdLowAndAbove    = "BLOCK_LOW_AND_ABOVE"
+	HarmBlockThresholdMediumAndAbove = "BLOCK_MEDIUM_AND_ABOVE"
+	HarmBlockThresholdHighOnly       = "BLOCK_ONLY_HIGH"
+)
+
+// Vertex Imagen safety filter threshold constants for SafetyFilter.
+const (
+	ImageSafetyFilterBlockFew      = "block_few"
+	ImageSafetyFilterBlockSome     = "block_some"
+	ImageSafetyFilterBlockMost     = "block_most"
+	ImageSafetyFilterBlockOnlyHigh = "block_only_high"
+)
+
 // Option configures a Prompt or Agent call.
 type Option func(*options)
 
@@ -107,6 +141,7 @@ type options struct {
 	caching           bool
 	cacheTTL          time.Duration
 	middleware        []providers.MiddlewareFn
+	safetySettings    []SafetySetting
 }
 
 func defaultOptions() *options {
@@ -203,4 +238,10 @@ func WithMaxToolIterations(n int) Option {
 // Middlewares fire in registration order.
 func WithMiddleware(fns ...providers.MiddlewareFn) Option {
 	return func(o *options) { o.middleware = append(o.middleware, fns...) }
+}
+
+// WithSafetySettings sets per-category content safety filters.
+// Gemini AI Studio only — ValidationError on providers without a safetySettingsWirePath.
+func WithSafetySettings(settings ...SafetySetting) Option {
+	return func(o *options) { o.safetySettings = settings }
 }
