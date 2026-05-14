@@ -54,6 +54,9 @@ func (b *Image) Generate(ctx context.Context, finalText string) (ImageResponse, 
 	if b.safetyFilter != "" {
 		opts = append(opts, WithImageSafetyFilter(b.safetyFilter))
 	}
+	if len(b.safetySettings) > 0 {
+		opts = append(opts, WithImageSafetySettings(b.safetySettings...))
+	}
 	if len(b.extraFields) > 0 {
 		opts = append(opts, WithImageExtraFields(b.extraFields))
 	}
