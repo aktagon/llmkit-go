@@ -1207,6 +1207,74 @@ func TestPromptBatchOpenAI(t *testing.T) {
 }
 
 // splitJSONLLines splits JSONL bytes into non-empty trimmed lines.
+func TestPromptSafetySettingsGoogle(t *testing.T) {
+	var captured map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		json.Unmarshal(body, &captured)
+		json.NewEncoder(w).Encode(map[string]any{
+			"candidates": []map[string]any{{
+				"content": map[string]any{"parts": []map[string]any{{"text": "ok"}}},
+			}},
+			"usageMetadata": map[string]any{"promptTokenCount": 1, "candidatesTokenCount": 1},
+		})
+	}))
+	defer server.Close()
+
+	c := New(providers.Google, "key")
+	c.provider.baseURL = server.URL
+	_, err := c.Text.
+		SafetySettings([]SafetySetting{
+			{Category: HarmCategoryHarassment, Threshold: HarmBlockThresholdNone},
+		}).
+		Prompt(context.Background(), "hello")
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, ok := captured["safetySettings"]
+	if !ok {
+		t.Fatal("expected safetySettings in wire body")
+	}
+	ss, ok := raw.([]any)
+	if !ok || len(ss) != 1 {
+		t.Fatalf("expected safetySettings array[1], got %T %v", raw, raw)
+	}
+	entry := ss[0].(map[string]any)
+	if entry["category"] != HarmCategoryHarassment {
+		t.Errorf("category: expected %q, got %v", HarmCategoryHarassment, entry["category"])
+	}
+	if entry["threshold"] != HarmBlockThresholdNone {
+		t.Errorf("threshold: expected %q, got %v", HarmBlockThresholdNone, entry["threshold"])
+	}
+}
+
+func TestPromptSafetySettingsRejectedOnOpenAI(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{
+			"choices": []map[string]any{{"message": map[string]any{"content": "ok"}}},
+			"usage":   map[string]any{"prompt_tokens": 1, "completion_tokens": 1},
+		})
+	}))
+	defer server.Close()
+
+	c := New(providers.OpenAI, "key")
+	c.provider.baseURL = server.URL
+	resp, err := c.Text.
+		SafetySettings([]SafetySetting{
+			{Category: HarmCategoryHarassment, Threshold: HarmBlockThresholdNone},
+		}).
+		Prompt(context.Background(), "hello")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// OpenAI has no safetySettingsWirePath — settings must be silently dropped,
+	// not cause an error, and not leak into the wire body (no validation at the
+	// text-gen layer, only on the image-gen layer for safety_filter).
+	if resp.Text != "ok" {
+		t.Errorf("expected text=ok, got %q", resp.Text)
+	}
+}
+
 func splitJSONLLines(data []byte) []string {
 	var lines []string
 	for _, line := range strings.Split(string(data), "\n") {

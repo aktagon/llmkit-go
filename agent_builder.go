@@ -83,6 +83,9 @@ func (b *Agent) initAgent() {
 	if len(b.middleware) > 0 {
 		opts = append(opts, WithMiddleware(b.middleware...))
 	}
+	if len(b.safetySettings) > 0 {
+		opts = append(opts, WithSafetySettings(b.safetySettings...))
+	}
 
 	provider := b.client.provider.toProvider(b.model)
 	a := newLegacyAgent(provider, opts...)

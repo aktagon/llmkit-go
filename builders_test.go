@@ -34,6 +34,7 @@ func TestSurface_Chains(t *testing.T) {
 		Model("text-model").
 		PresencePenalty(0.2).
 		ReasoningEffort("high").
+		SafetySettings([]SafetySetting{{Category: "HARM_CATEGORY_HARASSMENT", Threshold: "BLOCK_NONE"}}).
 		Schema(`{"type":"object"}`).
 		Seed(1234).
 		StopSequences("END", "STOP").
@@ -74,6 +75,9 @@ func TestSurface_Chains(t *testing.T) {
 	if len(text.parts) != 2 || text.parts[0].Image == nil || text.parts[1].Text != "hello" {
 		t.Errorf("parts ordering: got %+v", text.parts)
 	}
+	if len(text.safetySettings) != 1 || text.safetySettings[0].Category != "HARM_CATEGORY_HARASSMENT" {
+		t.Errorf("safetySettings: got %+v", text.safetySettings)
+	}
 
 	img := c.Image.
 		AspectRatio("16:9").
@@ -100,6 +104,7 @@ func TestSurface_Chains(t *testing.T) {
 		Model("a").
 		PresencePenalty(0.2).
 		ReasoningEffort("medium").
+		SafetySettings([]SafetySetting{{Category: "HARM_CATEGORY_HATE_SPEECH", Threshold: "BLOCK_MEDIUM_AND_ABOVE"}}).
 		Seed(7).
 		StopSequences("Q:").
 		System("sys").
@@ -114,6 +119,9 @@ func TestSurface_Chains(t *testing.T) {
 	}
 	if agent.maxToolIterations == nil || *agent.maxToolIterations != 3 {
 		t.Errorf("maxToolIterations: got %v", agent.maxToolIterations)
+	}
+	if len(agent.safetySettings) != 1 || agent.safetySettings[0].Category != "HARM_CATEGORY_HATE_SPEECH" {
+		t.Errorf("agent safetySettings: got %+v", agent.safetySettings)
 	}
 
 	up := c.Upload.
