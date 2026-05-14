@@ -1598,3 +1598,37 @@ func TestGenerateImageVertexSurfacesRaiFilteredReason(t *testing.T) {
 		t.Errorf("expected raiFilteredReason on FinishReason, got %q", resp.FinishReason)
 	}
 }
+
+func TestGenerateImageVertexSafetyFilterMapsToParameters(t *testing.T) {
+	encoded := base64.StdEncoding.EncodeToString(fakePNG)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var req map[string]any
+		json.Unmarshal(body, &req)
+		params := req["parameters"].(map[string]any)
+		if got := params["safetySetting"]; got != ImageSafetyFilterBlockFew {
+			t.Errorf("expected safetySetting=%q, got %v", ImageSafetyFilterBlockFew, got)
+		}
+		json.NewEncoder(w).Encode(vertexImageResponse(encoded, 1, "image/png"))
+	}))
+	defer server.Close()
+
+	c := New(providers.Vertex, "test-token")
+	c.provider.baseURL = server.URL
+	_, err := c.Image.Model(vertexImagen3).
+		SafetyFilter(ImageSafetyFilterBlockFew).
+		Generate(context.Background(), "x")
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestGenerateImageSafetyFilterRejectedOnNonVertex(t *testing.T) {
+	c := New(providers.Google, "key")
+	_, err := c.Image.Model("gemini-3.0-flash-preview-image-generation").
+		SafetyFilter(ImageSafetyFilterBlockFew).
+		Generate(context.Background(), "x")
+	if err == nil {
+		t.Error("expected error for safety_filter on Google (non-Vertex) provider")
+	}
+}
