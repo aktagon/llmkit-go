@@ -77,18 +77,19 @@ type ImageResponse struct {
 type ImageOption func(*imageOptions)
 
 type imageOptions struct {
-	aspectRatio  string
-	imageSize    string
-	includeText  bool
-	quality      string
-	outputFormat string
-	background   string
-	count        *int
-	mask         *MediaRef
-	safetyFilter string
-	extraFields  map[string]any
-	middleware   []providers.MiddlewareFn
-	httpClient   *http.Client
+	aspectRatio    string
+	imageSize      string
+	includeText    bool
+	quality        string
+	outputFormat   string
+	background     string
+	count          *int
+	mask           *MediaRef
+	safetyFilter   string
+	safetySettings []SafetySetting
+	extraFields    map[string]any
+	middleware     []providers.MiddlewareFn
+	httpClient     *http.Client
 }
 
 // WithImageHTTPClient overrides the http.Client used for the GenerateImage call.
@@ -178,6 +179,15 @@ func WithImageMask(mime string, data []byte) ImageOption {
 // a raw string. ValidationError on all other image-gen providers.
 func WithImageSafetyFilter(threshold string) ImageOption {
 	return func(o *imageOptions) { o.safetyFilter = threshold }
+}
+
+// WithImageSafetySettings sets per-category safety thresholds for Google
+// image generation (the same safetySettings top-level field as text-gen).
+// Wire field: safetySettings[]. Use SafetySetting{Category, Threshold} with
+// the HarmCategory* / HarmBlockThreshold* constants. ValidationError on all
+// non-Google image-gen providers (safetySettingsWirePath must be non-empty).
+func WithImageSafetySettings(s ...SafetySetting) ImageOption {
+	return func(o *imageOptions) { o.safetySettings = append(o.safetySettings, s...) }
 }
 
 func resolveImageOptions(opts []ImageOption) *imageOptions {
@@ -282,6 +292,7 @@ func generateImage(ctx context.Context, p Provider, req ImageRequest, opts ...Im
 		if o.safetyFilter != "" {
 			return ImageResponse{}, &ValidationError{Field: "safety_filter", Message: "not supported by " + p.Name + "; use SafetySettings for text-gen"}
 		}
+		// safetySettings valid for InlineParts (Google); wired in buildImageBody
 	case providers.ImageInputJSONInlineRefs: // xAI Grok
 		if o.quality != "" {
 			return ImageResponse{}, &ValidationError{Field: "quality", Message: "not supported by " + p.Name}
@@ -298,12 +309,18 @@ func generateImage(ctx context.Context, p Provider, req ImageRequest, opts ...Im
 		if o.safetyFilter != "" {
 			return ImageResponse{}, &ValidationError{Field: "safety_filter", Message: "not supported by " + p.Name}
 		}
+		if len(o.safetySettings) > 0 {
+			return ImageResponse{}, &ValidationError{Field: "safety_settings", Message: "not supported by " + p.Name}
+		}
 	case providers.ImageInputMultipartForm: // OpenAI
 		if o.mask != nil && imageCount == 0 {
 			return ImageResponse{}, &ValidationError{Field: "mask", Message: "requires at least one image part (edits branch only)"}
 		}
 		if o.safetyFilter != "" {
 			return ImageResponse{}, &ValidationError{Field: "safety_filter", Message: "not supported by " + p.Name}
+		}
+		if len(o.safetySettings) > 0 {
+			return ImageResponse{}, &ValidationError{Field: "safety_settings", Message: "not supported by " + p.Name}
 		}
 	case providers.ImageInputJSONPredict: // Vertex Imagen
 		if o.quality != "" {
@@ -314,6 +331,9 @@ func generateImage(ctx context.Context, p Provider, req ImageRequest, opts ...Im
 		}
 		if o.background != "" {
 			return ImageResponse{}, &ValidationError{Field: "background", Message: "not supported by " + p.Name}
+		}
+		if len(o.safetySettings) > 0 {
+			return ImageResponse{}, &ValidationError{Field: "safety_settings", Message: "not supported by " + p.Name + "; use SafetyFilter for Vertex Imagen"}
 		}
 		// safetyFilter is valid for Vertex Imagen; wired in buildVertexBody
 	}
@@ -762,10 +782,18 @@ func buildImageBody(parts []Part, o *imageOptions) map[string]any {
 		genConfig["imageConfig"] = imgConfig
 	}
 
-	return map[string]any{
+	body := map[string]any{
 		"contents":         []map[string]any{{"parts": wire}},
 		"generationConfig": genConfig,
 	}
+	if len(o.safetySettings) > 0 {
+		ss := make([]map[string]any, len(o.safetySettings))
+		for i, s := range o.safetySettings {
+			ss[i] = map[string]any{"category": s.Category, "threshold": s.Threshold}
+		}
+		body["safetySettings"] = ss
+	}
+	return body
 }
 
 // buildImageURL substitutes the per-call image-gen model into the provider's
