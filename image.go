@@ -71,6 +71,11 @@ type ImageResponse struct {
 	//
 	//
 	FinishMessage string
+	//
+	//
+	//
+	//
+	Raw json.RawMessage
 }
 
 //
@@ -90,6 +95,7 @@ type imageOptions struct {
 	extraFields    map[string]any
 	middleware     []providers.MiddlewareFn
 	httpClient     *http.Client
+	raw            bool
 }
 
 //
@@ -188,6 +194,13 @@ func WithImageSafetyFilter(threshold string) ImageOption {
 //
 func WithImageSafetySettings(s ...SafetySetting) ImageOption {
 	return func(o *imageOptions) { o.safetySettings = append(o.safetySettings, s...) }
+}
+
+//
+//
+//
+func withImageRaw() ImageOption {
+	return func(o *imageOptions) { o.raw = true }
 }
 
 func resolveImageOptions(opts []ImageOption) *imageOptions {
@@ -367,6 +380,9 @@ func generateImage(ctx context.Context, p Provider, req ImageRequest, opts ...Im
 	}
 
 	resp, parseErr := parseImageResponse(p.Name, respBody)
+	if o.raw && parseErr == nil {
+		resp.Raw = append(json.RawMessage(nil), respBody...)
+	}
 	postEv := baseEvent
 	postEv.Usage = resp.Tokens
 	postEv.Err = parseErr

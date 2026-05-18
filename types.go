@@ -1,6 +1,7 @@
 package llmkit
 
 import (
+	"encoding/json"
 	"net/http"
 	"time"
 
@@ -43,6 +44,14 @@ type Response struct {
 	//
 	//
 	FinishMessage string
+	//
+	//
+	//
+	//
+	//
+	//
+	//
+	Raw json.RawMessage
 }
 
 //
@@ -142,6 +151,7 @@ type options struct {
 	cacheTTL          time.Duration
 	middleware        []providers.MiddlewareFn
 	safetySettings    []SafetySetting
+	raw               bool
 }
 
 func defaultOptions() *options {
@@ -244,4 +254,12 @@ func WithMiddleware(fns ...providers.MiddlewareFn) Option {
 //
 func WithSafetySettings(settings ...SafetySetting) Option {
 	return func(o *options) { o.safetySettings = settings }
+}
+
+//
+//
+//
+//
+func withRaw() Option {
+	return func(o *options) { o.raw = true }
 }

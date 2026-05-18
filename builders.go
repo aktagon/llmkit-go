@@ -8,9 +8,16 @@ package llmkit
 //
 //
 //
+//
+//
+//
+//
+//
+//
 type BatchHandle struct {
 	ID       string
 	Provider Provider
+	Raw      bool
 }
 
 //
@@ -100,6 +107,7 @@ type Text struct {
 	middleware       []MiddlewareFn
 	model            string
 	presencePenalty  *float64
+	raw              bool
 	reasoningEffort  string
 	safetySettings   []SafetySetting
 	schema           string
@@ -147,6 +155,7 @@ func (b *Text) PresencePenalty(v float64) *Text {
 	out.presencePenalty = &x
 	return &out
 }
+func (b *Text) Raw() *Text { out := *b; out.raw = true; return &out }
 func (b *Text) ReasoningEffort(level string) *Text {
 	out := *b
 	out.reasoningEffort = level
@@ -193,6 +202,7 @@ type Image struct {
 	model          string
 	outputFormat   string
 	quality        string
+	raw            bool
 	safetyFilter   string
 	safetySettings []SafetySetting
 	extraFields    map[string]any
@@ -221,6 +231,7 @@ func (b *Image) Middleware(fns ...MiddlewareFn) *Image {
 func (b *Image) Model(name string) *Image     { out := *b; out.model = name; return &out }
 func (b *Image) OutputFormat(s string) *Image { out := *b; out.outputFormat = s; return &out }
 func (b *Image) Quality(s string) *Image      { out := *b; out.quality = s; return &out }
+func (b *Image) Raw() *Image                  { out := *b; out.raw = true; return &out }
 func (b *Image) SafetyFilter(s string) *Image { out := *b; out.safetyFilter = s; return &out }
 func (b *Image) SafetySettings(s []SafetySetting) *Image {
 	out := *b
@@ -247,6 +258,7 @@ type Agent struct {
 	middleware        []MiddlewareFn
 	model             string
 	presencePenalty   *float64
+	raw               bool
 	reasoningEffort   string
 	safetySettings    []SafetySetting
 	seed              *int64
@@ -296,6 +308,7 @@ func (b *Agent) PresencePenalty(v float64) *Agent {
 	out.state = nil
 	return &out
 }
+func (b *Agent) Raw() *Agent { out := *b; out.raw = true; out.state = nil; return &out }
 func (b *Agent) ReasoningEffort(level string) *Agent {
 	out := *b
 	out.reasoningEffort = level

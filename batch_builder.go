@@ -19,6 +19,11 @@ func (b *Text) Batch(ctx context.Context, prompts ...string) ([]Response, error)
 
 //
 //
+//
+//
+//
+//
+//
 func (b *Text) SubmitBatch(ctx context.Context, prompts ...string) (BatchHandle, error) {
 	reqs, opts := b.batchInputs(prompts)
 	provider := b.client.provider.toProvider(b.model)
@@ -26,7 +31,7 @@ func (b *Text) SubmitBatch(ctx context.Context, prompts ...string) (BatchHandle,
 	if err != nil {
 		return BatchHandle{}, err
 	}
-	return BatchHandle{ID: legacy.ID, Provider: legacy.Provider}, nil
+	return BatchHandle{ID: legacy.ID, Provider: legacy.Provider, Raw: b.raw}, nil
 }
 
 //
@@ -48,6 +53,12 @@ func (b *Text) batchInputs(prompts []string) ([]Request, []Option) {
 //
 //
 //
+//
+//
+//
 func (h BatchHandle) Wait(ctx context.Context, opts ...Option) ([]Response, error) {
+	if h.Raw {
+		opts = append(opts, withRaw())
+	}
 	return waitBatch(ctx, BatchHandle{ID: h.ID, Provider: h.Provider}, opts...)
 }

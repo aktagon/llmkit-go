@@ -167,7 +167,7 @@ func waitBatch(ctx context.Context, handle BatchHandle, opts ...Option) ([]Respo
 
 		status := extractPath(raw, bc.Lifecycle.PollingStatusPath)
 		if status == bc.Lifecycle.PollingDoneValue {
-			return fetchBatchResults(ctx, o, handle, base, bc, cfg, headers)
+			return fetchBatchResults(ctx, o, handle, base, bc, cfg, headers, o.raw)
 		}
 
 		time.Sleep(2 * time.Second)
@@ -250,7 +250,7 @@ func uploadBatchFile(ctx context.Context, client *http.Client, base string, json
 //
 //
 //
-func fetchBatchResults(ctx context.Context, o *options, handle BatchHandle, base string, bc *providers.BatchDef, cfg providers.ProviderConfig, headers map[string]string) ([]Response, error) {
+func fetchBatchResults(ctx context.Context, o *options, handle BatchHandle, base string, bc *providers.BatchDef, cfg providers.ProviderConfig, headers map[string]string, raw bool) ([]Response, error) {
 	var respBody []byte
 	var err error
 
@@ -285,14 +285,18 @@ func fetchBatchResults(ctx context.Context, o *options, handle BatchHandle, base
 		return nil, fmt.Errorf("batch result endpoint not configured for %s", handle.Provider.Name)
 	}
 
-	return parseBatchResults(handle.Provider.Name, respBody, bc)
+	return parseBatchResults(handle.Provider.Name, respBody, bc, raw)
 }
 
 //
 //
 //
 //
-func parseBatchResults(provider string, data []byte, bc *providers.BatchDef) ([]Response, error) {
+//
+//
+//
+//
+func parseBatchResults(provider string, data []byte, bc *providers.BatchDef, raw bool) ([]Response, error) {
 	var responses []Response
 	for _, line := range strings.Split(string(data), "\n") {
 		line = strings.TrimSpace(line)
@@ -316,6 +320,9 @@ func parseBatchResults(provider string, data []byte, bc *providers.BatchDef) ([]
 		resp, err := parseResponse(provider, responseBytes)
 		if err != nil {
 			continue
+		}
+		if raw {
+			resp.Raw = append(json.RawMessage(nil), responseBytes...)
 		}
 		responses = append(responses, resp)
 	}
