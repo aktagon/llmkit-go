@@ -1,6 +1,7 @@
 package llmkit
 
 import (
+	"encoding/json"
 	"net/http"
 	"time"
 
@@ -43,6 +44,14 @@ type Response struct {
 	// stop signal. Populated by Google when present; OpenAI / Anthropic /
 	// xAI do not carry an equivalent field, so this stays empty for them.
 	FinishMessage string
+	// Raw is the parsed provider response body, populated only when the
+	// caller opted in via the builder's Raw() chain method (ADR-014).
+	// Type-erased on purpose: provider-specific fields (Anthropic
+	// citations, OpenAI logprobs, Google promptFeedback, ...) are not
+	// part of the universal Response shape — consumers cast to a
+	// provider-shape type (or call json.Unmarshal against their own
+	// struct) once they know which provider they're talking to.
+	Raw json.RawMessage
 }
 
 // Usage holds token consumption metrics.
@@ -142,6 +151,7 @@ type options struct {
 	cacheTTL          time.Duration
 	middleware        []providers.MiddlewareFn
 	safetySettings    []SafetySetting
+	raw               bool
 }
 
 func defaultOptions() *options {
@@ -244,4 +254,12 @@ func WithMiddleware(fns ...providers.MiddlewareFn) Option {
 // Gemini AI Studio only — ValidationError on providers without a safetySettingsWirePath.
 func WithSafetySettings(settings ...SafetySetting) Option {
 	return func(o *options) { o.safetySettings = settings }
+}
+
+// withRaw opts the call into populating Response.Raw with the parsed
+// provider response body (ADR-014). Internal — typed-builder users
+// reach this via *Text.Raw() / *Agent.Raw(); BatchHandle.Wait reads
+// h.Raw and applies this option itself.
+func withRaw() Option {
+	return func(o *options) { o.raw = true }
 }
