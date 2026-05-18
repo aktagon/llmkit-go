@@ -19,6 +19,11 @@ func (b *Text) Batch(ctx context.Context, prompts ...string) ([]Response, error)
 
 // SubmitBatch queues a batch and returns a handle without blocking.
 // The handle's Wait method polls the provider for completion.
+//
+// ADR-014: the chain's Raw() opt-in is remembered on the returned
+// BatchHandle.Raw so handle.Wait() honors it without the caller needing
+// to re-specify. Cross-process resume callers persist
+// {ID, Provider, Raw} and reconstruct directly.
 func (b *Text) SubmitBatch(ctx context.Context, prompts ...string) (BatchHandle, error) {
 	reqs, opts := b.batchInputs(prompts)
 	provider := b.client.provider.toProvider(b.model)
@@ -26,7 +31,7 @@ func (b *Text) SubmitBatch(ctx context.Context, prompts ...string) (BatchHandle,
 	if err != nil {
 		return BatchHandle{}, err
 	}
-	return BatchHandle{ID: legacy.ID, Provider: legacy.Provider}, nil
+	return BatchHandle{ID: legacy.ID, Provider: legacy.Provider, Raw: b.raw}, nil
 }
 
 // batchInputs builds the per-prompt Request slice that
@@ -46,8 +51,14 @@ func (b *Text) batchInputs(prompts []string) ([]Request, []Option) {
 
 // Wait polls the provider's batch lifecycle until completion and
 // returns the ordered Response slice. Cross-process resume works by
-// reconstructing a BatchHandle{ID, Provider} from persisted state and
-// calling Wait on it.
+// reconstructing a BatchHandle{ID, Provider, Raw} from persisted
+// state and calling Wait on it.
+//
+// ADR-014: when h.Raw is true, each returned Response carries
+// Response.Raw set to the parsed per-item provider body.
 func (h BatchHandle) Wait(ctx context.Context, opts ...Option) ([]Response, error) {
+	if h.Raw {
+		opts = append(opts, withRaw())
+	}
 	return waitBatch(ctx, BatchHandle{ID: h.ID, Provider: h.Provider}, opts...)
 }

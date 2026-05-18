@@ -60,6 +60,9 @@ func (b *Image) Generate(ctx context.Context, finalText string) (ImageResponse, 
 	if len(b.extraFields) > 0 {
 		opts = append(opts, WithImageExtraFields(b.extraFields))
 	}
+	if b.raw {
+		opts = append(opts, withImageRaw())
+	}
 
 	provider := b.client.provider.toProvider(b.model)
 	return generateImage(ctx, provider, req, opts...)
