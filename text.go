@@ -92,6 +92,9 @@ func (b *Text) Prompt(ctx context.Context, finalText string) (Response, error) {
 	}
 
 	resp, parseErr := parseResponse(p.Name, respBody)
+	if o.raw && parseErr == nil {
+		resp.Raw = append(json.RawMessage(nil), respBody...)
+	}
 	postEv := baseEvent
 	postEv.Usage = resp.Tokens
 	postEv.Err = parseErr
@@ -171,6 +174,9 @@ func (b *Text) buildRequest(finalText string) (Request, []Option) {
 	}
 	if len(b.safetySettings) > 0 {
 		opts = append(opts, WithSafetySettings(b.safetySettings...))
+	}
+	if b.raw {
+		opts = append(opts, withRaw())
 	}
 	return req, opts
 }

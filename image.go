@@ -71,6 +71,11 @@ type ImageResponse struct {
 	// populates this for non-success FinishReason values; other providers
 	// leave it empty. Use as the user-facing message when len(Images) == 0.
 	FinishMessage string
+	// Raw is the parsed provider response body, populated only when the
+	// caller opted in via the builder's Raw() chain method (ADR-014).
+	// Type-erased — consumers cast to a provider-shape type for fields
+	// the universal ImageResponse does not carry.
+	Raw json.RawMessage
 }
 
 // ImageOption configures GenerateImage.
@@ -90,6 +95,7 @@ type imageOptions struct {
 	extraFields    map[string]any
 	middleware     []providers.MiddlewareFn
 	httpClient     *http.Client
+	raw            bool
 }
 
 // WithImageHTTPClient overrides the http.Client used for the GenerateImage call.
@@ -188,6 +194,13 @@ func WithImageSafetyFilter(threshold string) ImageOption {
 // non-Google image-gen providers (safetySettingsWirePath must be non-empty).
 func WithImageSafetySettings(s ...SafetySetting) ImageOption {
 	return func(o *imageOptions) { o.safetySettings = append(o.safetySettings, s...) }
+}
+
+// withImageRaw opts the call into populating ImageResponse.Raw with
+// the parsed provider response body (ADR-014). Internal — typed-builder
+// users reach this via *Image.Raw().
+func withImageRaw() ImageOption {
+	return func(o *imageOptions) { o.raw = true }
 }
 
 func resolveImageOptions(opts []ImageOption) *imageOptions {
@@ -367,6 +380,9 @@ func generateImage(ctx context.Context, p Provider, req ImageRequest, opts ...Im
 	}
 
 	resp, parseErr := parseImageResponse(p.Name, respBody)
+	if o.raw && parseErr == nil {
+		resp.Raw = append(json.RawMessage(nil), respBody...)
+	}
 	postEv := baseEvent
 	postEv.Usage = resp.Tokens
 	postEv.Err = parseErr
