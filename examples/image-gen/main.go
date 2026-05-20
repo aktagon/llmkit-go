@@ -40,7 +40,7 @@ func main() {
 		log.Fatal(err)
 	}
 	fmt.Printf("wrote nano-banana.png (%d bytes, in=%d out=%d tokens)\n",
-		len(resp.Images[0].Bytes), resp.Tokens.Input, resp.Tokens.Output)
+		len(resp.Images[0].Bytes), resp.Usage.Input, resp.Usage.Output)
 
 	// Image-to-image: feed the output back in as a reference and edit it.
 	edited, err := c.Image.Model(flashModel).AspectRatio("16:9").ImageSize("2K").
@@ -53,5 +53,5 @@ func main() {
 		log.Fatal(err)
 	}
 	fmt.Printf("wrote nano-banana-winter.png (%d bytes, in=%d out=%d tokens)\n",
-		len(edited.Images[0].Bytes), edited.Tokens.Input, edited.Tokens.Output)
+		len(edited.Images[0].Bytes), edited.Usage.Input, edited.Usage.Output)
 }

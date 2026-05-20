@@ -1,7 +1,6 @@
 package llmkit
 
 import (
-	"encoding/json"
 	"net/http"
 	"time"
 
@@ -24,34 +23,6 @@ type Request struct {
 	Schema   string       // JSON schema for structured output (optional)
 	Files    []File       // file attachments (optional)
 	Images   []InputImage // image inputs (optional)
-}
-
-// Response is the canonical response format.
-type Response struct {
-	Text   string
-	Tokens Usage
-	// FinishReason is the provider stop signal, passed through verbatim.
-	// Empty when the provider response carries no signal or the parser does
-	// not yet read this provider's location.
-	//
-	// Examples per provider:
-	//   Google:    "STOP", "MAX_TOKENS", "SAFETY", "RECITATION"
-	//   OpenAI:    "stop", "length", "content_filter", "tool_calls"
-	//   Anthropic: "end_turn", "max_tokens", "stop_sequence", "tool_use"
-	//   xAI:       "stop", "length", "content_filter"
-	FinishReason string
-	// FinishMessage is a provider-supplied free-text explanation of the
-	// stop signal. Populated by Google when present; OpenAI / Anthropic /
-	// xAI do not carry an equivalent field, so this stays empty for them.
-	FinishMessage string
-	// Raw is the parsed provider response body, populated only when the
-	// caller opted in via the builder's Raw() chain method (ADR-014).
-	// Type-erased on purpose: provider-specific fields (Anthropic
-	// citations, OpenAI logprobs, Google promptFeedback, ...) are not
-	// part of the universal Response shape — consumers cast to a
-	// provider-shape type (or call json.Unmarshal against their own
-	// struct) once they know which provider they're talking to.
-	Raw json.RawMessage
 }
 
 // Usage holds token consumption metrics.

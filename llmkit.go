@@ -111,7 +111,7 @@ func promptStream(ctx context.Context, p Provider, req Request, callback StreamC
 
 	return Response{
 		Text:         fullText.String(),
-		Tokens:       usage,
+		Usage:        usage,
 		FinishReason: finishReason,
 	}, nil
 }
@@ -704,7 +704,7 @@ func parseResponse(provider string, body []byte) (Response, error) {
 
 	return Response{
 		Text: text,
-		Tokens: Usage{
+		Usage: Usage{
 			Input:      input,
 			Output:     output,
 			CacheWrite: cacheWrite,
