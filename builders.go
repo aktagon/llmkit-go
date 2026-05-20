@@ -5,21 +5,6 @@
 // was deleted (ADR-010).
 package llmkit
 
-// BatchHandle is a value struct identifying a submitted batch.
-// Cross-process resume works by persisting {ID, Provider, Raw}
-// and reconstructing the struct.
-//
-// Raw mirrors the *Text.Raw() chain method (ADR-014): when true,
-// every Response returned from Wait carries Response.Raw set to
-// the parsed per-item provider body. SubmitBatch propagates the
-// chain's Raw flag onto the handle; cross-process resume callers
-// set the field directly.
-type BatchHandle struct {
-	ID       string
-	Provider Provider
-	Raw      bool
-}
-
 // providerConfig holds per-provider auth + endpoint details.
 // baseURL is an internal override mainly used by tests pointing
 // at httptest.Server URLs; per-provider constructors leave it

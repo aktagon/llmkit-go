@@ -17,7 +17,7 @@ import (
 //	    fmt.Print(chunk)
 //	}
 //	resp := stream.Response()  // populated after the range loop ends
-//	fmt.Println(resp.Tokens)
+//	fmt.Println(resp.Usage)
 //
 // Response() before iteration completes returns the zero value; Err()
 // returns nil. After iteration, both reflect the producer's final
