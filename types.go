@@ -16,6 +16,23 @@ type Provider struct {
 }
 
 //
+//
+//
+//
+type Capability string
+
+const (
+	CapChatCompletion  Capability = "chat_completion"
+	CapImageGeneration Capability = "image_generation"
+	CapToolCalling     Capability = "tool_calling"
+	CapFileUpload      Capability = "file_upload"
+	CapBatching        Capability = "batching"
+	CapCaching         Capability = "caching"
+	CapReasoning       Capability = "reasoning"
+	CapCatalogue       Capability = "catalogue"
+)
+
+//
 type Request struct {
 	System   string       // system prompt
 	User     string       // user message (for single-turn)
