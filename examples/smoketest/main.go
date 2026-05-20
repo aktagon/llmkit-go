@@ -27,6 +27,7 @@ const timeout = 30 * time.Second
 //
 var models = map[string]string{
 	"cerebras": "zai-glm-4.7",
+	"ollama":   "gemma4:latest",
 }
 
 func main() {
