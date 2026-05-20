@@ -9,21 +9,6 @@ package llmkit
 //
 //
 //
-//
-//
-//
-//
-//
-type BatchHandle struct {
-	ID       string
-	Provider Provider
-	Raw      bool
-}
-
-//
-//
-//
-//
 type providerConfig struct {
 	name    string
 	apiKey  string

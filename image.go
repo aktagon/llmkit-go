@@ -56,27 +56,6 @@ type ImageData struct {
 }
 
 //
-type ImageResponse struct {
-	Images []ImageData
-	Text   string
-	Tokens Usage
-	//
-	//
-	//
-	//
-	//
-	//
-	FinishReason string
-	//
-	//
-	//
-	FinishMessage string
-	//
-	//
-	//
-	//
-	Raw json.RawMessage
-}
 
 //
 type ImageOption func(*imageOptions)
@@ -384,7 +363,7 @@ func generateImage(ctx context.Context, p Provider, req ImageRequest, opts ...Im
 		resp.Raw = append(json.RawMessage(nil), respBody...)
 	}
 	postEv := baseEvent
-	postEv.Usage = resp.Tokens
+	postEv.Usage = resp.Usage
 	postEv.Err = parseErr
 	postEv.Duration = time.Since(start)
 	firePost(ctx, o.middleware, postEv)
@@ -871,7 +850,7 @@ func parseImageResponse(provider string, body []byte) (ImageResponse, error) {
 	return ImageResponse{
 		Images: images,
 		Text:   text,
-		Tokens: Usage{
+		Usage: Usage{
 			Input:  extractIntPath(raw, inputPath),
 			Output: extractIntPath(raw, outputPath),
 		},
@@ -923,7 +902,7 @@ func parseImageResponseDataArray(raw map[string]any, inputPath, outputPath strin
 	return ImageResponse{
 		Images: images,
 		Text:   strings.Join(revised, "\n"),
-		Tokens: tokens,
+		Usage:  tokens,
 	}
 }
 

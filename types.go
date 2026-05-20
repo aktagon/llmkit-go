@@ -1,7 +1,6 @@
 package llmkit
 
 import (
-	"encoding/json"
 	"net/http"
 	"time"
 
@@ -24,34 +23,6 @@ type Request struct {
 	Schema   string       // JSON schema for structured output (optional)
 	Files    []File       // file attachments (optional)
 	Images   []InputImage // image inputs (optional)
-}
-
-//
-type Response struct {
-	Text   string
-	Tokens Usage
-	//
-	//
-	//
-	//
-	//
-	//
-	//
-	//
-	//
-	FinishReason string
-	//
-	//
-	//
-	FinishMessage string
-	//
-	//
-	//
-	//
-	//
-	//
-	//
-	Raw json.RawMessage
 }
 
 //
