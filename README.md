@@ -11,12 +11,22 @@ go get github.com/aktagon/llmkit-go
 ## Quick Start
 
 ```go
-resp, err := llmkit.Prompt(ctx,
-    llmkit.Provider{Name: "anthropic", APIKey: os.Getenv("ANTHROPIC_API_KEY")},
-    llmkit.Request{System: "You are helpful", User: "Hello"},
-)
+c := llmkit.New("anthropic", os.Getenv("ANTHROPIC_API_KEY"))
+resp, err := c.Text.System("You are helpful").Prompt(ctx, "Hello")
 fmt.Println(resp.Text)
 ```
+
+`c.Text`, `c.Image`, `c.Agent`, and `c.Upload` are pointer fields on
+`*Client`, not method calls. Chain methods clone the prototype and
+return a fresh builder, so successive `c.Text.System(...)` calls each
+yield a new `*Text`.
+
+See [`examples/`](examples/) for runnable single-file demos
+(`quickstart`, `agent`, `stream`, `upload`, `image-gen`,
+`image-gen-openai`, `middleware`, `vertex-imagen`). The shapes shown
+below are exercised against mock HTTP servers by
+[`example_test.go`](example_test.go), so the documented call shapes
+are guaranteed to match the public surface.
 
 ## Providers
 
@@ -57,10 +67,11 @@ fmt.Println(resp.Text)
 One-shot request:
 
 ```go
-resp, err := llmkit.Prompt(ctx, provider, llmkit.Request{
-    System: "You are helpful",
-    User:   "What is 2+2?",
-}, llmkit.WithTemperature(0.7))
+c := llmkit.New("anthropic", os.Getenv("ANTHROPIC_API_KEY"))
+resp, err := c.Text.
+    System("You are helpful").
+    Temperature(0.7).
+    Prompt(ctx, "What is 2+2?")
 
 fmt.Println(resp.Text)               // "4"
 fmt.Println(resp.Tokens.Input)       // prompt tokens
@@ -72,60 +83,89 @@ fmt.Println(resp.Tokens.Reasoning)   // internal reasoning tokens (OpenAI o1/o3/
 
 Capability-scoped fields (`CacheRead`, `CacheWrite`, `Reasoning`) are zero when the provider doesn't report them separately.
 
-### PromptStream
+### Stream
 
-Streaming with callback:
+Streaming with a trailing-handle iterator. `Stream` returns a
+`*TextStream`; range over `Chunks()` to consume deltas, then read
+`Response()` for the accumulated text + token counts:
 
 ```go
-resp, err := llmkit.PromptStream(ctx, provider, req, func(chunk string) {
-    fmt.Print(chunk) // prints as tokens arrive
-})
+stream := c.Text.System("Count to 5").Stream(ctx, "Go")
+for chunk, err := range stream.Chunks() {
+    if err != nil {
+        return err
+    }
+    fmt.Print(chunk)
+}
+final := stream.Response()
+fmt.Println("\ntokens:", final.Tokens.Input, "in,", final.Tokens.Output, "out")
 ```
+
+Breaking the range loop cancels the producer goroutine cleanly.
 
 ### Structured Output
 
 Pass a JSON schema to get typed responses:
 
 ```go
-resp, err := llmkit.Prompt(ctx, provider, llmkit.Request{
-    User:   "The sky is blue",
-    Schema: `{"type":"object","properties":{"color":{"type":"string"}}}`,
-})
+resp, err := c.Text.
+    Schema(`{"type":"object","properties":{"color":{"type":"string"}}}`).
+    Prompt(ctx, "The sky is blue")
 // resp.Text == `{"color":"blue"}`
 ```
 
 ### Agent with Tools
 
-Multi-turn conversations with function calling:
+Multi-turn conversations with function calling. `c.Agent` is a
+stateful builder — repeated `Prompt` calls on the same `*Agent`
+accumulate conversation history. Any chain method (`System`, `Tool`,
+`Temperature`, ...) returns a forked clone with empty state.
+`agent.Reset()` clears history without dropping the configured tools
+or other chain state.
 
 ```go
-agent := llmkit.NewAgent(provider)
-agent.SetSystem("You are a calculator")
-agent.AddTool(llmkit.Tool{
-    Name:        "add",
-    Description: "Add two numbers",
-    Schema:      map[string]any{"type": "object", "properties": map[string]any{
-        "a": map[string]any{"type": "number"},
-        "b": map[string]any{"type": "number"},
-    }},
-    Run: func(args map[string]any) (string, error) {
-        return fmt.Sprintf("%g", args["a"].(float64)+args["b"].(float64)), nil
-    },
-})
+agent := c.Agent.
+    System("You are a calculator").
+    Tool(llmkit.Tool{
+        Name:        "add",
+        Description: "Add two numbers",
+        Schema: map[string]any{"type": "object", "properties": map[string]any{
+            "a": map[string]any{"type": "number"},
+            "b": map[string]any{"type": "number"},
+        }},
+        Run: func(args map[string]any) (string, error) {
+            return fmt.Sprintf("%g", args["a"].(float64)+args["b"].(float64)), nil
+        },
+    }).
+    MaxToolIterations(5)
 
-resp, err := agent.Chat(ctx, "What is 2+3?")
+resp, err := agent.Prompt(ctx, "What is 2+3?")
 ```
 
-### UploadFile
+### Upload
 
-Upload files to a provider:
+Upload files to a provider. `Path` and `Bytes` are mutually exclusive
+on the same `*Upload`; `Bytes` requires `Filename`. The returned
+`File` plugs into `*Text.File(id)`:
 
 ```go
-file, err := llmkit.UploadFile(ctx, provider, "document.pdf")
-resp, err := llmkit.Prompt(ctx, provider, llmkit.Request{
-    User:  "Summarize this document",
-    Files: []llmkit.File{file},
-})
+file, err := c.Upload.Path("document.pdf").Run(ctx)
+if err != nil {
+    return err
+}
+resp, err := c.Text.
+    File(file.ID).
+    Prompt(ctx, "Summarize this document")
+```
+
+In-memory variant:
+
+```go
+file, err := c.Upload.
+    Bytes(payload).
+    Filename("greeting.txt").
+    MimeType("text/plain").
+    Run(ctx)
 ```
 
 ### GenerateImage
@@ -266,18 +306,27 @@ a `*ValidationError`. The `HarmCategory*`, `HarmBlockThreshold*`, and
 
 ## Options
 
+Sampling and decoding knobs are typed chain methods on `*Text` and
+`*Agent`. They're all PascalCase and return a fresh builder:
+
 ```go
-llmkit.WithTemperature(0.7)
-llmkit.WithTopP(0.9)
-llmkit.WithTopK(40)
-llmkit.WithMaxTokens(1000)
-llmkit.WithStopSequences("END")
-llmkit.WithSeed(42)
-llmkit.WithFrequencyPenalty(0.5)
-llmkit.WithPresencePenalty(0.5)
-llmkit.WithThinkingBudget(2000)
-llmkit.WithReasoningEffort("high")
+c.Text.
+    Temperature(0.7).
+    TopP(0.9).
+    TopK(40).
+    MaxTokens(1000).
+    StopSequences("END").
+    Seed(42).
+    FrequencyPenalty(0.5).
+    PresencePenalty(0.5).
+    ThinkingBudget(2000).
+    ReasoningEffort("high").
+    Prompt(ctx, "...")
 ```
+
+`*Agent` exposes the same set plus `MaxToolIterations(n)`. `*Text`
+exposes `History(...Message)` for multi-turn replay; `*Agent` retains
+history internally across `Prompt` calls instead.
 
 | Option            | anthropic | openai | google | grok |
 | ----------------- | --------- | ------ | ------ | ---- |
@@ -327,9 +376,9 @@ func budgetGate(limit float64, spent *float64) providers.MiddlewareFn {
     }
 }
 
-llmkit.Prompt(ctx, p, req,
-    llmkit.WithMiddleware(budgetGate(5.00, &spent), logUsage),
-)
+c.Text.
+    Middleware(budgetGate(5.00, &spent), logUsage).
+    Prompt(ctx, "Hello")
 ```
 
 See `examples/middleware/` for a spend-cap implementation with a price
@@ -337,9 +386,9 @@ table and mutex-guarded accumulation. Middlewares fire in registration
 order; the first pre-phase non-nil error aborts.
 
 Streaming uses the same middleware shape: one pre-phase before the
-request, one post-phase after the stream closes. `Event.Usage` reflects
-the accumulated usage at stream close. Per-chunk observation stays on
-your `StreamCallback`.
+request, one post-phase after the stream closes. `Event.Usage`
+reflects the accumulated usage at stream close. Per-chunk observation
+stays on the `*TextStream.Chunks()` range loop.
 
 ## CLI
 

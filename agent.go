@@ -88,7 +88,7 @@ func (a *legacyAgent) runToolLoop(ctx context.Context) (Response, error) {
 		}
 		llmStart := time.Now()
 		if err := firePre(ctx, a.opts.middleware, llmEvent); err != nil {
-			return Response{Tokens: totalUsage}, err
+			return Response{Usage: totalUsage}, err
 		}
 
 		jsonBody, err := json.Marshal(body)
@@ -157,7 +157,7 @@ func (a *legacyAgent) runToolLoop(ctx context.Context) (Response, error) {
 			finishReason, finishMessage := extractFinishSignal(raw, a.provider.Name)
 			resp := Response{
 				Text:          text,
-				Tokens:        totalUsage,
+				Usage:         totalUsage,
 				FinishReason:  finishReason,
 				FinishMessage: finishMessage,
 			}
@@ -191,7 +191,7 @@ func (a *legacyAgent) runToolLoop(ctx context.Context) (Response, error) {
 			}
 			toolStart := time.Now()
 			if err := firePre(ctx, a.opts.middleware, toolEv); err != nil {
-				return Response{Tokens: totalUsage}, err
+				return Response{Usage: totalUsage}, err
 			}
 
 			output, runErr := tool.Run(tc.input)
@@ -215,7 +215,7 @@ func (a *legacyAgent) runToolLoop(ctx context.Context) (Response, error) {
 		_ = tcResultTransform
 	}
 
-	return Response{Tokens: totalUsage}, fmt.Errorf("max tool iterations (%d) reached", a.opts.maxToolIterations)
+	return Response{Usage: totalUsage}, fmt.Errorf("max tool iterations (%d) reached", a.opts.maxToolIterations)
 }
 
 // buildAgentRequest builds the request body with conversation history and tools.

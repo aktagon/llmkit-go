@@ -247,8 +247,8 @@ func TestReasoningTokensPopulatedForOpenAI(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resp.Tokens.Reasoning != 17 {
-		t.Errorf("expected Tokens.Reasoning=17, got %d", resp.Tokens.Reasoning)
+	if resp.Usage.Reasoning != 17 {
+		t.Errorf("expected Tokens.Reasoning=17, got %d", resp.Usage.Reasoning)
 	}
 	if postUsage.Reasoning != 17 {
 		t.Errorf("expected middleware post-phase Usage.Reasoning=17, got %d", postUsage.Reasoning)
@@ -272,8 +272,8 @@ func TestReasoningTokensZeroWhenUnreported(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resp.Tokens.Reasoning != 0 {
-		t.Errorf("expected Tokens.Reasoning=0 for unreported provider, got %d", resp.Tokens.Reasoning)
+	if resp.Usage.Reasoning != 0 {
+		t.Errorf("expected Tokens.Reasoning=0 for unreported provider, got %d", resp.Usage.Reasoning)
 	}
 }
 
