@@ -2,16 +2,27 @@
 //
 // Run: cd go && go run ./examples/smoketest
 //
-// Iterates providers.Providers(), skips entries with no API-key env var
-// (local backends, multi-credential cloud providers), and prompts each
-// remaining provider with "ok" using the per-provider model in
-// `models` below (or the A-Box default if absent). Per-provider
-// overrides exist because some accounts can't access whatever the
-// A-Box picks as the SDK-wide default.
+// For each provider with credentials available, runs two probes:
+//
+//	chat=OK         one-token Prompt against the chat endpoint
+//	list=OK         live model list via c.Models.Provider(p).List(ctx)
+//
+// list=N/A          provider declares no models endpoint (Vertex,
+//
+//	Bedrock, local backends).
+//
+// list=PENDING      provider supports the endpoint but Phase 3 HTTP
+//
+//	wiring isn't merged yet (ErrModelsUnavailable).
+//	Auto-upgrades to OK once Phase 3 lands.
+//
+// SKIP / FAIL on the line itself refer to the chat probe — that's
+// llmkit's load-bearing API today and what determines exit code.
 package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"sort"
@@ -52,12 +63,15 @@ func main() {
 			skip++
 			continue
 		}
+
+		listStatus := listModels(name, key)
+
 		if err := smoke(name, key); err != nil {
-			fmt.Printf("FAIL %-12s %v\n", name, truncate(err))
+			fmt.Printf("FAIL %-12s list=%-7s chat: %v\n", name, listStatus, truncate(err))
 			fail++
 			continue
 		}
-		fmt.Printf("PASS %-12s\n", name)
+		fmt.Printf("PASS %-12s list=%s\n", name, listStatus)
 		pass++
 	}
 	fmt.Printf("\n%d pass, %d fail, %d skip\n", pass, fail, skip)
@@ -75,6 +89,28 @@ func smoke(name, key string) error {
 	}
 	_, err := text.Prompt(ctx, "ok")
 	return err
+}
+
+// listModels probes the catalogue list endpoint and returns a short
+// status: OK (live list returned), N/A (provider has no models
+// endpoint), PENDING (endpoint declared but Phase 3 HTTP path not yet
+// wired), or FAIL (real error).
+func listModels(name, key string) string {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	_, err := llmkit.New(name, key).Models.
+		Provider(llmkit.Provider{Name: name, APIKey: key}).
+		List(ctx)
+	switch {
+	case err == nil:
+		return "OK"
+	case errors.Is(err, llmkit.ErrModelsNotSupported):
+		return "N/A"
+	case errors.Is(err, llmkit.ErrModelsUnavailable):
+		return "PENDING"
+	default:
+		return "FAIL"
+	}
 }
 
 func truncate(err error) string {
