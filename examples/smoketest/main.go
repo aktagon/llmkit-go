@@ -98,12 +98,14 @@ func smoke(name, key string) error {
 func listModels(name, key string) string {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	_, err := llmkit.New(name, key).Models.
+	list, err := llmkit.New(name, key).Models.
 		Provider(llmkit.Provider{Name: name, APIKey: key}).
 		List(ctx)
 	switch {
+	case err == nil && len(list) == 0:
+		return "FAIL(0)" // 200 OK but no models listed = soft failure
 	case err == nil:
-		return "OK"
+		return fmt.Sprintf("OK(%d)", len(list))
 	case errors.Is(err, llmkit.ErrModelsNotSupported):
 		return "N/A"
 	case errors.Is(err, llmkit.ErrModelsUnavailable):
