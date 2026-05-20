@@ -43,7 +43,7 @@ func main() {
 		log.Fatal(err)
 	}
 	fmt.Printf("wrote openai-circle.png (%d bytes, in=%d out=%d tokens)\n",
-		len(resp.Images[0].Bytes), resp.Tokens.Input, resp.Tokens.Output)
+		len(resp.Images[0].Bytes), resp.Usage.Input, resp.Usage.Output)
 
 	// Image edit (edits endpoint): feed the output back in as a reference.
 	edited, err := c.Image.Model(model).ImageSize("1024x1024").
@@ -56,5 +56,5 @@ func main() {
 		log.Fatal(err)
 	}
 	fmt.Printf("wrote openai-circle-bordered.png (%d bytes, in=%d out=%d tokens)\n",
-		len(edited.Images[0].Bytes), edited.Tokens.Input, edited.Tokens.Output)
+		len(edited.Images[0].Bytes), edited.Usage.Input, edited.Usage.Output)
 }
