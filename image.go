@@ -55,28 +55,7 @@ type ImageData struct {
 	Bytes    []byte
 }
 
-// ImageResponse is the canonical image-generation response.
-type ImageResponse struct {
-	Images []ImageData
-	Text   string
-	Tokens Usage
-	// FinishReason is the provider stop signal, passed through verbatim.
-	// Examples per provider:
-	//   Google:    "STOP" (ok), "IMAGE_OTHER", "SAFETY", "MAX_TOKENS"
-	//   OpenAI Images API: no equivalent field (always empty)
-	//   xAI Grok:          no equivalent field (always empty)
-	//   Vertex Imagen:     RAI filter reason when content is blocked
-	FinishReason string
-	// FinishMessage is the free-text provider explanation. Gemini
-	// populates this for non-success FinishReason values; other providers
-	// leave it empty. Use as the user-facing message when len(Images) == 0.
-	FinishMessage string
-	// Raw is the parsed provider response body, populated only when the
-	// caller opted in via the builder's Raw() chain method (ADR-014).
-	// Type-erased — consumers cast to a provider-shape type for fields
-	// the universal ImageResponse does not carry.
-	Raw json.RawMessage
-}
+// ImageResponse is declared in go/structs.go (ADR-018, API-PDS-002).
 
 // ImageOption configures GenerateImage.
 type ImageOption func(*imageOptions)
@@ -384,7 +363,7 @@ func generateImage(ctx context.Context, p Provider, req ImageRequest, opts ...Im
 		resp.Raw = append(json.RawMessage(nil), respBody...)
 	}
 	postEv := baseEvent
-	postEv.Usage = resp.Tokens
+	postEv.Usage = resp.Usage
 	postEv.Err = parseErr
 	postEv.Duration = time.Since(start)
 	firePost(ctx, o.middleware, postEv)
@@ -871,7 +850,7 @@ func parseImageResponse(provider string, body []byte) (ImageResponse, error) {
 	return ImageResponse{
 		Images: images,
 		Text:   text,
-		Tokens: Usage{
+		Usage: Usage{
 			Input:  extractIntPath(raw, inputPath),
 			Output: extractIntPath(raw, outputPath),
 		},
@@ -923,7 +902,7 @@ func parseImageResponseDataArray(raw map[string]any, inputPath, outputPath strin
 	return ImageResponse{
 		Images: images,
 		Text:   strings.Join(revised, "\n"),
-		Tokens: tokens,
+		Usage:  tokens,
 	}
 }
 
