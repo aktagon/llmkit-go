@@ -42,14 +42,6 @@ type Message struct {
 }
 
 //
-type File struct {
-	ID       string
-	URI      string
-	MimeType string
-	Name     string
-}
-
-//
 //
 //
 //
