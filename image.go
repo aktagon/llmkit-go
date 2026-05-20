@@ -43,12 +43,6 @@ type Part struct {
 }
 
 //
-type ImageData struct {
-	MimeType string
-	Bytes    []byte
-}
-
-//
 
 //
 type ImageOption func(*imageOptions)

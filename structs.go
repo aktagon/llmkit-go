@@ -34,6 +34,15 @@ type File struct {
 }
 
 //
+type ImageData struct {
+	//
+	MimeType string
+
+	//
+	Bytes []byte
+}
+
+//
 type ImageResponse struct {
 	//
 	Images []ImageData
