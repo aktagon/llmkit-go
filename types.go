@@ -41,14 +41,6 @@ type Message struct {
 	Content string
 }
 
-// File references an uploaded file.
-type File struct {
-	ID       string
-	URI      string
-	MimeType string
-	Name     string
-}
-
 // InputImage references an image attached to a text-generation request
 // (vision input). Distinct from Part's Image() constructor used for
 // image-generation calls; the two concepts target different capabilities
