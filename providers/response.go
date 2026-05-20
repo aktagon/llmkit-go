@@ -31,6 +31,10 @@ func ResponseTextPath(provider string) string {
 		return "choices[0].message.content"
 	case Groq:
 		return "choices[0].message.content"
+	case Jan:
+		return "choices[0].message.content"
+	case Llamacpp:
+		return "choices[0].message.content"
 	case Lmstudio:
 		return "choices[0].message.content"
 	case Minimax:
@@ -94,6 +98,10 @@ func UsagePaths(provider string) (inputPath, outputPath string) {
 	case Grok:
 		return "usage.prompt_tokens", "usage.completion_tokens"
 	case Groq:
+		return "usage.prompt_tokens", "usage.completion_tokens"
+	case Jan:
+		return "usage.prompt_tokens", "usage.completion_tokens"
+	case Llamacpp:
 		return "usage.prompt_tokens", "usage.completion_tokens"
 	case Lmstudio:
 		return "usage.prompt_tokens", "usage.completion_tokens"

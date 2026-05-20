@@ -64,6 +64,8 @@ func Fireworks(apiKey string) *Client  { return newClient("fireworks", apiKey) }
 func Google(apiKey string) *Client     { return newClient("google", apiKey) }
 func Grok(apiKey string) *Client       { return newClient("grok", apiKey) }
 func Groq(apiKey string) *Client       { return newClient("groq", apiKey) }
+func Jan(apiKey string) *Client        { return newClient("jan", apiKey) }
+func Llamacpp(apiKey string) *Client   { return newClient("llamacpp", apiKey) }
 func Lmstudio(apiKey string) *Client   { return newClient("lmstudio", apiKey) }
 func Minimax(apiKey string) *Client    { return newClient("minimax", apiKey) }
 func Mistral(apiKey string) *Client    { return newClient("mistral", apiKey) }
