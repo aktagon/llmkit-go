@@ -188,6 +188,34 @@ func StreamConfig(provider string) *StreamDef {
 			UsageInputPath:  "usage.prompt_tokens",
 			UsageOutputPath: "usage.completion_tokens",
 		}
+	case Jan:
+		return &StreamDef{
+			Endpoint:        "",
+			Param:           "stream",
+			ParamValue:      "true",
+			DeltaTextPath:   "choices[0].delta.content",
+			DoneSignal:      "[DONE]",
+			UsesEventTypes:  false,
+			ContentEvent:    "",
+			DoneEvent:       "",
+			UsageEvent:      "",
+			UsageInputPath:  "usage.prompt_tokens",
+			UsageOutputPath: "usage.completion_tokens",
+		}
+	case Llamacpp:
+		return &StreamDef{
+			Endpoint:        "",
+			Param:           "stream",
+			ParamValue:      "true",
+			DeltaTextPath:   "choices[0].delta.content",
+			DoneSignal:      "[DONE]",
+			UsesEventTypes:  false,
+			ContentEvent:    "",
+			DoneEvent:       "",
+			UsageEvent:      "",
+			UsageInputPath:  "usage.prompt_tokens",
+			UsageOutputPath: "usage.completion_tokens",
+		}
 	case Lmstudio:
 		return &StreamDef{
 			Endpoint:        "",

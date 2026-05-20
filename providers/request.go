@@ -177,6 +177,18 @@ func ToolCallConfig(provider string) *ToolCallDef {
 			ResultRole: "tool",
 			IDSource:   "id_field",
 		}
+	case Jan:
+		return &ToolCallDef{
+			ArgsFormat: "json_string",
+			ResultRole: "tool",
+			IDSource:   "id_field",
+		}
+	case Llamacpp:
+		return &ToolCallDef{
+			ArgsFormat: "json_string",
+			ResultRole: "tool",
+			IDSource:   "id_field",
+		}
 	case Lmstudio:
 		return &ToolCallDef{
 			ArgsFormat: "json_string",
