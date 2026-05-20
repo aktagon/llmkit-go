@@ -55,6 +55,15 @@ type ImageResponse struct {
 }
 
 //
+type Message struct {
+	//
+	Role string
+
+	//
+	Content string
+}
+
+//
 type Response struct {
 	//
 	Text string

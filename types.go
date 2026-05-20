@@ -36,12 +36,6 @@ type Usage = providers.Usage
 type MiddlewareFn = providers.MiddlewareFn
 
 //
-type Message struct {
-	Role    string // "user" or "assistant"
-	Content string
-}
-
-//
 //
 //
 //
