@@ -15,6 +15,23 @@ type Provider struct {
 	BaseURL string // optional, overrides default API endpoint
 }
 
+// Capability names one of the SDK's modelled capabilities. The set mirrors
+// llm:Capability instances in the ontology; ModelInfo.Capabilities is a
+// slice of these. Ontology-derived per ADR-019 — never populated from
+// provider wire data.
+type Capability string
+
+const (
+	CapChatCompletion  Capability = "chat_completion"
+	CapImageGeneration Capability = "image_generation"
+	CapToolCalling     Capability = "tool_calling"
+	CapFileUpload      Capability = "file_upload"
+	CapBatching        Capability = "batching"
+	CapCaching         Capability = "caching"
+	CapReasoning       Capability = "reasoning"
+	CapCatalogue       Capability = "catalogue"
+)
+
 // Request is the canonical request format (OpenAI-compatible shape).
 type Request struct {
 	System   string       // system prompt

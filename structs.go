@@ -63,6 +63,15 @@ type ImageResponse struct {
 	Raw json.RawMessage
 }
 
+// LiveResult is returned by c.Models.Live(ctx) — the aggregated cross-provider live result. Partial success is the documented normal case: per-provider failures land in Errors while everything that succeeded lands in Models.
+type LiveResult struct {
+	// Models are the ModelInfo records that returned successfully across configured providers. Sorted by (provider name, id) for deterministic ordering across calls.
+	Models []ModelInfo
+
+	// Errors is the per-provider failure map. Empty when every configured provider succeeded. Keyed by Provider; each value carries the per-provider error sentinel (ErrModelsScope / ErrModelsUnavailable / ErrModelsNotSupported).
+	Errors map[string]error
+}
+
 // MediaRef is an inline media payload (mime type + raw bytes). Reused by every Part variant that carries non-text content, and by image-generation knobs like Mask that pass through a single binary blob.
 type MediaRef struct {
 	// MimeType is the IANA media type of the bytes payload (image/png, image/jpeg, audio/wav, ...). Drives both the wire encoding (base64 mime prefix on data URIs) and provider routing on multimodal endpoints.
@@ -79,6 +88,36 @@ type Message struct {
 
 	// Content is the turn's text. Multimodal content (a list of Parts) is deferred to a follow-up slice; today this is the concatenated text of the turn.
 	Content string
+}
+
+// ModelInfo is the universal model descriptor returned by c.Models methods (compiled-in and live). Capabilities is always ontology-derived — never from wire data; wire fills the metadata fields when present.
+type ModelInfo struct {
+	// ID is the provider-scoped model identifier (e.g. claude-opus-4-7, gpt-5, gemini-2.5-flash). Round-tripped to provider endpoints verbatim.
+	ID string
+
+	// Provider is the Provider value that exposes this model. Used by Models.Provider(m.Provider).Get(ctx, m.ID) to round-trip back to live data when needed.
+	Provider Provider
+
+	// Capabilities is the SDK's understanding of what this model supports — chat completion, image generation, tool calling, etc. Always populated from the ontology, never from wire data. Empty (nil) for live IDs the SDK does not recognise.
+	Capabilities []Capability
+
+	// DisplayName is the human-readable name when the provider supplies one (Anthropic display_name, Google displayName). Empty when the provider's wire shape does not carry one or for compiled-in entries.
+	DisplayName string
+
+	// Description is the provider's free-text description (Google description). Empty for providers that do not publish a description field and for compiled-in entries.
+	Description string
+
+	// ContextWindow is the maximum input token count when published (Anthropic max_input_tokens, Google inputTokenLimit). Zero when the provider does not publish it (OpenAI-shape cohort) or for compiled-in entries without a curated value.
+	ContextWindow int
+
+	// MaxOutput is the maximum output token count when published (Anthropic max_tokens, Google outputTokenLimit). Zero when the provider does not publish it or for compiled-in entries.
+	MaxOutput int
+
+	// Created is the Unix-timestamp creation time when the provider publishes one (Anthropic created_at parsed to Unix, OpenAI created). Zero for compiled-in entries and providers that do not publish it.
+	Created int
+
+	// Raw is the parsed provider-native record for this model, populated only when the caller opted in via the builder's .Raw() chain method (ADR-014). Type-erased — consumers cast to a provider-shape type for fields the universal ModelInfo does not carry (Anthropic capability matrix, Google supportedGenerationMethods, etc.).
+	Raw json.RawMessage
 }
 
 // Response is the universal response container returned by text-generation terminals (Text.Prompt, Agent.Prompt). Five fields; all five are core (no per-capability augmentation).
