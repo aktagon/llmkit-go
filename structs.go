@@ -55,6 +55,15 @@ type ImageResponse struct {
 }
 
 //
+type MediaRef struct {
+	//
+	MimeType string
+
+	//
+	Bytes []byte
+}
+
+//
 type Message struct {
 	//
 	Role string

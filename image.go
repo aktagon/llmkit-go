@@ -43,13 +43,6 @@ type Part struct {
 }
 
 //
-//
-type MediaRef struct {
-	MimeType string
-	Bytes    []byte
-}
-
-//
 type ImageData struct {
 	MimeType string
 	Bytes    []byte
