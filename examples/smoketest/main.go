@@ -27,6 +27,7 @@ const timeout = 30 * time.Second
 // A-Box default isn't accessible from the test account.
 var models = map[string]string{
 	"cerebras": "zai-glm-4.7",
+	"ollama":   "gemma4:latest",
 }
 
 func main() {
