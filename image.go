@@ -42,13 +42,7 @@ type Part struct {
 	Image *MediaRef
 }
 
-// ImageData is one decoded image in an ImageResponse.
-type ImageData struct {
-	MimeType string
-	Bytes    []byte
-}
-
-// ImageResponse is declared in go/structs.go (ADR-018, API-PDS-002).
+// ImageData and ImageResponse are declared in go/structs.go (ADR-018, API-PDS-002).
 
 // ImageOption configures GenerateImage.
 type ImageOption func(*imageOptions)
