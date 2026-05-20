@@ -173,6 +173,24 @@ func SupportedOptions(provider string) map[OptionKey]string {
 			OptionTemperature:      "temperature",
 			OptionTopP:             "top_p",
 		}
+	case Jan:
+		return map[OptionKey]string{
+			OptionMaxTokens:     "max_tokens",
+			OptionSeed:          "seed",
+			OptionStopSequences: "stop",
+			OptionTemperature:   "temperature",
+			OptionTopK:          "top_k",
+			OptionTopP:          "top_p",
+		}
+	case Llamacpp:
+		return map[OptionKey]string{
+			OptionMaxTokens:     "max_tokens",
+			OptionSeed:          "seed",
+			OptionStopSequences: "stop",
+			OptionTemperature:   "temperature",
+			OptionTopK:          "top_k",
+			OptionTopP:          "top_p",
+		}
 	case Lmstudio:
 		return map[OptionKey]string{
 			OptionMaxTokens:     "max_tokens",

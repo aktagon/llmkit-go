@@ -475,6 +475,90 @@ func TestIntegrationGroqStream(t *testing.T) {
 	}
 }
 
+func TestIntegrationJan(t *testing.T) {
+	key := os.Getenv("JAN_API_KEY")
+	if key == "" {
+		t.Skip("JAN_API_KEY not set")
+	}
+	c := llmkit.New(providers.Jan, key)
+	resp, err := c.Text.System("Reply with only the word pong").Prompt(context.Background(), "ping")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Text == "" {
+		t.Error("empty response text")
+	}
+	if resp.Tokens.Input == 0 {
+		t.Error("no input tokens reported")
+	}
+}
+
+func TestIntegrationJanStream(t *testing.T) {
+	key := os.Getenv("JAN_API_KEY")
+	if key == "" {
+		t.Skip("JAN_API_KEY not set")
+	}
+	var chunks int
+	var text string
+	c := llmkit.New(providers.Jan, key)
+	stream := c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping")
+	for chunk, err := range stream.Chunks() {
+		if err != nil {
+			t.Fatal(err)
+		}
+		chunks++
+		text += chunk
+	}
+	if text == "" {
+		t.Error("empty response text")
+	}
+	if chunks == 0 {
+		t.Error("no chunks received")
+	}
+}
+
+func TestIntegrationLlamacpp(t *testing.T) {
+	key := os.Getenv("LLAMACPP_API_KEY")
+	if key == "" {
+		t.Skip("LLAMACPP_API_KEY not set")
+	}
+	c := llmkit.New(providers.Llamacpp, key)
+	resp, err := c.Text.System("Reply with only the word pong").Prompt(context.Background(), "ping")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Text == "" {
+		t.Error("empty response text")
+	}
+	if resp.Tokens.Input == 0 {
+		t.Error("no input tokens reported")
+	}
+}
+
+func TestIntegrationLlamacppStream(t *testing.T) {
+	key := os.Getenv("LLAMACPP_API_KEY")
+	if key == "" {
+		t.Skip("LLAMACPP_API_KEY not set")
+	}
+	var chunks int
+	var text string
+	c := llmkit.New(providers.Llamacpp, key)
+	stream := c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping")
+	for chunk, err := range stream.Chunks() {
+		if err != nil {
+			t.Fatal(err)
+		}
+		chunks++
+		text += chunk
+	}
+	if text == "" {
+		t.Error("empty response text")
+	}
+	if chunks == 0 {
+		t.Error("no chunks received")
+	}
+}
+
 func TestIntegrationMinimax(t *testing.T) {
 	key := os.Getenv("MINIMAX_API_KEY")
 	if key == "" {
