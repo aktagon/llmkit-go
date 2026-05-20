@@ -33,6 +33,15 @@ type File struct {
 	Name string
 }
 
+// ImageData is one decoded image payload returned in an ImageResponse. Same shape as MediaRef (mime type + raw bytes) but a distinct type so capability-specific return semantics stay typed: ImageResponse.images carries decoded outputs; MediaRef appears in input payloads and edit masks.
+type ImageData struct {
+	// MimeType is the IANA media type of the returned image (image/png, image/jpeg, image/webp). Drives the file extension or data URI scheme the caller picks for storage.
+	MimeType string
+
+	// Bytes is the raw (not base64-encoded) decoded image payload. The SDK decodes provider wire format (base64, URL fetch) before returning so callers always see raw bytes.
+	Bytes []byte
+}
+
 // ImageResponse is the universal image-generation response container returned by Image.Generate. Carries the decoded images, optional text captions/refusals, usage, and the same finish-reason / finish-message / raw fields the text-gen Response carries.
 type ImageResponse struct {
 	// Images are the decoded image payloads (mime type + raw bytes) returned by the provider. Empty when the provider blocks or refuses the request — inspect FinishReason / FinishMessage for the cause.
