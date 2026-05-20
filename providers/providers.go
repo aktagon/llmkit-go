@@ -693,7 +693,7 @@ func Providers() map[string]ProviderConfig {
 		},
 		Moonshot: {
 			Name:                "moonshot",
-			BaseURL:             "https://api.moonshot.cn",
+			BaseURL:             "https://api.moonshot.ai",
 			Endpoint:            "/v1/chat/completions",
 			DefaultModel:        "moonshot-v1-8k",
 			EnvVar:              "MOONSHOT_API_KEY",
