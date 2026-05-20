@@ -53,6 +53,7 @@ func APIOptions() []APIOptionDef {
 		{GoFunc: "WithOutputFormat", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithPath", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithPresencePenalty", SubOptions: []APISubOptionDef{}},
+		{GoFunc: "WithProvider", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithQuality", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithRaw", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithReasoningEffort", SubOptions: []APISubOptionDef{}},
@@ -68,6 +69,7 @@ func APIOptions() []APIOptionDef {
 		{GoFunc: "WithTool", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithTopK", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithTopP", SubOptions: []APISubOptionDef{}},
+		{GoFunc: "WithWithCapability", SubOptions: []APISubOptionDef{}},
 	}
 }
 
