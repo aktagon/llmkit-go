@@ -26,11 +26,13 @@ func (pc providerConfig) toProvider(model string) Provider {
 // this client; chain methods return new instances, the field stays
 // constant.
 type Client struct {
-	provider providerConfig
-	Text     *Text
-	Image    *Image
-	Agent    *Agent
-	Upload   *Upload
+	provider  providerConfig
+	Text      *Text
+	Image     *Image
+	Agent     *Agent
+	Upload    *Upload
+	Models    *Models
+	Providers *Providers
 }
 
 func newClient(name, apiKey string) *Client {
@@ -39,6 +41,8 @@ func newClient(name, apiKey string) *Client {
 	c.Image = &Image{client: c}
 	c.Agent = &Agent{client: c}
 	c.Upload = &Upload{client: c}
+	c.Models = &Models{client: c}
+	c.Providers = &Providers{client: c}
 	return c
 }
 
