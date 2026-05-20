@@ -42,13 +42,6 @@ type Part struct {
 	Image *MediaRef
 }
 
-// MediaRef is an inline media payload (mime type + raw bytes). Reused by
-// every Part variant that carries non-text content.
-type MediaRef struct {
-	MimeType string
-	Bytes    []byte
-}
-
 // ImageData is one decoded image in an ImageResponse.
 type ImageData struct {
 	MimeType string
