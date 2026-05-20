@@ -8,10 +8,21 @@
 //
 //
 //
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
 package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"sort"
@@ -52,12 +63,15 @@ func main() {
 			skip++
 			continue
 		}
+
+		listStatus := listModels(name, key)
+
 		if err := smoke(name, key); err != nil {
-			fmt.Printf("FAIL %-12s %v\n", name, truncate(err))
+			fmt.Printf("FAIL %-12s list=%-7s chat: %v\n", name, listStatus, truncate(err))
 			fail++
 			continue
 		}
-		fmt.Printf("PASS %-12s\n", name)
+		fmt.Printf("PASS %-12s list=%s\n", name, listStatus)
 		pass++
 	}
 	fmt.Printf("\n%d pass, %d fail, %d skip\n", pass, fail, skip)
@@ -75,6 +89,28 @@ func smoke(name, key string) error {
 	}
 	_, err := text.Prompt(ctx, "ok")
 	return err
+}
+
+//
+//
+//
+//
+func listModels(name, key string) string {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	_, err := llmkit.New(name, key).Models.
+		Provider(llmkit.Provider{Name: name, APIKey: key}).
+		List(ctx)
+	switch {
+	case err == nil:
+		return "OK"
+	case errors.Is(err, llmkit.ErrModelsNotSupported):
+		return "N/A"
+	case errors.Is(err, llmkit.ErrModelsUnavailable):
+		return "PENDING"
+	default:
+		return "FAIL"
+	}
 }
 
 func truncate(err error) string {
