@@ -35,12 +35,6 @@ type Usage = providers.Usage
 // providers subpackage just to declare a hook.
 type MiddlewareFn = providers.MiddlewareFn
 
-// Message represents a single conversation turn.
-type Message struct {
-	Role    string // "user" or "assistant"
-	Content string
-}
-
 // InputImage references an image attached to a text-generation request
 // (vision input). Distinct from Part's Image() constructor used for
 // image-generation calls; the two concepts target different capabilities
