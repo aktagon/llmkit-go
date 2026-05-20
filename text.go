@@ -96,7 +96,7 @@ func (b *Text) Prompt(ctx context.Context, finalText string) (Response, error) {
 		resp.Raw = append(json.RawMessage(nil), respBody...)
 	}
 	postEv := baseEvent
-	postEv.Usage = resp.Tokens
+	postEv.Usage = resp.Usage
 	postEv.Err = parseErr
 	postEv.Duration = time.Since(start)
 	firePost(ctx, o.middleware, postEv)

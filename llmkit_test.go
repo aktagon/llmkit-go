@@ -64,11 +64,11 @@ func TestPromptOpenAI(t *testing.T) {
 	if resp.Text != "Hello!" {
 		t.Errorf("expected 'Hello!', got %q", resp.Text)
 	}
-	if resp.Tokens.Input != 10 {
-		t.Errorf("expected 10 input tokens, got %d", resp.Tokens.Input)
+	if resp.Usage.Input != 10 {
+		t.Errorf("expected 10 input tokens, got %d", resp.Usage.Input)
 	}
-	if resp.Tokens.Output != 5 {
-		t.Errorf("expected 5 output tokens, got %d", resp.Tokens.Output)
+	if resp.Usage.Output != 5 {
+		t.Errorf("expected 5 output tokens, got %d", resp.Usage.Output)
 	}
 }
 
@@ -123,11 +123,11 @@ func TestPromptAnthropic(t *testing.T) {
 	if resp.Text != "Hello from Claude!" {
 		t.Errorf("expected 'Hello from Claude!', got %q", resp.Text)
 	}
-	if resp.Tokens.Input != 12 {
-		t.Errorf("expected 12 input tokens, got %d", resp.Tokens.Input)
+	if resp.Usage.Input != 12 {
+		t.Errorf("expected 12 input tokens, got %d", resp.Usage.Input)
 	}
-	if resp.Tokens.Output != 7 {
-		t.Errorf("expected 7 output tokens, got %d", resp.Tokens.Output)
+	if resp.Usage.Output != 7 {
+		t.Errorf("expected 7 output tokens, got %d", resp.Usage.Output)
 	}
 }
 
@@ -718,8 +718,8 @@ func TestAgentWithTools(t *testing.T) {
 	if callCount != 2 {
 		t.Errorf("expected 2 API calls (tool call + final), got %d", callCount)
 	}
-	if resp.Tokens.Input != 30 {
-		t.Errorf("expected 30 total input tokens, got %d", resp.Tokens.Input)
+	if resp.Usage.Input != 30 {
+		t.Errorf("expected 30 total input tokens, got %d", resp.Usage.Input)
 	}
 }
 
@@ -880,11 +880,11 @@ func TestWithCachingAnthropic(t *testing.T) {
 	if resp.Text != "cached!" {
 		t.Errorf("expected 'cached!', got %q", resp.Text)
 	}
-	if resp.Tokens.CacheWrite != 100 {
-		t.Errorf("expected 100 cache write tokens, got %d", resp.Tokens.CacheWrite)
+	if resp.Usage.CacheWrite != 100 {
+		t.Errorf("expected 100 cache write tokens, got %d", resp.Usage.CacheWrite)
 	}
-	if resp.Tokens.CacheRead != 0 {
-		t.Errorf("expected 0 cache read tokens, got %d", resp.Tokens.CacheRead)
+	if resp.Usage.CacheRead != 0 {
+		t.Errorf("expected 0 cache read tokens, got %d", resp.Usage.CacheRead)
 	}
 }
 
@@ -923,8 +923,8 @@ func TestWithCachingOpenAI(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resp.Tokens.CacheRead != 42 {
-		t.Errorf("expected 42 cache read tokens, got %d", resp.Tokens.CacheRead)
+	if resp.Usage.CacheRead != 42 {
+		t.Errorf("expected 42 cache read tokens, got %d", resp.Usage.CacheRead)
 	}
 }
 
@@ -1192,8 +1192,8 @@ func TestPromptBatchOpenAI(t *testing.T) {
 	if results[1].Text != "pong 2" {
 		t.Errorf("expected 'pong 2', got %q", results[1].Text)
 	}
-	if results[0].Tokens.Input != 5 {
-		t.Errorf("expected input tokens=5, got %d", results[0].Tokens.Input)
+	if results[0].Usage.Input != 5 {
+		t.Errorf("expected input tokens=5, got %d", results[0].Usage.Input)
 	}
 
 	// Verify JSONL was uploaded

@@ -368,8 +368,8 @@ func TestStream_RealBridge(t *testing.T) {
 	if resp.Text != "Hello world" {
 		t.Errorf("Response().Text: got %q want %q", resp.Text, "Hello world")
 	}
-	if resp.Tokens.Input != 1 || resp.Tokens.Output != 3 {
-		t.Errorf("Response().Tokens: got %+v want {Input:1, Output:3}", resp.Tokens)
+	if resp.Usage.Input != 1 || resp.Usage.Output != 3 {
+		t.Errorf("Response().Usage: got %+v want {Input:1, Output:3}", resp.Usage)
 	}
 	if err := stream.Err(); err != nil {
 		t.Errorf("Err(): got %v want nil", err)

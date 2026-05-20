@@ -86,8 +86,8 @@ func TestGenerateImageGoogleFlash(t *testing.T) {
 	if resp.Images[0].MimeType != "image/png" {
 		t.Errorf("expected image/png, got %q", resp.Images[0].MimeType)
 	}
-	if resp.Tokens.Input != 12 || resp.Tokens.Output != 1290 {
-		t.Errorf("usage mismatch: input=%d output=%d", resp.Tokens.Input, resp.Tokens.Output)
+	if resp.Usage.Input != 12 || resp.Usage.Output != 1290 {
+		t.Errorf("usage mismatch: input=%d output=%d", resp.Usage.Input, resp.Usage.Output)
 	}
 	if resp.Text != "" {
 		t.Errorf("expected empty text without WithIncludeText, got %q", resp.Text)
@@ -431,8 +431,8 @@ func TestGenerateImageOpenAIGenerationsHappyPath(t *testing.T) {
 	if !bytes.Equal(resp.Images[0].Bytes, fakePNG) {
 		t.Errorf("image bytes did not round-trip through base64")
 	}
-	if resp.Tokens.Input != 7 || resp.Tokens.Output != 1500 {
-		t.Errorf("usage mismatch: input=%d output=%d", resp.Tokens.Input, resp.Tokens.Output)
+	if resp.Usage.Input != 7 || resp.Usage.Output != 1500 {
+		t.Errorf("usage mismatch: input=%d output=%d", resp.Usage.Input, resp.Usage.Output)
 	}
 }
 
@@ -771,9 +771,9 @@ func TestGenerateImageGrokGenerationsForcesB64Json(t *testing.T) {
 	}
 	// xAI doesn't report token counts (only cost_in_usd_ticks); both
 	// fields should remain zero rather than fabricated.
-	if resp.Tokens.Input != 0 || resp.Tokens.Output != 0 {
+	if resp.Usage.Input != 0 || resp.Usage.Output != 0 {
 		t.Errorf("xAI usage shape has no token counts; expected 0/0, got %d/%d",
-			resp.Tokens.Input, resp.Tokens.Output)
+			resp.Usage.Input, resp.Usage.Output)
 	}
 }
 
@@ -1365,9 +1365,9 @@ func TestGenerateImageVertexGenerationsHappyPath(t *testing.T) {
 		t.Errorf("expected mime_type echoed back, got %q", resp.Images[0].MimeType)
 	}
 	// Vertex predict response does not carry token counts.
-	if resp.Tokens.Input != 0 || resp.Tokens.Output != 0 {
+	if resp.Usage.Input != 0 || resp.Usage.Output != 0 {
 		t.Errorf("Vertex usage shape has no token counts; expected 0/0, got %d/%d",
-			resp.Tokens.Input, resp.Tokens.Output)
+			resp.Usage.Input, resp.Usage.Output)
 	}
 }
 
