@@ -102,3 +102,54 @@ func TestScopedModels_List_NotSupportedProvider(t *testing.T) {
 		t.Errorf("err = %v, want ErrModelsNotSupported", err)
 	}
 }
+
+func TestScopedModels_List_UnavailableForPhase3Stub(t *testing.T) {
+	c := Anthropic("test-key") // has models endpoint, but Phase 3 stub returns ErrModelsUnavailable
+	_, err := c.Models.Provider(Provider{Name: "anthropic"}).List(context.Background())
+	if !errors.Is(err, ErrModelsUnavailable) {
+		t.Errorf("err = %v, want ErrModelsUnavailable", err)
+	}
+}
+
+func TestScopedModels_Get_Phase3Stub(t *testing.T) {
+	c := Anthropic("test-key")
+	_, err := c.Models.Provider(Provider{Name: "anthropic"}).Get(context.Background(), "claude-opus-4-7")
+	if !errors.Is(err, ErrModelsUnavailable) {
+		t.Errorf("Get err = %v, want ErrModelsUnavailable", err)
+	}
+	c2 := Cerebras("test-key")
+	_, err = c2.Models.Provider(Provider{Name: "cerebras"}).Get(context.Background(), "any-id")
+	if !errors.Is(err, ErrModelsNotSupported) {
+		t.Errorf("Get on endpoint-less err = %v, want ErrModelsNotSupported", err)
+	}
+}
+
+func TestScopedModels_Raw_FlipsRawFlag(t *testing.T) {
+	c := Anthropic("test-key")
+	scoped := c.Models.Provider(Provider{Name: "anthropic"})
+	forked := scoped.Raw()
+	if scoped.raw {
+		t.Error("parent.raw mutated: chain immutability broken")
+	}
+	if !forked.raw {
+		t.Error("forked.raw not set after Raw()")
+	}
+}
+
+func TestModels_Live_CapturesUnavailableInLiveResultErrors(t *testing.T) {
+	c := Anthropic("test-key")
+	res, err := c.Models.Live(context.Background())
+	if err != nil {
+		t.Fatalf("Live unexpected err = %v", err)
+	}
+	if len(res.Models) != 0 {
+		t.Errorf("expected zero successful models from Phase 3 stub, got %d", len(res.Models))
+	}
+	got, ok := res.Errors["anthropic"]
+	if !ok {
+		t.Fatal("expected anthropic key in Errors map")
+	}
+	if !errors.Is(got, ErrModelsUnavailable) {
+		t.Errorf("anthropic err = %v, want ErrModelsUnavailable", got)
+	}
+}
