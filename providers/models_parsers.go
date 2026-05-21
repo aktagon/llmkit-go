@@ -9,6 +9,7 @@
 package providers
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -85,16 +86,27 @@ func ParseAnthropicModelsResponse(body []byte) (ParsedModelsPage, error) {
 
 // ParseOpenAICohortModelsResponse decodes the non-paginated OpenAI
 // /v1/models response (and any provider that mirrors the shape — xAI
-// Grok, Cerebras, Groq, Together, etc.). NextCursor is always "".
+// Grok, Cerebras, Groq, Together, etc.). Accepts either the OpenAI
+// envelope ({"data":[...]}) or a bare top-level array ([...]) — Together
+// returns the latter. NextCursor is always "".
 func ParseOpenAICohortModelsResponse(body []byte) (ParsedModelsPage, error) {
-	var envelope struct {
-		Data []json.RawMessage `json:"data"`
+	trimmed := bytes.TrimLeft(body, " \t\r\n")
+	var raws []json.RawMessage
+	if len(trimmed) > 0 && trimmed[0] == '[' {
+		if err := json.Unmarshal(body, &raws); err != nil {
+			return ParsedModelsPage{}, fmt.Errorf("openai-cohort models: decode array: %w", err)
+		}
+	} else {
+		var envelope struct {
+			Data []json.RawMessage `json:"data"`
+		}
+		if err := json.Unmarshal(body, &envelope); err != nil {
+			return ParsedModelsPage{}, fmt.Errorf("openai-cohort models: decode envelope: %w", err)
+		}
+		raws = envelope.Data
 	}
-	if err := json.Unmarshal(body, &envelope); err != nil {
-		return ParsedModelsPage{}, fmt.Errorf("openai-cohort models: decode envelope: %w", err)
-	}
-	records := make([]ParsedModelRecord, 0, len(envelope.Data))
-	for i, raw := range envelope.Data {
+	records := make([]ParsedModelRecord, 0, len(raws))
+	for i, raw := range raws {
 		var wire struct {
 			ID      string `json:"id"`
 			Created int64  `json:"created"`
