@@ -33,6 +33,30 @@ func doPost(ctx context.Context, client *http.Client, url string, body []byte, h
 	return data, nil
 }
 
+// doGetRaw sends a GET request and returns body + status code without
+// wrapping non-2xx as APIError. Catalogue paths (ADR-019) use this so
+// the runtime can read provider error envelopes for scope-vs-unavailable
+// classification before deciding which sentinel to surface.
+func doGetRaw(ctx context.Context, client *http.Client, url string, headers map[string]string) ([]byte, int, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, 0, err
+	}
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer resp.Body.Close()
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, resp.StatusCode, err
+	}
+	return data, resp.StatusCode, nil
+}
+
 // doPostRaw sends a POST request and returns status code and body without error handling.
 func doPostRaw(ctx context.Context, client *http.Client, url string, body []byte, headers map[string]string) ([]byte, int, error) {
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
