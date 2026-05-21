@@ -967,7 +967,7 @@ func Providers() map[string]ProviderConfig {
 		},
 		Qwen: {
 			Name:                "qwen",
-			BaseURL:             "https://dashscope.aliyuncs.com/compatible-mode",
+			BaseURL:             "https://dashscope-intl.aliyuncs.com/compatible-mode",
 			Endpoint:            "/v1/chat/completions",
 			DefaultModel:        "qwen-plus",
 			EnvVar:              "DASHSCOPE_API_KEY",
