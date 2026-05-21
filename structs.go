@@ -69,7 +69,7 @@ type LiveResult struct {
 	Models []ModelInfo
 
 	//
-	Errors map[string]error
+	Errors map[string]ProviderError
 }
 
 //
@@ -118,6 +118,15 @@ type ModelInfo struct {
 
 	//
 	Raw json.RawMessage
+}
+
+//
+type ProviderError struct {
+	//
+	Kind string
+
+	//
+	Message string
 }
 
 //

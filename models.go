@@ -24,6 +24,22 @@ var (
 //
 //
 //
+//
+func classifyCatalogueErr(err error) string {
+	switch {
+	case errors.Is(err, ErrModelsNotSupported):
+		return "not_supported"
+	case errors.Is(err, ErrModelsScope):
+		return "scope"
+	default:
+		return "unavailable"
+	}
+}
+
+//
+//
+//
+//
 func filterCompiledModels(c Capability) []ModelInfo {
 	if c == "" {
 		out := make([]ModelInfo, len(compiledInModels))
@@ -63,13 +79,14 @@ func (b *Models) runLive(ctx context.Context) (LiveResult, error) {
 	configured := b.client.Providers.List()
 	var (
 		all  []ModelInfo
-		errs = map[string]error{}
+		errs = map[string]ProviderError{}
 	)
 	for _, p := range configured {
 		scoped := &ScopedModels{client: b.client, target: p}
 		models, err := scoped.runList(ctx)
 		if err != nil {
-			errs[p.Name] = err
+			//
+			errs[p.Name] = ProviderError{Kind: classifyCatalogueErr(err), Message: err.Error()}
 			continue
 		}
 		all = append(all, models...)
