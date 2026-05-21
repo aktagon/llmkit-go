@@ -69,7 +69,7 @@ type LiveResult struct {
 	Models []ModelInfo
 
 	// Errors is the per-provider failure map. Empty when every configured provider succeeded. Keyed by Provider; each value carries the per-provider error sentinel (ErrModelsScope / ErrModelsUnavailable / ErrModelsNotSupported).
-	Errors map[string]error
+	Errors map[string]ProviderError
 }
 
 // MediaRef is an inline media payload (mime type + raw bytes). Reused by every Part variant that carries non-text content, and by image-generation knobs like Mask that pass through a single binary blob.
@@ -118,6 +118,15 @@ type ModelInfo struct {
 
 	// Raw is the parsed provider-native record for this model, populated only when the caller opted in via the builder's .Raw() chain method (ADR-014). Type-erased — consumers cast to a provider-shape type for fields the universal ModelInfo does not carry (Anthropic capability matrix, Google supportedGenerationMethods, etc.).
 	Raw json.RawMessage
+}
+
+// ProviderError is the per-provider failure carried in LiveResult.errors (ADR-019 Amendment 1). Discriminated by Kind so consumers can branch typed in any SDK; Message is the human-readable form for display.
+type ProviderError struct {
+	// Kind is the sentinel discriminant: "not_supported", "unavailable", or "scope". Mirrors the three Err* sentinels declared in ADR-019 § Error story. String (not enum) keeps the codegen-table footprint at zero and dodges the Python str(Enum) trap that Phase 2.5's review surfaced.
+	Kind string
+
+	// Message is the human-readable explanation. Free-form; not part of the contract beyond display.
+	Message string
 }
 
 // Response is the universal response container returned by text-generation terminals (Text.Prompt, Agent.Prompt). Five fields; all five are core (no per-capability augmentation).

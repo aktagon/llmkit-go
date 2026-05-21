@@ -20,6 +20,22 @@ var (
 	ErrModelsScope        = errors.New("llmkit: api key lacks scope for models endpoint")
 )
 
+// classifyCatalogueErr maps the three sentinel values to the wire-format
+// discriminant carried in ProviderError.Kind (ADR-019 Amendment 1). Lets
+// consumers branch typed on .Kind in any SDK with a single string compare.
+// Unknown errors fall back to "unavailable" — the safer default since
+// "scope" implies a documented retry path that doesn't apply.
+func classifyCatalogueErr(err error) string {
+	switch {
+	case errors.Is(err, ErrModelsNotSupported):
+		return "not_supported"
+	case errors.Is(err, ErrModelsScope):
+		return "scope"
+	default:
+		return "unavailable"
+	}
+}
+
 // filterCompiledModels walks the codegen-emitted compiledInModels slice
 // and returns the records whose Capabilities slice contains c. An empty
 // c means no filter — the full slice is returned by reference-copy of a
@@ -63,13 +79,14 @@ func (b *Models) runLive(ctx context.Context) (LiveResult, error) {
 	configured := b.client.Providers.List()
 	var (
 		all  []ModelInfo
-		errs = map[string]error{}
+		errs = map[string]ProviderError{}
 	)
 	for _, p := range configured {
 		scoped := &ScopedModels{client: b.client, target: p}
 		models, err := scoped.runList(ctx)
 		if err != nil {
-			errs[p.Name] = err
+			// ADR-019 Amendment 1: structured discriminant + message.
+			errs[p.Name] = ProviderError{Kind: classifyCatalogueErr(err), Message: err.Error()}
 			continue
 		}
 		all = append(all, models...)
