@@ -45,6 +45,8 @@ const (
 	OpBatchSubmit MiddlewareOp = "batch_submit"
 	//
 	OpImageGeneration MiddlewareOp = "image_generation"
+	//
+	OpModelsList MiddlewareOp = "models_list"
 )
 
 //
