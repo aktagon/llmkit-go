@@ -149,7 +149,11 @@ func TestModels_Live_CapturesUnavailableInLiveResultErrors(t *testing.T) {
 	if !ok {
 		t.Fatal("expected anthropic key in Errors map")
 	}
-	if !errors.Is(got, ErrModelsUnavailable) {
-		t.Errorf("anthropic err = %v, want ErrModelsUnavailable", got)
+	// ADR-019 Amendment 1: typed discriminant via ProviderError.Kind.
+	if got.Kind != "unavailable" {
+		t.Errorf("anthropic err.Kind = %q, want %q", got.Kind, "unavailable")
+	}
+	if got.Message == "" {
+		t.Error("anthropic err.Message empty; expected sentinel text")
 	}
 }
