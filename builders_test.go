@@ -161,9 +161,10 @@ func TestSurface_Constructors(t *testing.T) {
 		New("custom", "k"),
 		Ai21("k"), Anthropic("k"), Azure("k"), Bedrock("k"), Cerebras("k"),
 		Cohere("k"), Deepseek("k"), Doubao("k"), Ernie("k"), Fireworks("k"),
-		Google("k"), Grok("k"), Groq("k"), Lmstudio("k"), Minimax("k"),
-		Mistral("k"), Moonshot("k"), Ollama("k"), Openai("k"), Openrouter("k"),
-		Perplexity("k"), Qwen("k"), Sambanova("k"), Together("k"), Vertex("k"),
+		Google("k"), Grok("k"), Groq("k"), Jan("k"), Llamacpp("k"),
+		Lmstudio("k"), Minimax("k"), Mistral("k"), Moonshot("k"),
+		Ollama("k"), Openai("k"), Openrouter("k"), Perplexity("k"),
+		Qwen("k"), Sambanova("k"), Together("k"), Vertex("k"),
 		Vllm("k"), Yi("k"), Zhipu("k"),
 	}
 	for i, c := range clients {
