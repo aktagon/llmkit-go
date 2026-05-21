@@ -80,8 +80,8 @@ func TestProviders_List_SingleProviderClient(t *testing.T) {
 		t.Errorf("Providers.List[0] = %q, want anthropic", got[0].Name)
 	}
 
-	// Cerebras does NOT have llm:hasModelsEndpoint -> empty.
-	c2 := Cerebras("test-key")
+	// Cohere does NOT have llm:hasModelsEndpoint -> empty.
+	c2 := Cohere("test-key")
 	if got := c2.Providers.List(); len(got) != 0 {
 		t.Errorf("Providers.List for endpoint-less provider = %d, want 0", len(got))
 	}
@@ -96,8 +96,8 @@ func TestProviders_Supported_ReturnsAllSDKProviders(t *testing.T) {
 }
 
 func TestScopedModels_List_NotSupportedProvider(t *testing.T) {
-	c := Cerebras("test-key") // no models endpoint
-	_, err := c.Models.Provider(Provider{Name: "cerebras"}).List(context.Background())
+	c := Cohere("test-key") // no models endpoint
+	_, err := c.Models.Provider(Provider{Name: "cohere"}).List(context.Background())
 	if !errors.Is(err, ErrModelsNotSupported) {
 		t.Errorf("err = %v, want ErrModelsNotSupported", err)
 	}
@@ -117,8 +117,8 @@ func TestScopedModels_Get_Phase3Stub(t *testing.T) {
 	if !errors.Is(err, ErrModelsUnavailable) {
 		t.Errorf("Get err = %v, want ErrModelsUnavailable", err)
 	}
-	c2 := Cerebras("test-key")
-	_, err = c2.Models.Provider(Provider{Name: "cerebras"}).Get(context.Background(), "any-id")
+	c2 := Cohere("test-key")
+	_, err = c2.Models.Provider(Provider{Name: "cohere"}).Get(context.Background(), "any-id")
 	if !errors.Is(err, ErrModelsNotSupported) {
 		t.Errorf("Get on endpoint-less err = %v, want ErrModelsNotSupported", err)
 	}
