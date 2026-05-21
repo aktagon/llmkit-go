@@ -154,28 +154,9 @@ func TestSurface_Immutable(t *testing.T) {
 	}
 }
 
-// TestSurface_Constructors exercises every per-provider constructor and
-// the generic New() escape hatch.
-func TestSurface_Constructors(t *testing.T) {
-	clients := []*Client{
-		New("custom", "k"),
-		Ai21("k"), Anthropic("k"), Azure("k"), Bedrock("k"), Cerebras("k"),
-		Cohere("k"), Deepseek("k"), Doubao("k"), Ernie("k"), Fireworks("k"),
-		Google("k"), Grok("k"), Groq("k"), Jan("k"), Llamacpp("k"),
-		Lmstudio("k"), Minimax("k"), Mistral("k"), Moonshot("k"),
-		Ollama("k"), Openai("k"), Openrouter("k"), Perplexity("k"),
-		Qwen("k"), Sambanova("k"), Together("k"), Vertex("k"),
-		Vllm("k"), Yi("k"), Zhipu("k"),
-	}
-	for i, c := range clients {
-		if c == nil {
-			t.Fatalf("constructor %d returned nil", i)
-		}
-		if c.provider.apiKey != "k" {
-			t.Fatalf("constructor %d: apiKey not stored (got %q)", i, c.provider.apiKey)
-		}
-	}
-}
+// Per-provider constructor smoke moved to the generated
+// TestEveryProviderFactory_Constructs in builders_constructors_test.go
+// — keeps the list and the ontology in lockstep.
 
 func TestClient_WithBaseURL_SetsAndReturnsSelf(t *testing.T) {
 	override := "https://example.test/v1"
