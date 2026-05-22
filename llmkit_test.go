@@ -708,7 +708,7 @@ func TestAgentWithTools(t *testing.T) {
 		},
 	}
 
-	resp, err := c.Agent.System("You are a calculator").Tool(addTool).Prompt(context.Background(), "What is 2+3?")
+	resp, err := c.Agent.System("You are a calculator").AddTool(addTool).Prompt(context.Background(), "What is 2+3?")
 	if err != nil {
 		t.Fatal(err)
 	}

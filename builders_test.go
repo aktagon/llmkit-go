@@ -31,7 +31,7 @@ func TestSurface_Chains(t *testing.T) {
 		History(Message{Role: "user", Content: "earlier"}).
 		Image("image/png", []byte{0xff}).
 		MaxTokens(42).
-		Middleware(noopMiddleware).
+		AddMiddleware(noopMiddleware).
 		Model("text-model").
 		PresencePenalty(0.2).
 		ReasoningEffort("high").
@@ -85,7 +85,7 @@ func TestSurface_Chains(t *testing.T) {
 		Image("image/png", []byte{0xff}).
 		ImageSize("2K").
 		IncludeText().
-		Middleware(noopMiddleware).
+		AddMiddleware(noopMiddleware).
 		Model("img-model").
 		Text("compose")
 
@@ -101,7 +101,7 @@ func TestSurface_Chains(t *testing.T) {
 		FrequencyPenalty(0.1).
 		MaxTokens(1).
 		MaxToolIterations(3).
-		Middleware(noopMiddleware).
+		AddMiddleware(noopMiddleware).
 		Model("a").
 		PresencePenalty(0.2).
 		ReasoningEffort("medium").
@@ -111,7 +111,7 @@ func TestSurface_Chains(t *testing.T) {
 		System("sys").
 		Temperature(0.5).
 		ThinkingBudget(512).
-		Tool(Tool{Name: "calc"}).
+		AddTool(Tool{Name: "calc"}).
 		TopK(20).
 		TopP(0.85)
 
@@ -129,7 +129,7 @@ func TestSurface_Chains(t *testing.T) {
 		Bytes([]byte("hi")).
 		Filename("f").
 		MimeType("text/plain").
-		Middleware(noopMiddleware).
+		AddMiddleware(noopMiddleware).
 		Path("/tmp/x")
 
 	if up.path != "/tmp/x" || string(up.bytes) != "hi" || up.filename != "f" || up.mimeType != "text/plain" {
@@ -151,6 +151,30 @@ func TestSurface_Immutable(t *testing.T) {
 	}
 	if configured.system != "hello" {
 		t.Errorf("copy not configured: configured.system = %q", configured.system)
+	}
+}
+
+// TestAgent_AddTool_Appends guards the appender semantics that the
+// ADR-021 `Add*` prefix telegraphs: two AddTool calls accumulate, not
+// replace. Regression guard against anyone "simplifying" the chain
+// method body to assignment-instead-of-append.
+func TestAgent_AddTool_Appends(t *testing.T) {
+	t1 := Tool{Name: "first"}
+	t2 := Tool{Name: "second"}
+	bot := Anthropic("k").Agent.System("S").AddTool(t1).AddTool(t2)
+	if len(bot.tools) != 2 || bot.tools[0].Name != "first" || bot.tools[1].Name != "second" {
+		t.Errorf("AddTool should accumulate; got %#v", bot.tools)
+	}
+}
+
+// TestText_AddMiddleware_Appends mirrors the AddTool guard for
+// AddMiddleware — two calls accumulate.
+func TestText_AddMiddleware_Appends(t *testing.T) {
+	m1 := MiddlewareFn(func(_ context.Context, _ providers.Event) error { return nil })
+	m2 := MiddlewareFn(func(_ context.Context, _ providers.Event) error { return nil })
+	bot := Anthropic("k").Text.AddMiddleware(m1).AddMiddleware(m2)
+	if len(bot.middleware) != 2 {
+		t.Errorf("AddMiddleware should accumulate; got len=%d", len(bot.middleware))
 	}
 }
 
@@ -225,11 +249,11 @@ func TestAgent_Prompt_Coverage(t *testing.T) {
 	c := Anthropic("k")
 	_, _ = c.Agent.
 		System("you are helpful").
-		Tool(Tool{Name: "calc"}).
+		AddTool(Tool{Name: "calc"}).
 		MaxTokens(50).
 		Temperature(0.5).
 		Caching().
-		Middleware(noopMiddleware).
+		AddMiddleware(noopMiddleware).
 		Model("claude").
 		Prompt(ctx, "hello")
 }
@@ -412,7 +436,7 @@ func TestUpload_Coverage(t *testing.T) {
 	c := Openai("k")
 
 	// Path branch — exercises the wired path.
-	_, _ = c.Upload.Path("/nonexistent").Middleware(noopMiddleware).Run(ctx)
+	_, _ = c.Upload.Path("/nonexistent").AddMiddleware(noopMiddleware).Run(ctx)
 
 	// Bytes branch — exercises the wired path (cancelled ctx forces
 	// the call to bail out before the network).
@@ -452,7 +476,7 @@ func TestText_Prompt_Coverage(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	c := Openai("k")
-	_, _ = c.Text.System("x").MaxTokens(1).Temperature(0.5).Caching().Middleware(noopMiddleware).Prompt(ctx, "hi")
+	_, _ = c.Text.System("x").MaxTokens(1).Temperature(0.5).Caching().AddMiddleware(noopMiddleware).Prompt(ctx, "hi")
 }
 
 // TestImage_Generate_Coverage same idea — exercises the wired Image
@@ -466,7 +490,7 @@ func TestImage_Generate_Coverage(t *testing.T) {
 		AspectRatio("1:1").
 		ImageSize("1K").
 		IncludeText().
-		Middleware(noopMiddleware).
+		AddMiddleware(noopMiddleware).
 		Generate(ctx, "a banana")
 }
 
@@ -506,7 +530,7 @@ func TestText_BuildRequest_Compatibility(t *testing.T) {
 		MaxTokens(maxTok).
 		Temperature(temp).
 		Caching().
-		Middleware(noopMiddleware)
+		AddMiddleware(noopMiddleware)
 
 	got, gotOpts := tb.buildRequest("hello")
 

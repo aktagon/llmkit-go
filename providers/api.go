@@ -31,6 +31,7 @@ type APIResponseFieldDef struct {
 // APIOptions returns all functional options.
 func APIOptions() []APIOptionDef {
 	return []APIOptionDef{
+		{GoFunc: "WithAddTool", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithAspectRatio", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithBackground", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithBytes", SubOptions: []APISubOptionDef{}},
@@ -66,7 +67,6 @@ func APIOptions() []APIOptionDef {
 		{GoFunc: "WithTemperature", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithText", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithThinkingBudget", SubOptions: []APISubOptionDef{}},
-		{GoFunc: "WithTool", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithTopK", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithTopP", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithWithCapability", SubOptions: []APISubOptionDef{}},

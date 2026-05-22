@@ -104,7 +104,7 @@ func ExampleClient_agent() {
 
 	bot := c.Agent.
 		System("You are a calculator").
-		Tool(addTool).
+		AddTool(addTool).
 		MaxToolIterations(5)
 	resp, err := bot.Prompt(context.Background(), "What is 2+3?")
 	if err != nil {
