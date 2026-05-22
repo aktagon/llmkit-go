@@ -304,6 +304,29 @@ img, err := c.Image.Model("imagen-3.0-generate-002").
 a `*ValidationError`. The `HarmCategory*`, `HarmBlockThreshold*`, and
 `ImageSafetyFilter*` constants cover all documented values; raw strings also work.
 
+### Model catalogue
+
+`c.Models` and `c.Providers` (ADR-019) cover model discovery in three modes. Runnable counterpart at [`examples/catalogue/main.go`](./examples/catalogue/main.go).
+
+```go
+// 1. Compiled-in catalogue -- synchronous, no HTTP.
+all := c.Models.List()
+info, ok := c.Models.Get("claude-opus-4-7")                       // (ModelInfo, bool)
+chat := c.Models.WithCapability(llmkit.CapChatCompletion).List()
+
+// 2. Providers namespace.
+c.Providers.List()       // configured (credentials + /v1/models endpoint)
+c.Providers.Supported()  // every provider the SDK was built with
+
+// 3. Live + scoped HTTP.
+live, err := c.Models.Live(ctx)                                   // LiveResult -- fan-out
+p := llmkit.Provider{Name: "anthropic", APIKey: "sk-..."}
+scoped, err := c.Models.Provider(p).List(ctx)                     // single-provider list
+raw, err := c.Models.Provider(p).Raw().List(ctx)                  // ModelInfo.Raw populated
+```
+
+`Live(ctx)` calls every configured provider's `/v1/models` in parallel and aggregates results into `LiveResult.Models` + a per-provider `LiveResult.Errors` map (partial success is the normal case). `Provider(p).Raw().List(ctx)` opts into populating `ModelInfo.Raw` with the provider-native record -- useful when you need fields the universal `ModelInfo` does not carry (Anthropic's capability matrix, Google's `supportedGenerationMethods`, etc.).
+
 ## Options
 
 Sampling and decoding knobs are typed chain methods on `*Text` and
