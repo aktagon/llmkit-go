@@ -38,6 +38,30 @@ func (b *Agent) Reset() {
 	b.state = nil
 }
 
+// Save serializes the agent's accumulated history into the canonical
+// wire format (ADR-023 STAB-012). Sugar over SaveHistory(b.Messages()).
+// Returns nil bytes + nil error when the builder has no runtime
+// state, mirroring an empty conversation.
+func (b *Agent) Save() ([]byte, error) {
+	return SaveHistory(b.Messages())
+}
+
+// Load decodes a wire document and replaces the chain's history
+// list, then zeroes the runtime state so the next Prompt rebuilds
+// the legacy agent with the loaded history. Returns a typed error
+// (ErrMissingWireVersion / ErrUnsupportedWireVersion / ErrUnknownWireKey)
+// on a non-conforming document (ADR-023 STAB-012).
+func (b *Agent) Load(data []byte) (*Agent, error) {
+	msgs, err := LoadHistory(data)
+	if err != nil {
+		return nil, err
+	}
+	out := *b
+	out.history = msgs
+	out.state = nil
+	return &out, nil
+}
+
 // Messages returns the accumulated conversation history as a fresh
 // []Message slice (ADR-020 HIST-004). Empty when the builder has no
 // runtime state — i.e. before the first Prompt call.
