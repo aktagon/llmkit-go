@@ -51,7 +51,7 @@ func TestMiddlewarePrePostFire(t *testing.T) {
 
 	c := Openai("test-key")
 	c.provider.baseURL = server.URL
-	_, err := c.Text.Middleware(mw).Prompt(context.Background(), "Hi")
+	_, err := c.Text.AddMiddleware(mw).Prompt(context.Background(), "Hi")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -88,7 +88,7 @@ func TestMiddlewarePreVetoAborts(t *testing.T) {
 
 	c := New(providers.OpenAI, "test-key")
 	c.provider.baseURL = server.URL
-	_, err := c.Text.Middleware(mw).Prompt(context.Background(), "Hi")
+	_, err := c.Text.AddMiddleware(mw).Prompt(context.Background(), "Hi")
 	if err == nil {
 		t.Fatal("expected veto error, got nil")
 	}
@@ -118,7 +118,7 @@ func TestMiddlewarePostErrorIsSwallowed(t *testing.T) {
 
 	c := New(providers.OpenAI, "test-key")
 	c.provider.baseURL = server.URL
-	resp, err := c.Text.Middleware(mw).Prompt(context.Background(), "Hi")
+	resp, err := c.Text.AddMiddleware(mw).Prompt(context.Background(), "Hi")
 	if err != nil {
 		t.Fatalf("post-phase error must not propagate: %v", err)
 	}
@@ -147,7 +147,7 @@ func TestMiddlewareFiresInRegistrationOrder(t *testing.T) {
 
 	c := New(providers.OpenAI, "test-key")
 	c.provider.baseURL = server.URL
-	_, err := c.Text.Middleware(first, second).Prompt(context.Background(), "Hi")
+	_, err := c.Text.AddMiddleware(first, second).Prompt(context.Background(), "Hi")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -177,7 +177,7 @@ func TestMiddlewareFirstVetoStopsChain(t *testing.T) {
 
 	c := New(providers.OpenAI, "test-key")
 	c.provider.baseURL = server.URL
-	_, err := c.Text.Middleware(first, second).Prompt(context.Background(), "Hi")
+	_, err := c.Text.AddMiddleware(first, second).Prompt(context.Background(), "Hi")
 	if err == nil {
 		t.Fatal("expected veto error")
 	}
@@ -201,7 +201,7 @@ func TestMiddlewareCarriesModelAndProvider(t *testing.T) {
 
 	c := New(providers.OpenAI, "test-key")
 	c.provider.baseURL = server.URL
-	_, err := c.Text.Model("gpt-4o-mini").Middleware(mw).Prompt(context.Background(), "Hi")
+	_, err := c.Text.Model("gpt-4o-mini").AddMiddleware(mw).Prompt(context.Background(), "Hi")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -243,7 +243,7 @@ func TestReasoningTokensPopulatedForOpenAI(t *testing.T) {
 
 	c := New(providers.OpenAI, "test-key")
 	c.provider.baseURL = server.URL
-	resp, err := c.Text.Middleware(mw).Prompt(context.Background(), "Hi")
+	resp, err := c.Text.AddMiddleware(mw).Prompt(context.Background(), "Hi")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -308,7 +308,7 @@ func TestMiddlewareStreamBracketsEntireStream(t *testing.T) {
 	c := New(providers.OpenAI, "test-key")
 	c.provider.baseURL = server.URL
 	chunks := []string{}
-	for chunk, err := range c.Text.Middleware(mw).Stream(context.Background(), "Hi").Chunks() {
+	for chunk, err := range c.Text.AddMiddleware(mw).Stream(context.Background(), "Hi").Chunks() {
 		if err != nil {
 			t.Fatal(err)
 		}

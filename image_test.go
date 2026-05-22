@@ -328,7 +328,7 @@ func TestGenerateImageMiddlewareFires(t *testing.T) {
 
 	c := New(providers.Google, "k")
 	c.provider.baseURL = server.URL
-	_, err := c.Image.Model(flashModel).Middleware(mw).Generate(context.Background(), "x")
+	_, err := c.Image.Model(flashModel).AddMiddleware(mw).Generate(context.Background(), "x")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -355,7 +355,7 @@ func TestGenerateImageMiddlewareCanVeto(t *testing.T) {
 
 	c := New(providers.Google, "k")
 	c.provider.baseURL = "http://unused"
-	_, err := c.Image.Model(flashModel).Middleware(mw).Generate(context.Background(), "x")
+	_, err := c.Image.Model(flashModel).AddMiddleware(mw).Generate(context.Background(), "x")
 	var veto *MiddlewareVetoError
 	if !errors.As(err, &veto) {
 		t.Fatalf("expected MiddlewareVetoError, got %v", err)
@@ -609,7 +609,7 @@ func TestGenerateImageOpenAIMiddlewareFiresBothBranches(t *testing.T) {
 		}
 		c := New(providers.OpenAI, "test-key")
 		c.provider.baseURL = server.URL
-		b := c.Image.Model(openaiImage2).Middleware(mw)
+		b := c.Image.Model(openaiImage2).AddMiddleware(mw)
 		if branch == "edits" {
 			b = b.Image("image/png", []byte{0x89, 'P', 'N', 'G'})
 		}
@@ -640,7 +640,7 @@ func TestGenerateImageOpenAIMiddlewareVetoStopsHTTP(t *testing.T) {
 	}
 	c := New(providers.OpenAI, "test-key")
 	c.provider.baseURL = server.URL
-	_, err := c.Image.Model(openaiImage2).Middleware(mw).Generate(context.Background(), "x")
+	_, err := c.Image.Model(openaiImage2).AddMiddleware(mw).Generate(context.Background(), "x")
 	var veto *MiddlewareVetoError
 	if !errors.As(err, &veto) {
 		t.Fatalf("expected MiddlewareVetoError, got %v", err)
@@ -969,7 +969,7 @@ func TestGenerateImageGrokMiddlewareFiresBothBranches(t *testing.T) {
 		}
 		c := New(providers.Grok, "test-key")
 		c.provider.baseURL = server.URL
-		b := c.Image.Model(grokImagineQuality).Middleware(mw)
+		b := c.Image.Model(grokImagineQuality).AddMiddleware(mw)
 		if branch == "edits" {
 			b = b.Image("image/png", []byte{0x89, 'P', 'N', 'G'})
 		}
