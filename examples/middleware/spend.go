@@ -87,7 +87,7 @@ func main() {
 	})
 
 	c := llmkit.New(providers.Anthropic, key)
-	resp, err := c.Text.Middleware(cap.Middleware, TokenLogger).Prompt(context.Background(), "What is 2+2? Reply in one word.")
+	resp, err := c.Text.AddMiddleware(cap.Middleware, TokenLogger).Prompt(context.Background(), "What is 2+2? Reply in one word.")
 	if err != nil {
 		log.Fatal(err)
 	}
