@@ -41,7 +41,7 @@ func main() {
 
 	bot := c.Agent.
 		System("You are a calculator. Use the add tool.").
-		Tool(addTool).
+		AddTool(addTool).
 		MaxToolIterations(5)
 	resp, err := bot.Prompt(context.Background(), "What is 2 + 3?")
 	if err != nil {
