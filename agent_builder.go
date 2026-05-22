@@ -42,6 +42,30 @@ func (b *Agent) Reset() {
 //
 //
 //
+func (b *Agent) Save() ([]byte, error) {
+	return SaveHistory(b.Messages())
+}
+
+//
+//
+//
+//
+//
+func (b *Agent) Load(data []byte) (*Agent, error) {
+	msgs, err := LoadHistory(data)
+	if err != nil {
+		return nil, err
+	}
+	out := *b
+	out.history = msgs
+	out.state = nil
+	return &out, nil
+}
+
+//
+//
+//
+//
 //
 //
 //
