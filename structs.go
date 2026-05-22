@@ -88,6 +88,12 @@ type Message struct {
 
 	//
 	Content string
+
+	//
+	ToolCalls []ToolCall
+
+	//
+	ToolResult *ToolResult
 }
 
 //
@@ -145,4 +151,25 @@ type Response struct {
 
 	//
 	Raw json.RawMessage
+}
+
+//
+type ToolCall struct {
+	//
+	ID string
+
+	//
+	Name string
+
+	//
+	Input json.RawMessage
+}
+
+//
+type ToolResult struct {
+	//
+	ToolUseID string
+
+	//
+	Content string
 }

@@ -2,6 +2,7 @@ package llmkit
 
 import (
 	"context"
+	"encoding/json"
 )
 
 //
@@ -35,6 +36,74 @@ func (b *Agent) Prompt(ctx context.Context, msg string) (Response, error) {
 //
 func (b *Agent) Reset() {
 	b.state = nil
+}
+
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+func (b *Agent) Messages() []Message {
+	if b.state == nil || b.state.agent == nil {
+		return nil
+	}
+	hist := b.state.agent.history
+	out := make([]Message, 0, len(hist))
+	for _, m := range hist {
+		out = append(out, toPublicMessage(m))
+	}
+	return out
+}
+
+//
+//
+//
+//
+func toPublicMessage(m internalMessage) Message {
+	role := m.role
+	if role == "tool_result" {
+		role = "tool"
+	}
+	out := Message{
+		Role:      role,
+		Content:   m.content,
+		ToolCalls: make([]ToolCall, 0, len(m.toolCalls)),
+	}
+	for _, tc := range m.toolCalls {
+		out.ToolCalls = append(out.ToolCalls, ToolCall{
+			ID:    tc.id,
+			Name:  tc.name,
+			Input: encodeToolInput(tc.input),
+		})
+	}
+	if m.toolResult != nil {
+		out.ToolResult = &ToolResult{
+			ToolUseID: m.toolResult.toolUseID,
+			Content:   m.toolResult.content,
+		}
+	}
+	return out
+}
+
+//
+//
+//
+//
+//
+func encodeToolInput(input map[string]any) json.RawMessage {
+	if input == nil {
+		return nil
+	}
+	b, err := json.Marshal(input)
+	if err != nil {
+		return nil
+	}
+	return b
 }
 
 //
@@ -98,5 +167,45 @@ func (b *Agent) initAgent() {
 	for _, t := range b.tools {
 		a.addTool(t)
 	}
+	//
+	//
+	//
+	//
+	for _, m := range b.history {
+		role := m.Role
+		if role == "tool" {
+			role = "tool_result"
+		}
+		im := internalMessage{role: role, content: m.Content}
+		for _, tc := range m.ToolCalls {
+			im.toolCalls = append(im.toolCalls, toolCall{
+				id:    tc.ID,
+				name:  tc.Name,
+				input: decodeToolInput(tc.Input),
+			})
+		}
+		if m.ToolResult != nil {
+			im.toolResult = &toolResult{
+				toolUseID: m.ToolResult.ToolUseID,
+				content:   m.ToolResult.Content,
+			}
+		}
+		a.history = append(a.history, im)
+	}
 	b.state = &agentState{agent: a}
+}
+
+//
+//
+//
+//
+func decodeToolInput(raw json.RawMessage) map[string]any {
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil
+	}
+	out := map[string]any{}
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return nil
+	}
+	return out
 }
