@@ -4,7 +4,7 @@
 //
 // `c.Agent` is a stateful builder -- repeated Prompt calls on the same
 // *Agent accumulate conversation history. Any chain method (.System,
-// .Tool, ...) forks a fresh clone with empty state. agent.Reset()
+// .AddTool, ...) forks a fresh clone with empty state. agent.Reset()
 // clears history without dropping configured tools.
 package main
 
@@ -41,7 +41,7 @@ func main() {
 
 	bot := c.Agent.
 		System("You are a calculator. Use the add tool.").
-		Tool(addTool).
+		AddTool(addTool).
 		MaxToolIterations(5)
 	resp, err := bot.Prompt(context.Background(), "What is 2 + 3?")
 	if err != nil {

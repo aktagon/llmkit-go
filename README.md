@@ -118,7 +118,7 @@ resp, err := c.Text.
 
 Multi-turn conversations with function calling. `c.Agent` is a
 stateful builder — repeated `Prompt` calls on the same `*Agent`
-accumulate conversation history. Any chain method (`System`, `Tool`,
+accumulate conversation history. Any chain method (`System`, `AddTool`,
 `Temperature`, ...) returns a forked clone with empty state.
 `agent.Reset()` clears history without dropping the configured tools
 or other chain state.
@@ -126,7 +126,7 @@ or other chain state.
 ```go
 agent := c.Agent.
     System("You are a calculator").
-    Tool(llmkit.Tool{
+    AddTool(llmkit.Tool{
         Name:        "add",
         Description: "Add two numbers",
         Schema: map[string]any{"type": "object", "properties": map[string]any{
@@ -377,7 +377,7 @@ func budgetGate(limit float64, spent *float64) providers.MiddlewareFn {
 }
 
 c.Text.
-    Middleware(budgetGate(5.00, &spent), logUsage).
+    AddMiddleware(budgetGate(5.00, &spent), logUsage).
     Prompt(ctx, "Hello")
 ```
 

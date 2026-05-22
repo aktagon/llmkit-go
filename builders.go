@@ -89,13 +89,13 @@ func Zhipu(apiKey string) *Client      { return newClient("zhipu", apiKey) }
 // terminals live in hand-written text.go / image.go.
 type Text struct {
 	client           *Client
+	middleware       []MiddlewareFn
 	caching          bool
 	files            []File
 	frequencyPenalty *float64
 	history          []Message
 	parts            []Part
 	maxTokens        *int
-	middleware       []MiddlewareFn
 	model            string
 	presencePenalty  *float64
 	raw              bool
@@ -111,6 +111,11 @@ type Text struct {
 	topP             *float64
 }
 
+func (b *Text) AddMiddleware(fns ...MiddlewareFn) *Text {
+	out := *b
+	out.middleware = append(append([]MiddlewareFn{}, b.middleware...), fns...)
+	return &out
+}
 func (b *Text) Caching() *Text { out := *b; out.caching = true; return &out }
 func (b *Text) File(id string) *Text {
 	out := *b
@@ -132,13 +137,8 @@ func (b *Text) Image(mime string, data []byte) *Text {
 	out := *b
 	out.parts = append(append([]Part{}, b.parts...), Part{Image: &MediaRef{MimeType: mime, Bytes: data}})
 	return &out
-}                                     // ordered
-func (b *Text) MaxTokens(n int) *Text { out := *b; v := n; out.maxTokens = &v; return &out }
-func (b *Text) Middleware(fns ...MiddlewareFn) *Text {
-	out := *b
-	out.middleware = append(append([]MiddlewareFn{}, b.middleware...), fns...)
-	return &out
-}
+}                                       // ordered
+func (b *Text) MaxTokens(n int) *Text   { out := *b; v := n; out.maxTokens = &v; return &out }
 func (b *Text) Model(name string) *Text { out := *b; out.model = name; return &out }
 func (b *Text) PresencePenalty(v float64) *Text {
 	out := *b
@@ -182,6 +182,7 @@ func (b *Text) TopP(v float64) *Text       { out := *b; x := v; out.topP = &x; r
 // terminals live in hand-written text.go / image.go.
 type Image struct {
 	client         *Client
+	middleware     []MiddlewareFn
 	aspectRatio    string
 	background     string
 	count          *int
@@ -189,7 +190,6 @@ type Image struct {
 	imageSize      string
 	includeText    bool
 	mask           *MediaRef
-	middleware     []MiddlewareFn
 	model          string
 	outputFormat   string
 	quality        string
@@ -199,6 +199,11 @@ type Image struct {
 	extraFields    map[string]any
 }
 
+func (b *Image) AddMiddleware(fns ...MiddlewareFn) *Image {
+	out := *b
+	out.middleware = append(append([]MiddlewareFn{}, b.middleware...), fns...)
+	return &out
+}
 func (b *Image) AspectRatio(r string) *Image { out := *b; out.aspectRatio = r; return &out }
 func (b *Image) Background(s string) *Image  { out := *b; out.background = s; return &out }
 func (b *Image) Count(n int) *Image          { out := *b; v := n; out.count = &v; return &out }
@@ -212,11 +217,6 @@ func (b *Image) IncludeText() *Image       { out := *b; out.includeText = true; 
 func (b *Image) Mask(mime string, data []byte) *Image {
 	out := *b
 	out.mask = &MediaRef{MimeType: mime, Bytes: append([]byte(nil), data...)}
-	return &out
-}
-func (b *Image) Middleware(fns ...MiddlewareFn) *Image {
-	out := *b
-	out.middleware = append(append([]MiddlewareFn{}, b.middleware...), fns...)
 	return &out
 }
 func (b *Image) Model(name string) *Image     { out := *b; out.model = name; return &out }
@@ -242,11 +242,12 @@ func (b *Image) Text(s string) *Image {
 // terminals live in hand-written text.go / image.go.
 type Agent struct {
 	client            *Client
+	middleware        []MiddlewareFn
+	tools             []Tool
 	caching           bool
 	frequencyPenalty  *float64
 	maxTokens         *int
 	maxToolIterations *int
-	middleware        []MiddlewareFn
 	model             string
 	presencePenalty   *float64
 	raw               bool
@@ -257,12 +258,23 @@ type Agent struct {
 	system            string
 	temperature       *float64
 	thinkingBudget    *int
-	tools             []Tool
 	topK              *int
 	topP              *float64
 	state             *agentState
 }
 
+func (b *Agent) AddMiddleware(fns ...MiddlewareFn) *Agent {
+	out := *b
+	out.middleware = append(append([]MiddlewareFn{}, b.middleware...), fns...)
+	out.state = nil
+	return &out
+}
+func (b *Agent) AddTool(t Tool) *Agent {
+	out := *b
+	out.tools = append(append([]Tool{}, b.tools...), t)
+	out.state = nil
+	return &out
+}
 func (b *Agent) Caching() *Agent { out := *b; out.caching = true; out.state = nil; return &out }
 func (b *Agent) FrequencyPenalty(v float64) *Agent {
 	out := *b
@@ -282,12 +294,6 @@ func (b *Agent) MaxToolIterations(n int) *Agent {
 	out := *b
 	v := n
 	out.maxToolIterations = &v
-	out.state = nil
-	return &out
-}
-func (b *Agent) Middleware(fns ...MiddlewareFn) *Agent {
-	out := *b
-	out.middleware = append(append([]MiddlewareFn{}, b.middleware...), fns...)
 	out.state = nil
 	return &out
 }
@@ -334,12 +340,6 @@ func (b *Agent) ThinkingBudget(n int) *Agent {
 	out.state = nil
 	return &out
 }
-func (b *Agent) Tool(t Tool) *Agent {
-	out := *b
-	out.tools = append(append([]Tool{}, b.tools...), t)
-	out.state = nil
-	return &out
-}
 func (b *Agent) TopK(n int) *Agent { out := *b; v := n; out.topK = &v; out.state = nil; return &out }
 func (b *Agent) TopP(v float64) *Agent {
 	out := *b
@@ -356,23 +356,23 @@ func (b *Agent) TopP(v float64) *Agent {
 // terminals live in hand-written text.go / image.go.
 type Upload struct {
 	client     *Client
+	middleware []MiddlewareFn
 	bytes      []byte
 	filename   string
-	middleware []MiddlewareFn
 	mimeType   string
 	path       string
 }
 
+func (b *Upload) AddMiddleware(fns ...MiddlewareFn) *Upload {
+	out := *b
+	out.middleware = append(append([]MiddlewareFn{}, b.middleware...), fns...)
+	return &out
+}
 func (b *Upload) Bytes(data []byte) *Upload {
 	out := *b
 	out.bytes = append([]byte(nil), data...)
 	return &out
 }
 func (b *Upload) Filename(name string) *Upload { out := *b; out.filename = name; return &out }
-func (b *Upload) Middleware(fns ...MiddlewareFn) *Upload {
-	out := *b
-	out.middleware = append(append([]MiddlewareFn{}, b.middleware...), fns...)
-	return &out
-}
 func (b *Upload) MimeType(mime string) *Upload { out := *b; out.mimeType = mime; return &out }
 func (b *Upload) Path(p string) *Upload        { out := *b; out.path = p; return &out }
