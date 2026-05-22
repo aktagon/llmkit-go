@@ -2,6 +2,7 @@ package llmkit
 
 import (
 	"context"
+	"encoding/json"
 )
 
 // agentState holds the live conversation handle for a *Agent.
@@ -35,6 +36,74 @@ func (b *Agent) Prompt(ctx context.Context, msg string) (Response, error) {
 // Prompt automatically.
 func (b *Agent) Reset() {
 	b.state = nil
+}
+
+// Messages returns the accumulated conversation history as a fresh
+// []Message slice (ADR-020 HIST-004). Empty when the builder has no
+// runtime state — i.e. before the first Prompt call.
+//
+// The returned slice's outer container is owned by the caller, but
+// each Message.ToolCalls slice is shared with the agent's internal
+// state by ADR-020's shallow-immutability rule. Treat the returned
+// messages as read-only; mutating Message.ToolCalls corrupts the
+// underlying agent. Per llmkit's user-misuse-not-library's-problem
+// posture, this is documented, not defended against.
+func (b *Agent) Messages() []Message {
+	if b.state == nil || b.state.agent == nil {
+		return nil
+	}
+	hist := b.state.agent.history
+	out := make([]Message, 0, len(hist))
+	for _, m := range hist {
+		out = append(out, toPublicMessage(m))
+	}
+	return out
+}
+
+// toPublicMessage projects an internalMessage into the public Message
+// shape (ADR-020 HIST-004). The internal `tool_result` role is
+// flattened back to `tool` on the public side so the wire shape
+// matches the ontology's union-by-role discriminant.
+func toPublicMessage(m internalMessage) Message {
+	role := m.role
+	if role == "tool_result" {
+		role = "tool"
+	}
+	out := Message{
+		Role:      role,
+		Content:   m.content,
+		ToolCalls: make([]ToolCall, 0, len(m.toolCalls)),
+	}
+	for _, tc := range m.toolCalls {
+		out.ToolCalls = append(out.ToolCalls, ToolCall{
+			ID:    tc.id,
+			Name:  tc.name,
+			Input: encodeToolInput(tc.input),
+		})
+	}
+	if m.toolResult != nil {
+		out.ToolResult = &ToolResult{
+			ToolUseID: m.toolResult.toolUseID,
+			Content:   m.toolResult.content,
+		}
+	}
+	return out
+}
+
+// encodeToolInput converts the agent's map[string]any tool-call input
+// into the public ToolCall.Input field's json.RawMessage shape. nil
+// surfaces as a nil RawMessage so the wire layer emits JSON null;
+// any marshal error is treated identically (the input shape is
+// caller-controlled but constrained to JSON-able values upstream).
+func encodeToolInput(input map[string]any) json.RawMessage {
+	if input == nil {
+		return nil
+	}
+	b, err := json.Marshal(input)
+	if err != nil {
+		return nil
+	}
+	return b
 }
 
 // initAgent constructs the underlying *Agent from the chained
@@ -98,5 +167,45 @@ func (b *Agent) initAgent() {
 	for _, t := range b.tools {
 		a.addTool(t)
 	}
+	// ADR-020 HIST-007: seed the legacy agent's internal history from the
+	// chain's typed Message list. Mechanical field copy with role
+	// normalization ("tool" → "tool_result" matching the internal
+	// discriminator) and a json.Marshal pass-through for tool inputs.
+	for _, m := range b.history {
+		role := m.Role
+		if role == "tool" {
+			role = "tool_result"
+		}
+		im := internalMessage{role: role, content: m.Content}
+		for _, tc := range m.ToolCalls {
+			im.toolCalls = append(im.toolCalls, toolCall{
+				id:    tc.ID,
+				name:  tc.Name,
+				input: decodeToolInput(tc.Input),
+			})
+		}
+		if m.ToolResult != nil {
+			im.toolResult = &toolResult{
+				toolUseID: m.ToolResult.ToolUseID,
+				content:   m.ToolResult.Content,
+			}
+		}
+		a.history = append(a.history, im)
+	}
 	b.state = &agentState{agent: a}
+}
+
+// decodeToolInput is the inverse of encodeToolInput: parse a public
+// json.RawMessage back into the internal map[string]any shape the
+// agent's wire transforms expect. Returns nil for empty/null/missing
+// inputs (the internal shape uses nil as the absent sentinel).
+func decodeToolInput(raw json.RawMessage) map[string]any {
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil
+	}
+	out := map[string]any{}
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return nil
+	}
+	return out
 }

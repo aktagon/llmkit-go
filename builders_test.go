@@ -224,6 +224,86 @@ func TestAgent_StateForking(t *testing.T) {
 	}
 }
 
+// TestAgent_History_Writer_Replaces_Chain_State asserts ADR-020 HIST-003
+// — the chain method replaces prior history rather than appending.
+func TestAgent_History_Writer_Replaces_Chain_State(t *testing.T) {
+	c := Google("k")
+	msgA := Message{Role: "user", Content: "first"}
+	msgB := Message{Role: "assistant", Content: "ok"}
+	bot := c.Agent.System("seed").History(msgA, msgB)
+	if got, want := len(bot.history), 2; got != want {
+		t.Fatalf("history len: got %d want %d", got, want)
+	}
+	msgC := Message{Role: "user", Content: "reset"}
+	rebot := bot.History(msgC)
+	if got, want := len(rebot.history), 1; got != want {
+		t.Fatalf("rebot history len after replace: got %d want %d", got, want)
+	}
+	if rebot.history[0].Content != "reset" {
+		t.Errorf("history not replaced; got %q", rebot.history[0].Content)
+	}
+}
+
+// TestAgent_Messages_Empty_Before_Prompt asserts ADR-020 HIST-004 —
+// bot.Messages() returns an empty slice before initAgent runs.
+func TestAgent_Messages_Empty_Before_Prompt(t *testing.T) {
+	c := Google("k")
+	bot := c.Agent.System("seed").History(Message{Role: "user", Content: "hi"})
+	if got := bot.Messages(); len(got) != 0 {
+		t.Errorf("Messages() before init: want empty, got %d entries", len(got))
+	}
+}
+
+// TestAgent_Messages_Projects_Internal_History asserts ADR-020 HIST-004
+// — bot.Messages() projects the runtime agent's internal history
+// (including tool-call/tool-result turns) through the public Message
+// shape with the union-by-role discriminator.
+func TestAgent_Messages_Projects_Internal_History(t *testing.T) {
+	c := Google("k")
+	bot := c.Agent
+	bot.initAgent()
+	// Synthesise an internal-message history covering all three turn kinds.
+	bot.state.agent.history = []internalMessage{
+		{role: "user", content: "list py files"},
+		{role: "assistant", toolCalls: []toolCall{
+			{id: "call_1", name: "list_files", input: map[string]any{"path": "src"}},
+		}},
+		{role: "tool_result", toolResult: &toolResult{toolUseID: "call_1", content: "a.py b.py"}},
+	}
+	got := bot.Messages()
+	if len(got) != 3 {
+		t.Fatalf("Messages len: got %d want 3", len(got))
+	}
+	if got[0].Role != "user" || got[0].Content != "list py files" {
+		t.Errorf("user turn: %+v", got[0])
+	}
+	if got[1].Role != "assistant" || len(got[1].ToolCalls) != 1 || got[1].ToolCalls[0].Name != "list_files" {
+		t.Errorf("assistant tool turn: %+v", got[1])
+	}
+	// Internal "tool_result" flattens to public "tool".
+	if got[2].Role != "tool" || got[2].ToolResult == nil || got[2].ToolResult.ToolUseID != "call_1" {
+		t.Errorf("tool result turn: %+v", got[2])
+	}
+}
+
+// TestAgent_History_Init_Seeds_Runtime asserts ADR-020 HIST-007 —
+// chain history is translated into internal-message form on
+// initAgent.
+func TestAgent_History_Init_Seeds_Runtime(t *testing.T) {
+	c := Google("k")
+	bot := c.Agent.System("seed").History(
+		Message{Role: "user", Content: "hi"},
+		Message{Role: "assistant", Content: "hi back"},
+	)
+	bot.initAgent()
+	if got := len(bot.state.agent.history); got != 2 {
+		t.Fatalf("seeded history len: got %d want 2", got)
+	}
+	if bot.state.agent.history[0].role != "user" || bot.state.agent.history[0].content != "hi" {
+		t.Errorf("seeded[0]: %+v", bot.state.agent.history[0])
+	}
+}
+
 // TestAgent_Reset confirms Reset clears state so the next Prompt
 // reinitialises a fresh Agent.
 func TestAgent_Reset(t *testing.T) {
