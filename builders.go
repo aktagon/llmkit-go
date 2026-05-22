@@ -246,6 +246,7 @@ type Agent struct {
 	tools             []Tool
 	caching           bool
 	frequencyPenalty  *float64
+	history           []Message
 	maxTokens         *int
 	maxToolIterations *int
 	model             string
@@ -280,6 +281,12 @@ func (b *Agent) FrequencyPenalty(v float64) *Agent {
 	out := *b
 	x := v
 	out.frequencyPenalty = &x
+	out.state = nil
+	return &out
+}
+func (b *Agent) History(msgs ...Message) *Agent {
+	out := *b
+	out.history = append([]Message{}, msgs...)
 	out.state = nil
 	return &out
 }
