@@ -232,3 +232,49 @@ func ExampleClient_image() {
 	fmt.Println(resp.Images[0].MimeType, len(resp.Images[0].Bytes))
 	// Output: image/png 14
 }
+
+// ExampleClient_middleware walks the text path with a registered
+// middleware that counts pre/post phase fires. Mirrors the chain in
+// examples/middleware/spend.go (which adds spend-cap accounting on
+// top of the same observer shape).
+func ExampleClient_middleware() {
+	server := mockJSON(map[string]any{
+		"content": []map[string]any{
+			{"type": "text", "text": "ok"},
+		},
+		"usage": map[string]any{"input_tokens": 7, "output_tokens": 1},
+	})
+	defer server.Close()
+
+	var preCalls, postCalls int
+	observer := func(ctx context.Context, e providers.Event) error {
+		if e.Op != providers.OpLLMRequest {
+			return nil
+		}
+		switch e.Phase {
+		case providers.PhasePre:
+			preCalls++
+		case providers.PhasePost:
+			postCalls++
+		}
+		return nil
+	}
+
+	c := New(providers.Anthropic, "sk-test")
+	c.provider.baseURL = server.URL
+
+	resp, err := c.Text.
+		AddMiddleware(observer).
+		Prompt(context.Background(), "What is 2+2?")
+	if err != nil {
+		fmt.Println("err:", err)
+		return
+	}
+	fmt.Println(resp.Text)
+	fmt.Println("pre:", preCalls, "post:", postCalls)
+	fmt.Println("usage:", resp.Usage.Input, resp.Usage.Output)
+	// Output:
+	// ok
+	// pre: 1 post: 1
+	// usage: 7 1
+}
