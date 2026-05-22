@@ -426,6 +426,37 @@ llmkit -provider google -system "Extract color" -user "Sky is blue" \
   -schema '{"type":"object","properties":{"color":{"type":"string"}}}'
 ```
 
+## Wire-format stability
+
+`*Agent` history persists across process boundaries through two paired
+functions:
+
+```go
+data, _ := bot.Save()                 // []byte
+// ...later, fresh process...
+bot, err := c.Agent.System("...").Tool(t).Load(data)
+if errors.Is(err, llmkit.ErrUnsupportedWireVersion) { /* upgrade prompt */ }
+```
+
+Or the free-function form for admin tooling:
+
+```go
+data, _ := llmkit.SaveHistory(msgs)   // []byte
+msgs, _ := llmkit.LoadHistory(data)   // []llmkit.Message
+```
+
+The output is a JSON document with a `_v` integer envelope plus a
+`messages` array. The version is tracked through `llmkit.WireSchemaVersion`;
+the same in-memory `Message` schema may evolve additively under one
+version (new optional fields work on older readers), but a renamed,
+removed, or retyped field requires a `_v` bump and a migrator.
+
+`SaveHistory` / `LoadHistory` are the ONLY guaranteed-stable
+serialization path. Direct `json.Marshal` on a `Message` value
+produces valid JSON but lacks the `_v` envelope, and `LoadHistory`
+rejects it with `ErrMissingWireVersion`. Use the contract path for
+anything that crosses a process boundary or a release.
+
 ## Architecture
 
 - **Generated** (`providers/*.go`) — per-provider config: URLs, auth, options, JSON paths. Typed structs with no logic.

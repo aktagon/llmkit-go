@@ -1,0 +1,7 @@
+// Code generated — DO NOT EDIT.
+
+package llmkit
+
+// WireSchemaVersion is the current generation of the on-disk
+// wire format for serialized agent history (ADR-023 STAB-001).
+const WireSchemaVersion uint32 = 1
