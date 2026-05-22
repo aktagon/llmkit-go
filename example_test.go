@@ -233,6 +233,78 @@ func ExampleClient_image() {
 	// Output: image/png 14
 }
 
+// ExampleClient_catalogue walks the c.Models / c.Providers surface
+// (ADR-019). Mirrors the chain in examples/catalogue/main.go — three
+// modes: compiled-in (sync, no HTTP), providers namespace, and
+// live / scoped / scoped-raw HTTP against /v1/models.
+func ExampleClient_catalogue() {
+	server := mockJSON(map[string]any{
+		"data": []map[string]any{{
+			"type":             "model",
+			"id":               "claude-opus-4-7",
+			"display_name":     "Claude Opus 4.7",
+			"created_at":       "2026-04-14T00:00:00Z",
+			"max_input_tokens": 1000000,
+			"max_tokens":       128000,
+		}},
+		"has_more": false,
+		"last_id":  "claude-opus-4-7",
+	})
+	defer server.Close()
+
+	c := New(providers.Anthropic, "sk-test")
+	c.provider.baseURL = server.URL
+	ctx := context.Background()
+
+	// Compiled-in catalogue.
+	fmt.Println("compiled-in non-empty:", len(c.Models.List()) > 0)
+	info, ok := c.Models.Get("claude-opus-4-7")
+	fmt.Println("claude-opus-4-7 context > 0:", ok && info.ContextWindow > 0)
+	fmt.Println("chat-capable non-empty:",
+		len(c.Models.WithCapability(CapChatCompletion).List()) > 0)
+
+	// Providers namespace.
+	names := make([]string, 0, len(c.Providers.List()))
+	for _, p := range c.Providers.List() {
+		names = append(names, p.Name)
+	}
+	fmt.Println("configured:", names)
+	fmt.Println("supported >= 1:", len(c.Providers.Supported()) > 0)
+
+	// Live + scoped HTTP.
+	p := Provider{Name: "anthropic", APIKey: "sk-test"}
+	live, err := c.Models.Live(ctx)
+	if err != nil {
+		fmt.Println("err:", err)
+		return
+	}
+	fmt.Println("live models:", len(live.Models))
+
+	scoped, err := c.Models.Provider(p).List(ctx)
+	if err != nil {
+		fmt.Println("err:", err)
+		return
+	}
+	fmt.Println("scoped list:", len(scoped))
+
+	rawScoped, err := c.Models.Provider(p).Raw().List(ctx)
+	if err != nil {
+		fmt.Println("err:", err)
+		return
+	}
+	fmt.Println("raw populated:", len(rawScoped) > 0 && rawScoped[0].Raw != nil)
+
+	// Output:
+	// compiled-in non-empty: true
+	// claude-opus-4-7 context > 0: true
+	// chat-capable non-empty: true
+	// configured: [anthropic]
+	// supported >= 1: true
+	// live models: 1
+	// scoped list: 1
+	// raw populated: true
+}
+
 // ExampleClient_middleware walks the text path with a registered
 // middleware that counts pre/post phase fires. Mirrors the chain in
 // examples/middleware/spend.go (which adds spend-cap accounting on
