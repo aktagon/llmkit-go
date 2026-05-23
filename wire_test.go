@@ -1,7 +1,6 @@
 package llmkit
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"os"
@@ -158,7 +157,94 @@ func TestWire_ChainMethodsRoundTrip(t *testing.T) {
 	if !reflect.DeepEqual(fresh.history, canonicalWireFixture()) {
 		t.Errorf("loaded history mismatch\n got: %+v\nwant: %+v", fresh.history, canonicalWireFixture())
 	}
-	_ = context.Background()
+}
+
+// TestWire_ToolCallInputNullPreserved exercises the documented
+// semantic: a caller-constructed `json.RawMessage("null")` (4 bytes
+// of literal "null") survives Save → Load as itself, distinct from
+// a nil RawMessage which omits the key entirely.
+func TestWire_ToolCallInputNullPreserved(t *testing.T) {
+	cases := []struct {
+		name  string
+		input json.RawMessage
+	}{
+		{"nil_input_omitted", nil},
+		{"literal_null_preserved", json.RawMessage("null")},
+		{"empty_object", json.RawMessage("{}")},
+		{"populated_object", json.RawMessage(`{"k":"v"}`)},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fixture := []Message{{
+				Role: "assistant",
+				ToolCalls: []ToolCall{
+					{ID: "id1", Name: "t", Input: tc.input},
+				},
+			}}
+			bytes, err := SaveHistory(fixture)
+			if err != nil {
+				t.Fatalf("SaveHistory: %v", err)
+			}
+			restored, err := LoadHistory(bytes)
+			if err != nil {
+				t.Fatalf("LoadHistory: %v", err)
+			}
+			gotInput := restored[0].ToolCalls[0].Input
+			// Nil and literal "null" are distinct wire-side: nil
+			// omits the key, "null" emits the literal. LoadHistory
+			// preserves the distinction.
+			if tc.input == nil && gotInput != nil {
+				t.Errorf("nil input not preserved; got %q", gotInput)
+			}
+			if tc.input != nil && !reflect.DeepEqual([]byte(gotInput), []byte(tc.input)) {
+				t.Errorf("Input round-trip lost data; got %q want %q", gotInput, tc.input)
+			}
+		})
+	}
+}
+
+// TestWire_MalformedDocumentRejected covers the three Malformed
+// paths: non-object root, non-integer `_v`, non-array `messages`.
+func TestWire_MalformedDocumentRejected(t *testing.T) {
+	cases := []struct {
+		name string
+		data string
+	}{
+		{"non_object_root", `[]`},
+		{"_v_not_integer", `{"_v": "1", "messages": []}`},
+		{"_v_fractional", `{"_v": 1.5, "messages": []}`},
+		{"messages_not_array", `{"_v": 1, "messages": "oops"}`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := LoadHistory([]byte(tc.data))
+			if !errors.Is(err, ErrMalformedWire) {
+				t.Errorf("got %v, want ErrMalformedWire", err)
+			}
+		})
+	}
+}
+
+// TestWire_LoadClearsState verifies STAB-012 — Load returns a fork
+// with cleared runtime state regardless of the parent's state.
+func TestWire_LoadClearsState(t *testing.T) {
+	c := Anthropic("k")
+	bot := c.Agent
+	bot.initAgent()
+	if bot.state == nil {
+		t.Fatal("initAgent did not populate state")
+	}
+	data, _ := SaveHistory(canonicalWireFixture())
+	fresh, err := bot.Load(data)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if fresh.state != nil {
+		t.Errorf("Load did not clear state; got %+v", fresh.state)
+	}
+	if bot.state == nil {
+		t.Errorf("Load mutated parent state — chain method must clone, not mutate")
+	}
 }
 
 // TestWire_DropTargetArtifact emits target/wire/go.json so the
