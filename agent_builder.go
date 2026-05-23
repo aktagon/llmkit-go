@@ -66,12 +66,14 @@ func (b *Agent) Load(data []byte) (*Agent, error) {
 // []Message slice (ADR-020 HIST-004). Empty when the builder has no
 // runtime state — i.e. before the first Prompt call.
 //
-// The returned slice's outer container is owned by the caller, but
-// each Message.ToolCalls slice is shared with the agent's internal
-// state by ADR-020's shallow-immutability rule. Treat the returned
-// messages as read-only; mutating Message.ToolCalls corrupts the
-// underlying agent. Per llmkit's user-misuse-not-library's-problem
-// posture, this is documented, not defended against.
+// Both the outer slice and each Message.ToolCalls slice are fresh
+// allocations; mutating them does NOT affect the agent's runtime
+// state. The narrow aliasing risk is ToolCall.Input, which is a
+// json.RawMessage carrying a reference to the JSON bytes from the
+// internal map[string]any encoding — replacing it on a returned
+// Message is safe, but in-place byte mutation would corrupt the
+// agent. Treat the inner Input bytes as read-only per llmkit's
+// user-misuse-not-library's-problem posture.
 func (b *Agent) Messages() []Message {
 	if b.state == nil || b.state.agent == nil {
 		return nil
