@@ -35,6 +35,14 @@ var ErrUnknownWireKey = errors.New("llmkit: unknown top-level wire key")
 //
 //
 //
+var ErrMalformedWire = errors.New("llmkit: malformed wire document")
+
+//
+//
+//
+//
+//
+//
 func SaveHistory(msgs []Message) ([]byte, error) {
 	wire := make([]wireMessage, 0, len(msgs))
 	for _, m := range msgs {
@@ -59,7 +67,7 @@ func SaveHistory(msgs []Message) ([]byte, error) {
 func LoadHistory(data []byte) ([]Message, error) {
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(data, &raw); err != nil {
-		return nil, fmt.Errorf("llmkit: wire document is not a JSON object: %w", err)
+		return nil, fmt.Errorf("%w: not a JSON object: %v", ErrMalformedWire, err)
 	}
 	rawV, ok := raw["_v"]
 	if !ok {
@@ -67,7 +75,7 @@ func LoadHistory(data []byte) ([]Message, error) {
 	}
 	var version uint32
 	if err := json.Unmarshal(rawV, &version); err != nil {
-		return nil, fmt.Errorf("llmkit: wire _v is not an integer: %w", err)
+		return nil, fmt.Errorf("%w: _v is not a non-negative integer: %v", ErrMalformedWire, err)
 	}
 	if version > WireSchemaVersion {
 		return nil, fmt.Errorf("%w: got %d, want <= %d", ErrUnsupportedWireVersion, version, WireSchemaVersion)
@@ -85,7 +93,7 @@ func LoadHistory(data []byte) ([]Message, error) {
 	}
 	var wire []wireMessage
 	if err := json.Unmarshal(rawMsgs, &wire); err != nil {
-		return nil, fmt.Errorf("llmkit: wire messages is not an array: %w", err)
+		return nil, fmt.Errorf("%w: messages is not an array of message objects: %v", ErrMalformedWire, err)
 	}
 	out := make([]Message, 0, len(wire))
 	for _, w := range wire {
@@ -111,6 +119,23 @@ type wireMessage struct {
 	ToolResult *wireToolRes   `json:"tool_result"`
 }
 
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
 type wireToolCall struct {
 	ID    string          `json:"id"`
 	Name  string          `json:"name"`

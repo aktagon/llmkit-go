@@ -72,6 +72,8 @@ func (b *Agent) Load(data []byte) (*Agent, error) {
 //
 //
 //
+//
+//
 func (b *Agent) Messages() []Message {
 	if b.state == nil || b.state.agent == nil {
 		return nil
