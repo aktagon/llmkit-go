@@ -1,6 +1,10 @@
 # LLMKit
 
-Go library for unified LLM API access. Write OpenAI-shaped requests, hit any provider. The per-provider config in `providers/` is generated; runtime behavior (HTTP, transforms, agent loop) is hand-coded with the help of AI.
+One Go API for Anthropic, OpenAI, Google, and 20+ other providers — including local models through Ollama and vLLM. Switch providers without rewriting your request.
+
+Zero external dependencies. Stdlib only.
+
+Also available for TypeScript, Python, and Rust.
 
 ## Install
 
