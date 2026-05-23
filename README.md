@@ -62,11 +62,11 @@ are guaranteed to match the public surface.
 | lmstudio   | default                                           | LM_STUDIO_API_KEY  |
 | vllm       | default                                           | VLLM_API_KEY       |
 
-25 providers, 3 API shapes. Adding an OpenAI-compatible provider requires only a Turtle file. Zero Go code.
+30 providers, 4 API shapes (OpenAI-compatible, Anthropic Messages, Google Generative AI, AWS Bedrock Converse). Bedrock auth uses SigV4; other providers use API-key auth. Full provider list — including `azure`, `bedrock`, `vertex`, `jan`, and `llamacpp` — in `providers/providers.go`.
 
 ## API
 
-### Prompt
+### Text — one-shot prompt
 
 One-shot request:
 
@@ -87,7 +87,7 @@ fmt.Println(resp.Tokens.Reasoning)   // internal reasoning tokens (OpenAI o1/o3/
 
 Capability-scoped fields (`CacheRead`, `CacheWrite`, `Reasoning`) are zero when the provider doesn't report them separately.
 
-### Stream
+### Stream — chunks + trailing handle
 
 Streaming with a trailing-handle iterator. `Stream` returns a
 `*TextStream`; range over `Chunks()` to consume deltas, then read
@@ -107,7 +107,7 @@ fmt.Println("\ntokens:", final.Tokens.Input, "in,", final.Tokens.Output, "out")
 
 Breaking the range loop cancels the producer goroutine cleanly.
 
-### Structured Output
+### Structured output
 
 Pass a JSON schema to get typed responses:
 
@@ -118,7 +118,7 @@ resp, err := c.Text.
 // resp.Text == `{"color":"blue"}`
 ```
 
-### Agent with Tools
+### Agent — tool loop
 
 Multi-turn conversations with function calling. `c.Agent` is a
 stateful builder — repeated `Prompt` calls on the same `*Agent`
@@ -146,7 +146,7 @@ agent := c.Agent.
 resp, err := agent.Prompt(ctx, "What is 2+3?")
 ```
 
-### Upload
+### Upload — Path or Bytes
 
 Upload files to a provider. `Path` and `Bytes` are mutually exclusive
 on the same `*Upload`; `Bytes` requires `Filename`. The returned
@@ -172,7 +172,7 @@ file, err := c.Upload.
     Run(ctx)
 ```
 
-### GenerateImage
+### Image — text-to-image and edit
 
 Generate images from text, optionally conditioned on reference images for
 editing or composition. Use the typed-builder chain on `c.Image`:
@@ -310,7 +310,7 @@ a `*ValidationError`. The `HarmCategory*`, `HarmBlockThreshold*`, and
 
 ### Model catalogue
 
-`c.Models` and `c.Providers` (ADR-019) cover model discovery in three modes. Runnable counterpart at [`examples/catalogue/main.go`](./examples/catalogue/main.go).
+`c.Models` and `c.Providers` cover model discovery in three modes. Runnable counterpart at [`examples/catalogue/main.go`](./examples/catalogue/main.go).
 
 ```go
 // 1. Compiled-in catalogue -- synchronous, no HTTP.
@@ -461,12 +461,7 @@ produces valid JSON but lacks the `_v` envelope, and `LoadHistory`
 rejects it with `ErrMissingWireVersion`. Use the contract path for
 anything that crosses a process boundary or a release.
 
-## Architecture
-
-- **Generated** (`providers/*.go`) — per-provider config: URLs, auth, options, JSON paths. Typed structs with no logic.
-- **Hand-coded** (`llmkit.go`, `transforms.go`, `agent.go`, `http.go`, `batch.go`, `caching.go`, `errors.go`, `sigv4.go`) — HTTP, request/response transforms, streaming, agent loop, batch lifecycle, caching, auth signing.
-
-Transforms are derived from config fields, not provider names.
+## Mirror
 
 This repo is a read-only mirror of a private source. File issues and feature requests here; patches should be submitted against the private source via `christian@aktagon.com`.
 
