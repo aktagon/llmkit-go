@@ -29,6 +29,14 @@ var ErrMissingWireVersion = errors.New("llmkit: wire document missing _v key")
 // keys the contract reserves).
 var ErrUnknownWireKey = errors.New("llmkit: unknown top-level wire key")
 
+// ErrMalformedWire is returned when LoadHistory parses a document
+// that satisfies the version envelope but whose shape violates the
+// wire schema (non-integer `_v`, non-array `messages`, non-object
+// message entry, etc.). Symmetric with the Missing / Unsupported /
+// UnknownKey sentinels so consumers can branch typed on every
+// failure mode.
+var ErrMalformedWire = errors.New("llmkit: malformed wire document")
+
 // SaveHistory serializes a slice of public Message values into a
 // versioned JSON document (ADR-023 STAB-002). The output carries a
 // `_v` key (uint32 matching WireSchemaVersion) and a `messages`
@@ -59,7 +67,7 @@ func SaveHistory(msgs []Message) ([]byte, error) {
 func LoadHistory(data []byte) ([]Message, error) {
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(data, &raw); err != nil {
-		return nil, fmt.Errorf("llmkit: wire document is not a JSON object: %w", err)
+		return nil, fmt.Errorf("%w: not a JSON object: %v", ErrMalformedWire, err)
 	}
 	rawV, ok := raw["_v"]
 	if !ok {
@@ -67,7 +75,7 @@ func LoadHistory(data []byte) ([]Message, error) {
 	}
 	var version uint32
 	if err := json.Unmarshal(rawV, &version); err != nil {
-		return nil, fmt.Errorf("llmkit: wire _v is not an integer: %w", err)
+		return nil, fmt.Errorf("%w: _v is not a non-negative integer: %v", ErrMalformedWire, err)
 	}
 	if version > WireSchemaVersion {
 		return nil, fmt.Errorf("%w: got %d, want <= %d", ErrUnsupportedWireVersion, version, WireSchemaVersion)
@@ -85,7 +93,7 @@ func LoadHistory(data []byte) ([]Message, error) {
 	}
 	var wire []wireMessage
 	if err := json.Unmarshal(rawMsgs, &wire); err != nil {
-		return nil, fmt.Errorf("llmkit: wire messages is not an array: %w", err)
+		return nil, fmt.Errorf("%w: messages is not an array of message objects: %v", ErrMalformedWire, err)
 	}
 	out := make([]Message, 0, len(wire))
 	for _, w := range wire {
@@ -111,6 +119,23 @@ type wireMessage struct {
 	ToolResult *wireToolRes   `json:"tool_result"`
 }
 
+// wireToolCall.Input is omitted when nil. The cross-SDK contract
+// (STAB-010 JSON-value equality) requires the four SDKs agree on
+// the wire shape; Python's `if tc.input is not None: out["input"]
+// = tc.input` and Rust's analogous Option<Value> omit pattern set
+// the precedent. STAB-004's "emit null not omitted" rule is
+// scoped to `tool_result` (the discriminator) — input has no
+// equivalent role-discrimination requirement.
+//
+// CAVEAT: a caller-constructed `json.RawMessage("null")` (4 bytes
+// of literal "null") is omitted by `omitempty` because Go's JSON
+// encoder treats a non-empty []byte as non-empty regardless of
+// content — actually that's wrong, let me re-check. `omitempty`
+// on a []byte triggers when len(b) == 0. `json.RawMessage("null")`
+// has len 4, so it IS emitted as the literal `null`. So in fact
+// the only case omit fires for is nil/empty RawMessage, matching
+// the absent-input semantic. Round-trip is lossless for all
+// non-nil RawMessage inputs.
 type wireToolCall struct {
 	ID    string          `json:"id"`
 	Name  string          `json:"name"`
