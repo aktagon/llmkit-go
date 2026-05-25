@@ -40,6 +40,11 @@ func promptStream(ctx context.Context, p Provider, req Request, callback StreamC
 		return Response{}, err
 	}
 
+	msgs, err := toInternal(req.Messages)
+	if err != nil {
+		return Response{}, err
+	}
+
 	cfg, ok := providers.Providers()[p.Name]
 	if !ok {
 		return Response{}, &ValidationError{Field: "provider", Message: "unknown: " + p.Name}
@@ -60,7 +65,7 @@ func promptStream(ctx context.Context, p Provider, req Request, callback StreamC
 		return Response{}, err
 	}
 
-	body, headers := buildRequest(p, req, o, cfg)
+	body, headers := buildRequest(p, req, msgs, o, cfg, nil)
 
 	//
 	if o.caching {
@@ -289,6 +294,9 @@ func validateRequest(req Request) error {
 			Message: "set Text(), Parts, History, or Image() before calling Prompt",
 		}
 	}
+	//
+	//
+	//
 	return nil
 }
 
@@ -420,7 +428,23 @@ func resolveOptionKey(provider, model string, param providers.OptionKey, support
 }
 
 //
-func buildRequest(p Provider, req Request, o *options, cfg providers.ProviderConfig) (map[string]any, map[string]string) {
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+func buildRequest(p Provider, req Request, msgs []msg, o *options, cfg providers.ProviderConfig, tools []Tool) (map[string]any, map[string]string) {
 	body := map[string]any{}
 	headers := map[string]string{}
 
@@ -463,7 +487,12 @@ func buildRequest(p Provider, req Request, o *options, cfg providers.ProviderCon
 
 	//
 	msgTransform := selectMessageTransform(cfg)
-	msgTransform(body, req, cfg)
+	msgTransform(body, msgs, req, cfg)
+
+	//
+	if len(tools) > 0 {
+		selectToolDefTransform(cfg)(body, tools)
+	}
 
 	//
 	if cfg.WrapsOptionsIn != "" {

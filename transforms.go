@@ -101,13 +101,79 @@ func selectToolCallExtractor(cfg providers.ProviderConfig) toolCallExtractFunc {
 //
 //
 
-type messageTransformFunc func(body map[string]any, req Request, cfg providers.ProviderConfig)
+//
+//
+//
+//
+//
+//
+type msg interface{ isMsg() }
 
-func transformFlatContent(body map[string]any, req Request, cfg providers.ProviderConfig) {
-	msgs := []map[string]any{}
+type msgText struct {
+	role string
+	text string
+}
+
+type msgCalls struct {
+	calls []ToolCall
+}
+
+type msgResult struct {
+	result ToolResult
+}
+
+func (msgText) isMsg()   {}
+func (msgCalls) isMsg()  {}
+func (msgResult) isMsg() {}
+
+//
+//
+//
+//
+//
+//
+func toInternal(messages []Message) ([]msg, error) {
+	out := make([]msg, 0, len(messages))
+	for i, m := range messages {
+		carriers := 0
+		if m.ToolResult != nil {
+			carriers++
+		}
+		if len(m.ToolCalls) > 0 {
+			carriers++
+		}
+		if m.Content != "" {
+			carriers++
+		}
+		if carriers > 1 {
+			return nil, &ValidationError{
+				Field:   fmt.Sprintf("messages[%d]", i),
+				Message: "must carry only one of content, tool calls, or tool result",
+			}
+		}
+		switch {
+		case m.ToolResult != nil:
+			out = append(out, msgResult{result: *m.ToolResult})
+		case len(m.ToolCalls) > 0:
+			out = append(out, msgCalls{calls: m.ToolCalls})
+		default:
+			out = append(out, msgText{role: m.Role, text: m.Content})
+		}
+	}
+	return out, nil
+}
+
+//
+//
+//
+
+type messageTransformFunc func(body map[string]any, msgs []msg, req Request, cfg providers.ProviderConfig)
+
+func transformFlatContent(body map[string]any, msgs []msg, req Request, cfg providers.ProviderConfig) {
+	out := []map[string]any{}
 
 	if cfg.SystemPlacement == providers.PlacementMessageInArray && req.System != "" {
-		msgs = append(msgs, map[string]any{
+		out = append(out, map[string]any{
 			"role":    mapRole("system", cfg.RoleMappings),
 			"content": req.System,
 		})
@@ -115,28 +181,39 @@ func transformFlatContent(body map[string]any, req Request, cfg providers.Provid
 
 	hasMedia := len(req.Files) > 0 || len(req.Images) > 0
 
-	if len(req.Messages) > 0 {
-		for _, m := range req.Messages {
-			msgs = append(msgs, map[string]any{
-				"role":    mapRole(m.Role, cfg.RoleMappings),
-				"content": m.Content,
-			})
+	if len(msgs) > 0 {
+		callT := selectToolCallTransform(cfg)
+		resultT := selectToolResultTransform(cfg)
+		for _, m := range msgs {
+			switch m := m.(type) {
+			case msgResult:
+				out = append(out, resultT(m.result, cfg.RoleMappings))
+			case msgCalls:
+				out = append(out, callT(m.calls, cfg.RoleMappings))
+			case msgText:
+				out = append(out, map[string]any{
+					"role":    mapRole(m.role, cfg.RoleMappings),
+					"content": m.text,
+				})
+			default:
+				panic(fmt.Sprintf("unhandled msg variant %T", m))
+			}
 		}
 	} else if req.User != "" {
 		if hasMedia {
-			msgs = append(msgs, map[string]any{
+			out = append(out, map[string]any{
 				"role":    mapRole("user", cfg.RoleMappings),
 				"content": buildFlatContentParts(req, cfg),
 			})
 		} else {
-			msgs = append(msgs, map[string]any{
+			out = append(out, map[string]any{
 				"role":    mapRole("user", cfg.RoleMappings),
 				"content": req.User,
 			})
 		}
 	}
 
-	body["messages"] = msgs
+	body["messages"] = out
 }
 
 //
@@ -197,15 +274,45 @@ func buildFlatContentParts(req Request, cfg providers.ProviderConfig) []map[stri
 	return parts
 }
 
-func transformGoogleParts(body map[string]any, req Request, cfg providers.ProviderConfig) {
+func transformGoogleParts(body map[string]any, msgs []msg, req Request, cfg providers.ProviderConfig) {
 	contents := []map[string]any{}
 
-	if len(req.Messages) > 0 {
-		for _, m := range req.Messages {
-			contents = append(contents, map[string]any{
-				"role":  mapRole(m.Role, cfg.RoleMappings),
-				"parts": []map[string]any{{"text": m.Content}},
-			})
+	if len(msgs) > 0 {
+		callT := selectToolCallTransform(cfg)
+		resultT := selectToolResultTransform(cfg)
+		//
+		//
+		//
+		//
+		//
+		//
+		//
+		//
+		var idToName map[string]string
+		for _, m := range msgs {
+			switch m := m.(type) {
+			case msgResult:
+				r := m.result
+				if name := idToName[r.ToolUseID]; name != "" {
+					r.ToolUseID = name
+				}
+				contents = append(contents, resultT(r, cfg.RoleMappings))
+			case msgCalls:
+				if idToName == nil {
+					idToName = make(map[string]string)
+				}
+				for _, c := range m.calls {
+					idToName[c.ID] = c.Name
+				}
+				contents = append(contents, callT(m.calls, cfg.RoleMappings))
+			case msgText:
+				contents = append(contents, map[string]any{
+					"role":  mapRole(m.role, cfg.RoleMappings),
+					"parts": []map[string]any{{"text": m.text}},
+				})
+			default:
+				panic(fmt.Sprintf("unhandled msg variant %T", m))
+			}
 		}
 	} else if req.User != "" {
 		parts := buildGoogleContentParts(req)
@@ -325,17 +432,23 @@ func transformGoogleFunctionDeclarations(body map[string]any, tools []Tool, para
 //
 //
 
-type toolCallTransformFunc func(calls []toolCall, roleMappings map[string]string) map[string]any
+//
+//
+//
+//
+//
+//
+type toolCallTransformFunc func(calls []ToolCall, roleMappings map[string]string) map[string]any
 
-func transformOpenAIToolCallMsg(calls []toolCall, roleMappings map[string]string) map[string]any {
+func transformOpenAIToolCallMsg(calls []ToolCall, roleMappings map[string]string) map[string]any {
 	tcs := []map[string]any{}
 	for _, tc := range calls {
-		argsJSON, _ := json.Marshal(tc.input)
+		argsJSON, _ := json.Marshal(tc.Input)
 		tcs = append(tcs, map[string]any{
-			"id":   tc.id,
+			"id":   tc.ID,
 			"type": "function",
 			"function": map[string]any{
-				"name":      tc.name,
+				"name":      tc.Name,
 				"arguments": string(argsJSON),
 			},
 		})
@@ -346,14 +459,14 @@ func transformOpenAIToolCallMsg(calls []toolCall, roleMappings map[string]string
 	}
 }
 
-func transformAnthropicToolCallMsg(calls []toolCall, roleMappings map[string]string) map[string]any {
+func transformAnthropicToolCallMsg(calls []ToolCall, roleMappings map[string]string) map[string]any {
 	content := []map[string]any{}
 	for _, tc := range calls {
 		content = append(content, map[string]any{
 			"type":  "tool_use",
-			"id":    tc.id,
-			"name":  tc.name,
-			"input": tc.input,
+			"id":    tc.ID,
+			"name":  tc.Name,
+			"input": tc.Input,
 		})
 	}
 	return map[string]any{
@@ -362,13 +475,13 @@ func transformAnthropicToolCallMsg(calls []toolCall, roleMappings map[string]str
 	}
 }
 
-func transformGoogleToolCallMsg(calls []toolCall, roleMappings map[string]string) map[string]any {
+func transformGoogleToolCallMsg(calls []ToolCall, roleMappings map[string]string) map[string]any {
 	parts := []map[string]any{}
 	for _, tc := range calls {
 		parts = append(parts, map[string]any{
 			"functionCall": map[string]any{
-				"name": tc.name,
-				"args": tc.input,
+				"name": tc.Name,
+				"args": tc.Input,
 			},
 		})
 	}
@@ -382,34 +495,34 @@ func transformGoogleToolCallMsg(calls []toolCall, roleMappings map[string]string
 //
 //
 
-type toolResultTransformFunc func(result toolResult, roleMappings map[string]string) map[string]any
+type toolResultTransformFunc func(result ToolResult, roleMappings map[string]string) map[string]any
 
-func transformOpenAIToolResultMsg(result toolResult, _ map[string]string) map[string]any {
+func transformOpenAIToolResultMsg(result ToolResult, _ map[string]string) map[string]any {
 	return map[string]any{
 		"role":         "tool",
-		"content":      result.content,
-		"tool_call_id": result.toolUseID,
+		"content":      result.Content,
+		"tool_call_id": result.ToolUseID,
 	}
 }
 
-func transformAnthropicToolResultMsg(result toolResult, _ map[string]string) map[string]any {
+func transformAnthropicToolResultMsg(result ToolResult, _ map[string]string) map[string]any {
 	return map[string]any{
 		"role": "user",
 		"content": []map[string]any{{
 			"type":        "tool_result",
-			"tool_use_id": result.toolUseID,
-			"content":     result.content,
+			"tool_use_id": result.ToolUseID,
+			"content":     result.Content,
 		}},
 	}
 }
 
-func transformGoogleToolResultMsg(result toolResult, _ map[string]string) map[string]any {
+func transformGoogleToolResultMsg(result ToolResult, _ map[string]string) map[string]any {
 	return map[string]any{
 		"role": "user",
 		"parts": []map[string]any{{
 			"functionResponse": map[string]any{
-				"name":     result.toolUseID,
-				"response": map[string]any{"result": result.content},
+				"name":     result.ToolUseID,
+				"response": map[string]any{"result": result.Content},
 			},
 		}},
 	}
@@ -483,27 +596,38 @@ func extractAnthropicToolCalls(raw map[string]any, _ *providers.ToolCallDef) []t
 //
 //
 
-func transformBedrockConverse(body map[string]any, req Request, cfg providers.ProviderConfig) {
+func transformBedrockConverse(body map[string]any, msgs []msg, req Request, cfg providers.ProviderConfig) {
 	//
 	if req.System != "" {
 		body["system"] = []map[string]any{{"text": req.System}}
 	}
 
-	msgs := []map[string]any{}
-	if len(req.Messages) > 0 {
-		for _, m := range req.Messages {
-			msgs = append(msgs, map[string]any{
-				"role":    mapRole(m.Role, cfg.RoleMappings),
-				"content": []map[string]any{{"text": m.Content}},
-			})
+	out := []map[string]any{}
+	if len(msgs) > 0 {
+		callT := selectToolCallTransform(cfg)
+		resultT := selectToolResultTransform(cfg)
+		for _, m := range msgs {
+			switch m := m.(type) {
+			case msgResult:
+				out = append(out, resultT(m.result, cfg.RoleMappings))
+			case msgCalls:
+				out = append(out, callT(m.calls, cfg.RoleMappings))
+			case msgText:
+				out = append(out, map[string]any{
+					"role":    mapRole(m.role, cfg.RoleMappings),
+					"content": []map[string]any{{"text": m.text}},
+				})
+			default:
+				panic(fmt.Sprintf("unhandled msg variant %T", m))
+			}
 		}
 	} else if req.User != "" {
-		msgs = append(msgs, map[string]any{
+		out = append(out, map[string]any{
 			"role":    mapRole("user", cfg.RoleMappings),
 			"content": []map[string]any{{"text": req.User}},
 		})
 	}
-	body["messages"] = msgs
+	body["messages"] = out
 }
 
 func transformBedrockToolDefs(body map[string]any, tools []Tool) {
@@ -520,14 +644,14 @@ func transformBedrockToolDefs(body map[string]any, tools []Tool) {
 	body["toolConfig"] = map[string]any{"tools": defs}
 }
 
-func transformBedrockToolCallMsg(calls []toolCall, roleMappings map[string]string) map[string]any {
+func transformBedrockToolCallMsg(calls []ToolCall, roleMappings map[string]string) map[string]any {
 	content := []map[string]any{}
 	for _, tc := range calls {
 		content = append(content, map[string]any{
 			"toolUse": map[string]any{
-				"toolUseId": tc.id,
-				"name":      tc.name,
-				"input":     tc.input,
+				"toolUseId": tc.ID,
+				"name":      tc.Name,
+				"input":     tc.Input,
 			},
 		})
 	}
@@ -537,13 +661,13 @@ func transformBedrockToolCallMsg(calls []toolCall, roleMappings map[string]strin
 	}
 }
 
-func transformBedrockToolResultMsg(result toolResult, _ map[string]string) map[string]any {
+func transformBedrockToolResultMsg(result ToolResult, _ map[string]string) map[string]any {
 	return map[string]any{
 		"role": "user",
 		"content": []map[string]any{{
 			"toolResult": map[string]any{
-				"toolUseId": result.toolUseID,
-				"content":   []map[string]any{{"text": result.content}},
+				"toolUseId": result.ToolUseID,
+				"content":   []map[string]any{{"text": result.Content}},
 			},
 		}},
 	}
