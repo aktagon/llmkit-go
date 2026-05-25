@@ -138,13 +138,26 @@ func UsagePaths(provider string) (inputPath, outputPath string) {
 	}
 }
 
-// UsageCostPath returns the JSON path to the provider-reported USD cost,
+// UsageCostPath returns the JSON path to the provider-reported cost,
 // or "" when the provider reports no cost.
 func UsageCostPath(provider string) string {
 	switch provider {
+	case Grok:
+		return "usage.cost_in_usd_ticks"
 	case Openrouter:
 		return "usage.cost"
 	default:
 		return ""
+	}
+}
+
+// UsageCostScale returns the multiplier converting the provider-reported
+// cost value to USD. Default 1.0 (value already USD).
+func UsageCostScale(provider string) float64 {
+	switch provider {
+	case Grok:
+		return 1e-10
+	default:
+		return 1
 	}
 }
