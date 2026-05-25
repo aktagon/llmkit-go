@@ -12,11 +12,12 @@ import (
 // Capability-scoped dimensions (e.g., CacheWrite, Reasoning) are zero
 // when the corresponding capability is inactive or unreported.
 type Usage struct {
-	Input      int // universal
-	Output     int // universal
-	CacheWrite int // scoped to Caching
-	CacheRead  int // scoped to Caching
-	Reasoning  int // scoped to Reasoning
+	Input      int     // universal
+	Output     int     // universal
+	CacheWrite int     // scoped to Caching
+	CacheRead  int     // scoped to Caching
+	Reasoning  int     // scoped to Reasoning
+	Cost       float64 // provider-reported USD cost; 0 when unreported
 }
 
 // MiddlewarePhase indicates when a middleware fires relative to the operation.
