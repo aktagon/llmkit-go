@@ -150,7 +150,7 @@ type wireToolRes struct {
 func toWireToolCalls(in []ToolCall) []wireToolCall {
 	out := make([]wireToolCall, 0, len(in))
 	for _, tc := range in {
-		out = append(out, wireToolCall{ID: tc.ID, Name: tc.Name, Input: tc.Input})
+		out = append(out, wireToolCall(tc))
 	}
 	return out
 }
@@ -169,11 +169,7 @@ func (w wireMessage) toPublic() Message {
 		ToolCalls: make([]ToolCall, 0, len(w.ToolCalls)),
 	}
 	for _, tc := range w.ToolCalls {
-		out.ToolCalls = append(out.ToolCalls, ToolCall{
-			ID:    tc.ID,
-			Name:  tc.Name,
-			Input: tc.Input,
-		})
+		out.ToolCalls = append(out.ToolCalls, ToolCall(tc))
 	}
 	if w.ToolResult != nil {
 		out.ToolResult = &ToolResult{

@@ -81,6 +81,15 @@ func (a *legacyAgent) runToolLoop(ctx context.Context) (Response, error) {
 	for i := 0; i < a.opts.maxToolIterations; i++ {
 		body, headers := a.buildAgentRequest(cfg)
 
+		// Caching is a shared request-construction step (ADR-026): applied on
+		// every send path by construction, not just Text. Before this, a
+		// .caching() agent silently paid full input price every turn (BUG-004).
+		if a.opts.caching {
+			if err := applyCaching(ctx, body, a.provider, a.opts, cfg); err != nil {
+				return Response{Usage: totalUsage}, err
+			}
+		}
+
 		llmEvent := providers.Event{
 			Op:       providers.OpLLMRequest,
 			Provider: a.provider.Name,
@@ -140,8 +149,10 @@ func (a *legacyAgent) runToolLoop(ctx context.Context) (Response, error) {
 		inputPath, outputPath := providers.UsagePaths(a.provider.Name)
 		turnInput := extractIntPath(raw, inputPath)
 		turnOutput := extractIntPath(raw, outputPath)
+		turnCost := extractFloatPath(raw, providers.UsageCostPath(a.provider.Name))
 		totalUsage.Input += turnInput
 		totalUsage.Output += turnOutput
+		totalUsage.Cost += turnCost
 
 		postEv := llmEvent
 		postEv.Usage = providers.Usage{Input: turnInput, Output: turnOutput}
@@ -267,18 +278,18 @@ func (a *legacyAgent) buildAgentRequest(cfg providers.ProviderConfig) (map[strin
 	// Options
 	if cfg.WrapsOptionsIn != "" {
 		optBody := map[string]any{}
-		addOptions(optBody, a.opts, a.provider.Name)
-		if key, ok := supported[providers.OptionMaxTokens]; ok {
+		addOptions(optBody, a.opts, a.provider.Name, model)
+		if key, ok := resolveOptionKey(a.provider.Name, model, providers.OptionMaxTokens, supported); ok {
 			setNestedField(optBody, key, maxTokens)
 		}
 		if len(optBody) > 0 {
 			body[cfg.WrapsOptionsIn] = optBody
 		}
 	} else {
-		if key, ok := supported[providers.OptionMaxTokens]; ok {
+		if key, ok := resolveOptionKey(a.provider.Name, model, providers.OptionMaxTokens, supported); ok {
 			setNestedField(body, key, maxTokens)
 		}
-		addOptions(body, a.opts, a.provider.Name)
+		addOptions(body, a.opts, a.provider.Name, model)
 	}
 
 	// Auth

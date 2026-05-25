@@ -58,13 +58,23 @@ func TestTransformGooglePartsRoleMapping(t *testing.T) {
 
 func TestTransformGoogleFunctionDeclarations(t *testing.T) {
 	body := map[string]any{}
+	// BUG-002 shapes: additionalProperties + a ["string","null"] union. These
+	// 400 under the OpenAPI-subset "parameters" field but are valid native
+	// JSON Schema; they must pass through verbatim under parametersJsonSchema.
+	schema := map[string]any{
+		"type":                 "object",
+		"additionalProperties": false,
+		"properties": map[string]any{
+			"note": map[string]any{"type": []any{"string", "null"}},
+		},
+	}
 	tools := []Tool{{
 		Name:        "calc",
 		Description: "Calculate",
-		Schema:      map[string]any{"type": "object"},
+		Schema:      schema,
 	}}
 
-	transformGoogleFunctionDeclarations(body, tools)
+	transformGoogleFunctionDeclarations(body, tools, "parametersJsonSchema")
 
 	toolsArr := body["tools"].([]map[string]any)
 	if len(toolsArr) != 1 {
@@ -74,6 +84,26 @@ func TestTransformGoogleFunctionDeclarations(t *testing.T) {
 	if decls[0]["name"] != "calc" {
 		t.Errorf("expected name calc, got %v", decls[0]["name"])
 	}
+	// ADR-025 / BUG-002: schema goes under parametersJsonSchema, not parameters.
+	if _, ok := decls[0]["parametersJsonSchema"]; !ok {
+		t.Errorf("expected schema under parametersJsonSchema, got keys %v", keysOfAny(decls[0]))
+	}
+	if _, leaked := decls[0]["parameters"]; leaked {
+		t.Errorf("schema must not use the OpenAPI-subset 'parameters' field for Google")
+	}
+	// Verbatim passthrough: additionalProperties + union preserved unchanged.
+	got := decls[0]["parametersJsonSchema"].(map[string]any)
+	if got["additionalProperties"] != false {
+		t.Errorf("additionalProperties not preserved verbatim: %v", got["additionalProperties"])
+	}
+}
+
+func keysOfAny(m map[string]any) []string {
+	ks := make([]string, 0, len(m))
+	for k := range m {
+		ks = append(ks, k)
+	}
+	return ks
 }
 
 func TestExtractGoogleToolCalls(t *testing.T) {
