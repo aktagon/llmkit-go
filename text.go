@@ -29,6 +29,11 @@ func (b *Text) Prompt(ctx context.Context, finalText string) (Response, error) {
 		return Response{}, err
 	}
 
+	msgs, err := toInternal(req.Messages)
+	if err != nil {
+		return Response{}, err
+	}
+
 	cfg, ok := providers.Providers()[p.Name]
 	if !ok {
 		return Response{}, &ValidationError{Field: "provider", Message: "unknown: " + p.Name}
@@ -44,7 +49,7 @@ func (b *Text) Prompt(ctx context.Context, finalText string) (Response, error) {
 		return Response{}, err
 	}
 
-	body, headers := buildRequest(p, req, o, cfg)
+	body, headers := buildRequest(p, req, msgs, o, cfg, nil)
 
 	if o.caching {
 		if err := applyCaching(ctx, body, p, o, cfg); err != nil {

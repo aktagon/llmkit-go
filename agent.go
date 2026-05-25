@@ -70,16 +70,20 @@ func (a *legacyAgent) runToolLoop(ctx context.Context) (Response, error) {
 	}
 
 	tcConfig := providers.ToolCallConfig(a.provider.Name)
-
-	// Select transforms from config
-	tcCallTransform := selectToolCallTransform(cfg)
-	tcResultTransform := selectToolResultTransform(cfg)
 	tcExtractor := selectToolCallExtractor(cfg)
 
 	var totalUsage Usage
 
 	for i := 0; i < a.opts.maxToolIterations; i++ {
-		body, headers := a.buildAgentRequest(cfg)
+		// Build the request through the shared builder (ADR-026 PIPE-001/004):
+		// the agent constructs no body of its own. Its trusted history is
+		// converted straight into the internal message sum (PIPE-007) — no
+		// round-trip through the lossy public Message shape — so the tool-aware
+		// message transforms and the option/caching/structured-output steps all
+		// run identically to the Text/batch path.
+		req := Request{System: a.system}
+		msgs := agentHistoryToMsgs(a.history)
+		body, headers := buildRequest(a.provider, req, msgs, a.opts, cfg, a.tools)
 
 		// Caching is a shared request-construction step (ADR-026): applied on
 		// every send path by construction, not just Text. Before this, a
@@ -221,156 +225,40 @@ func (a *legacyAgent) runToolLoop(ctx context.Context) (Response, error) {
 				toolResult: &toolResult{toolUseID: tc.id, content: output},
 			})
 		}
-
-		_ = tcCallTransform
-		_ = tcResultTransform
 	}
 
 	return Response{Usage: totalUsage}, fmt.Errorf("max tool iterations (%d) reached", a.opts.maxToolIterations)
 }
 
-// buildAgentRequest builds the request body with conversation history and tools.
-func (a *legacyAgent) buildAgentRequest(cfg providers.ProviderConfig) (map[string]any, map[string]string) {
-	body := map[string]any{}
-	headers := map[string]string{}
-
-	model := a.provider.Model
-	if model == "" {
-		model = cfg.DefaultModel
-	}
-	if cfg.ModelInBody {
-		body["model"] = model
-	}
-
-	maxTokens := cfg.DefaultMaxTokens
-	if a.opts.maxTokens != nil {
-		maxTokens = *a.opts.maxTokens
-	}
-	supported := providers.SupportedOptions(a.provider.Name)
-
-	// System message placement
-	switch cfg.SystemPlacement {
-	case providers.PlacementTopLevelField:
-		if a.system != "" {
-			body["system"] = a.system
-		}
-	case providers.PlacementSiblingObject:
-		if a.system != "" {
-			body["system_instruction"] = map[string]any{
-				"parts": []map[string]any{{"text": a.system}},
-			}
-		}
-	}
-
-	// Build messages from history using selected transforms
-	tcCallTransform := selectToolCallTransform(cfg)
-	tcResultTransform := selectToolResultTransform(cfg)
-	msgTransform := selectMessageTransform(cfg)
-
-	a.buildHistoryMessages(body, cfg, msgTransform, tcCallTransform, tcResultTransform)
-
-	// Add tools using selected transform
-	if len(a.tools) > 0 {
-		toolDefTransform := selectToolDefTransform(cfg)
-		toolDefTransform(body, a.tools)
-	}
-
-	// Options
-	if cfg.WrapsOptionsIn != "" {
-		optBody := map[string]any{}
-		addOptions(optBody, a.opts, a.provider.Name, model)
-		if key, ok := resolveOptionKey(a.provider.Name, model, providers.OptionMaxTokens, supported); ok {
-			setNestedField(optBody, key, maxTokens)
-		}
-		if len(optBody) > 0 {
-			body[cfg.WrapsOptionsIn] = optBody
-		}
-	} else {
-		if key, ok := resolveOptionKey(a.provider.Name, model, providers.OptionMaxTokens, supported); ok {
-			setNestedField(body, key, maxTokens)
-		}
-		addOptions(body, a.opts, a.provider.Name, model)
-	}
-
-	// Auth
-	switch cfg.AuthScheme {
-	case providers.AuthBearerToken:
-		headers[cfg.AuthHeader] = cfg.AuthPrefix + " " + a.provider.APIKey
-	case providers.AuthHeaderAPIKey:
-		headers[cfg.AuthHeader] = a.provider.APIKey
-	}
-	if cfg.RequiredHeader != "" {
-		headers[cfg.RequiredHeader] = cfg.RequiredHeaderValue
-	}
-
-	return body, headers
-}
-
-// buildHistoryMessages converts internal history to provider message format.
-func (a *legacyAgent) buildHistoryMessages(body map[string]any, cfg providers.ProviderConfig,
-	msgTransform messageTransformFunc,
-	tcCallTransform toolCallTransformFunc,
-	tcResultTransform toolResultTransformFunc) {
-
-	// For simple messages (no tool calls in history), use the standard transform
-	hasToolMessages := false
-	for _, m := range a.history {
-		if m.toolResult != nil || len(m.toolCalls) > 0 {
-			hasToolMessages = true
-			break
-		}
-	}
-
-	if !hasToolMessages {
-		// Build a synthetic Request to pass to the message transform
-		req := Request{System: a.system}
-		for _, m := range a.history {
-			req.Messages = append(req.Messages, Message{Role: m.role, Content: m.content})
-		}
-		msgTransform(body, req, cfg)
-		return
-	}
-
-	// History has tool calls — build manually with transforms
-	if cfg.SystemPlacement == providers.PlacementSiblingObject {
-		// Google: contents array
-		contents := []map[string]any{}
-		for _, m := range a.history {
-			if m.toolResult != nil {
-				contents = append(contents, tcResultTransform(*m.toolResult, cfg.RoleMappings))
-			} else if len(m.toolCalls) > 0 {
-				contents = append(contents, tcCallTransform(m.toolCalls, cfg.RoleMappings))
-			} else {
-				contents = append(contents, map[string]any{
-					"role":  mapRole(m.role, cfg.RoleMappings),
-					"parts": []map[string]any{{"text": m.content}},
+// agentHistoryToMsgs converts the agent's trusted internal history directly
+// into the internal message sum (ADR-026 PIPE-007), bypassing the public
+// Message shape. The agent sets exactly one carrier per turn by construction,
+// so the toInternal carrier check is unnecessary here — that boundary guards
+// only untrusted, user-supplied Message lists on the Text/batch path.
+func agentHistoryToMsgs(history []internalMessage) []msg {
+	out := make([]msg, 0, len(history))
+	for _, m := range history {
+		switch {
+		case m.toolResult != nil:
+			out = append(out, msgResult{result: ToolResult{
+				ToolUseID: m.toolResult.toolUseID,
+				Content:   m.toolResult.content,
+			}})
+		case len(m.toolCalls) > 0:
+			calls := make([]ToolCall, 0, len(m.toolCalls))
+			for _, tc := range m.toolCalls {
+				calls = append(calls, ToolCall{
+					ID:    tc.id,
+					Name:  tc.name,
+					Input: encodeToolInput(tc.input),
 				})
 			}
+			out = append(out, msgCalls{calls: calls})
+		default:
+			out = append(out, msgText{role: m.role, text: m.content})
 		}
-		body["contents"] = contents
-	} else {
-		// OpenAI/Anthropic: messages array
-		msgs := []map[string]any{}
-		if cfg.SystemPlacement == providers.PlacementMessageInArray && a.system != "" {
-			msgs = append(msgs, map[string]any{
-				"role":    mapRole("system", cfg.RoleMappings),
-				"content": a.system,
-			})
-		}
-		for _, m := range a.history {
-			if m.toolResult != nil {
-				msgs = append(msgs, tcResultTransform(*m.toolResult, cfg.RoleMappings))
-			} else if len(m.toolCalls) > 0 {
-				msgs = append(msgs, tcCallTransform(m.toolCalls, cfg.RoleMappings))
-			} else {
-				msgs = append(msgs, map[string]any{
-					"role":    mapRole(m.role, cfg.RoleMappings),
-					"content": m.content,
-				})
-			}
-		}
-		body["messages"] = msgs
 	}
+	return out
 }
 
 func (a *legacyAgent) findTool(name string) *Tool {
