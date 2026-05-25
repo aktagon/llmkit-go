@@ -149,7 +149,7 @@ func (a *legacyAgent) runToolLoop(ctx context.Context) (Response, error) {
 		inputPath, outputPath := providers.UsagePaths(a.provider.Name)
 		turnInput := extractIntPath(raw, inputPath)
 		turnOutput := extractIntPath(raw, outputPath)
-		turnCost := extractFloatPath(raw, providers.UsageCostPath(a.provider.Name))
+		turnCost := extractFloatPath(raw, providers.UsageCostPath(a.provider.Name)) * providers.UsageCostScale(a.provider.Name)
 		totalUsage.Input += turnInput
 		totalUsage.Output += turnOutput
 		totalUsage.Cost += turnCost

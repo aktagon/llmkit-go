@@ -142,9 +142,22 @@ func UsagePaths(provider string) (inputPath, outputPath string) {
 //
 func UsageCostPath(provider string) string {
 	switch provider {
+	case Grok:
+		return "usage.cost_in_usd_ticks"
 	case Openrouter:
 		return "usage.cost"
 	default:
 		return ""
+	}
+}
+
+//
+//
+func UsageCostScale(provider string) float64 {
+	switch provider {
+	case Grok:
+		return 1e-10
+	default:
+		return 1
 	}
 }
