@@ -357,6 +357,30 @@ func TestUsageCostOpenRouter(t *testing.T) {
 	}
 }
 
+// TestUsageCostGrokTicksToUSD covers the ADR-027 usageCostScale path: xAI
+// reports cost in usage.cost_in_usd_ticks where 1 USD = 1e10 ticks, so the
+// scale (1e-10) converts to USD. Live-verified 2026-05-25: 2856000 ticks =
+// $0.0002856.
+func TestUsageCostGrokTicksToUSD(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{
+			"choices": []map[string]any{{"message": map[string]any{"content": "ok"}}},
+			"usage":   map[string]any{"prompt_tokens": 136, "completion_tokens": 100, "cost_in_usd_ticks": 2856000},
+		})
+	}))
+	defer server.Close()
+
+	c := New(providers.Grok, "k")
+	c.provider.baseURL = server.URL
+	resp, err := c.Text.Prompt(context.Background(), "hi")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Usage.Cost != 0.0002856 {
+		t.Errorf("expected Usage.Cost = 0.0002856 (2856000 ticks / 1e10), got %v", resp.Usage.Cost)
+	}
+}
+
 func TestUsageCostZeroForNoCostProvider(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]any{
