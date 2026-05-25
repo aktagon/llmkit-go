@@ -387,6 +387,39 @@ func buildURL(p Provider, cfg providers.ProviderConfig) string {
 }
 
 //
+//
+//
+//
+//
+//
+//
+func resolveOptionKey(provider, model string, param providers.OptionKey, supported map[providers.OptionKey]string) (string, bool) {
+	bestKey := ""
+	bestLen := -1
+	for _, ov := range providers.ModelOptionOverrides(provider) {
+		if ov.Key != param {
+			continue
+		}
+		switch ov.MatcherKind {
+		case "id":
+			if ov.MatcherValue == model {
+				return ov.JSONKey, true
+			}
+		case "pattern":
+			prefix := strings.TrimSuffix(ov.MatcherValue, "*")
+			if strings.HasPrefix(model, prefix) && len(prefix) > bestLen {
+				bestKey, bestLen = ov.JSONKey, len(prefix)
+			}
+		}
+	}
+	if bestLen >= 0 {
+		return bestKey, true
+	}
+	key, ok := supported[param]
+	return key, ok
+}
+
+//
 func buildRequest(p Provider, req Request, o *options, cfg providers.ProviderConfig) (map[string]any, map[string]string) {
 	body := map[string]any{}
 	headers := map[string]string{}
@@ -408,7 +441,7 @@ func buildRequest(p Provider, req Request, o *options, cfg providers.ProviderCon
 
 	//
 	supported := providers.SupportedOptions(p.Name)
-	if key, ok := supported[providers.OptionMaxTokens]; ok {
+	if key, ok := resolveOptionKey(p.Name, model, providers.OptionMaxTokens, supported); ok {
 		body[key] = maxTokens
 	}
 
@@ -435,9 +468,9 @@ func buildRequest(p Provider, req Request, o *options, cfg providers.ProviderCon
 	//
 	if cfg.WrapsOptionsIn != "" {
 		optBody := map[string]any{}
-		addOptions(optBody, o, p.Name)
+		addOptions(optBody, o, p.Name, model)
 		//
-		if key, ok := supported[providers.OptionMaxTokens]; ok {
+		if key, ok := resolveOptionKey(p.Name, model, providers.OptionMaxTokens, supported); ok {
 			setNestedField(optBody, key, maxTokens)
 			delete(body, strings.SplitN(key, ".", 2)[0])
 		}
@@ -445,7 +478,7 @@ func buildRequest(p Provider, req Request, o *options, cfg providers.ProviderCon
 			body[cfg.WrapsOptionsIn] = optBody
 		}
 	} else {
-		addOptions(body, o, p.Name)
+		addOptions(body, o, p.Name, model)
 	}
 
 	//
@@ -493,12 +526,12 @@ func mapRole(role string, mappings map[string]string) string {
 //
 //
 //
-func addOptions(body map[string]any, o *options, provider string) {
+func addOptions(body map[string]any, o *options, provider, model string) {
 	supported := providers.SupportedOptions(provider)
 	overrides := providers.OptionOverrides(provider)
 
 	apply := func(key providers.OptionKey, value any) {
-		jsonKey, ok := supported[key]
+		jsonKey, ok := resolveOptionKey(provider, model, key, supported)
 		if !ok {
 			return
 		}
@@ -700,6 +733,7 @@ func parseResponse(provider string, body []byte) (Response, error) {
 	output := extractIntPath(raw, outputPath)
 	cacheWrite, cacheRead := extractCacheUsage(raw, provider)
 	reasoning := extractReasoningUsage(raw, provider)
+	cost := extractFloatPath(raw, providers.UsageCostPath(provider))
 	finishReason, finishMessage := extractFinishSignal(raw, provider)
 
 	return Response{
@@ -710,6 +744,7 @@ func parseResponse(provider string, body []byte) (Response, error) {
 			CacheWrite: cacheWrite,
 			CacheRead:  cacheRead,
 			Reasoning:  reasoning,
+			Cost:       cost,
 		},
 		FinishReason:  finishReason,
 		FinishMessage: finishMessage,
@@ -844,6 +879,32 @@ func extractIntPath(data map[string]any, path string) int {
 		return int(v)
 	case int:
 		return v
+	default:
+		return 0
+	}
+}
+
+//
+//
+//
+func extractFloatPath(data map[string]any, path string) float64 {
+	if path == "" {
+		return 0
+	}
+	parts := strings.Split(path, ".")
+	var current any = data
+	for _, part := range parts {
+		if m, ok := current.(map[string]any); ok {
+			current = m[part]
+		} else {
+			return 0
+		}
+	}
+	switch v := current.(type) {
+	case float64:
+		return v
+	case int:
+		return float64(v)
 	default:
 		return 0
 	}

@@ -137,3 +137,14 @@ func UsagePaths(provider string) (inputPath, outputPath string) {
 		return "", ""
 	}
 }
+
+//
+//
+func UsageCostPath(provider string) string {
+	switch provider {
+	case Openrouter:
+		return "usage.cost"
+	default:
+		return ""
+	}
+}

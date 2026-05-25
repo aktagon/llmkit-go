@@ -77,7 +77,10 @@ func submitBatch(ctx context.Context, p Provider, reqs []Request, opts ...Option
 	switch bc.InputMode {
 	case providers.BatchFileReferenceInput:
 		//
-		jsonl := buildBatchJSONL(reqs, o, p, cfg, bc)
+		jsonl, err := buildBatchJSONL(ctx, reqs, o, p, cfg, bc)
+		if err != nil {
+			return BatchHandle{}, postWith(err)
+		}
 		fileID, err := uploadBatchFile(ctx, o.httpClient, base, jsonl, bc, headers)
 		if err != nil {
 			return BatchHandle{}, postWith(err)
@@ -92,7 +95,7 @@ func submitBatch(ctx context.Context, p Provider, reqs []Request, opts ...Option
 			return BatchHandle{}, postWith(fmt.Errorf("marshal batch request: %w", err))
 		}
 	default:
-		body, err := buildBatchBody(reqs, o, p, cfg, bc)
+		body, err := buildBatchBody(ctx, reqs, o, p, cfg, bc)
 		if err != nil {
 			return BatchHandle{}, postWith(err)
 		}
@@ -178,11 +181,18 @@ func waitBatch(ctx context.Context, handle BatchHandle, opts ...Option) ([]Respo
 //
 //
 //
-func buildBatchBody(reqs []Request, o *options, p Provider, cfg providers.ProviderConfig, bc *providers.BatchDef) (map[string]any, error) {
+func buildBatchBody(ctx context.Context, reqs []Request, o *options, p Provider, cfg providers.ProviderConfig, bc *providers.BatchDef) (map[string]any, error) {
 	body := map[string]any{}
 	var items []map[string]any
 	for i, req := range reqs {
 		reqBody, _ := buildRequest(p, req, o, cfg)
+		//
+		//
+		if o.caching {
+			if err := applyCaching(ctx, reqBody, p, o, cfg); err != nil {
+				return nil, err
+			}
+		}
 		var item map[string]any
 		if bc.ItemBodyField != "" {
 			item = map[string]any{
@@ -204,10 +214,15 @@ func buildBatchBody(reqs []Request, o *options, p Provider, cfg providers.Provid
 
 //
 //
-func buildBatchJSONL(reqs []Request, o *options, p Provider, cfg providers.ProviderConfig, bc *providers.BatchDef) []byte {
+func buildBatchJSONL(ctx context.Context, reqs []Request, o *options, p Provider, cfg providers.ProviderConfig, bc *providers.BatchDef) ([]byte, error) {
 	var buf strings.Builder
 	for i, req := range reqs {
 		reqBody, _ := buildRequest(p, req, o, cfg)
+		if o.caching {
+			if err := applyCaching(ctx, reqBody, p, o, cfg); err != nil {
+				return nil, err
+			}
+		}
 		line := map[string]any{
 			"custom_id": fmt.Sprintf("req-%d", i),
 			"method":    "POST",
@@ -218,7 +233,7 @@ func buildBatchJSONL(reqs []Request, o *options, p Provider, cfg providers.Provi
 		buf.Write(data)
 		buf.WriteByte('\n')
 	}
-	return []byte(buf.String())
+	return []byte(buf.String()), nil
 }
 
 //

@@ -345,3 +345,26 @@ func OptionOverrides(provider string) map[OptionKey]OptionOverrideDef {
 		return nil
 	}
 }
+
+//
+//
+type ModelOptionOverrideDef struct {
+	MatcherKind  string
+	MatcherValue string
+	Key          OptionKey
+	JSONKey      string
+}
+
+//
+//
+func ModelOptionOverrides(provider string) []ModelOptionOverrideDef {
+	switch provider {
+	case OpenAI:
+		return []ModelOptionOverrideDef{
+			{MatcherKind: "pattern", MatcherValue: "gpt-5*", Key: OptionMaxTokens, JSONKey: "max_completion_tokens"},
+			{MatcherKind: "pattern", MatcherValue: "o*", Key: OptionMaxTokens, JSONKey: "max_completion_tokens"},
+		}
+	default:
+		return nil
+	}
+}
