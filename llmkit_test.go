@@ -282,6 +282,139 @@ func TestPromptWithThinkingBudgetAnthropic(t *testing.T) {
 	}
 }
 
+// TestPerModelMaxTokensKeyOpenAI is the BUG-001 / ADR-024 regression: gpt-5
+// and the o-series must emit max_completion_tokens, while gpt-4o keeps
+// max_tokens. The override is per-model, so the same client switches keys by
+// model id alone.
+func TestPerModelMaxTokensKeyOpenAI(t *testing.T) {
+	cases := []struct {
+		model   string
+		wantKey string
+	}{
+		{"gpt-5", "max_completion_tokens"},
+		{"gpt-5-mini", "max_completion_tokens"}, // glob gpt-5* covers variants
+		{"o3", "max_completion_tokens"},
+		{"o4-mini", "max_completion_tokens"}, // glob o*
+		{"gpt-4o", "max_tokens"},             // unaffected
+	}
+	for _, tc := range cases {
+		t.Run(tc.model, func(t *testing.T) {
+			var captured map[string]any
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				body, _ := io.ReadAll(r.Body)
+				json.Unmarshal(body, &captured)
+				json.NewEncoder(w).Encode(map[string]any{
+					"choices": []map[string]any{{"message": map[string]any{"content": "ok"}}},
+					"usage":   map[string]any{"prompt_tokens": 1, "completion_tokens": 1},
+				})
+			}))
+			defer server.Close()
+
+			c := New(providers.OpenAI, "k")
+			c.provider.baseURL = server.URL
+			if _, err := c.Text.Model(tc.model).Prompt(context.Background(), "hi"); err != nil {
+				t.Fatal(err)
+			}
+			other := map[string]string{"max_completion_tokens": "max_tokens", "max_tokens": "max_completion_tokens"}[tc.wantKey]
+			if _, ok := captured[tc.wantKey]; !ok {
+				t.Errorf("model %q: expected wire key %q in body, got keys %v", tc.model, tc.wantKey, keysOf(captured))
+			}
+			if _, leaked := captured[other]; leaked {
+				t.Errorf("model %q: wrong wire key %q present in body", tc.model, other)
+			}
+		})
+	}
+}
+
+func keysOf(m map[string]any) []string {
+	ks := make([]string, 0, len(m))
+	for k := range m {
+		ks = append(ks, k)
+	}
+	return ks
+}
+
+// TestUsageCostOpenRouter is the BUG-005 / ADR-027 regression: OpenRouter
+// reports usage.cost (USD), which must surface on resp.Usage.Cost. A provider
+// that reports no cost (OpenAI) stays 0.
+func TestUsageCostOpenRouter(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{
+			"choices": []map[string]any{{"message": map[string]any{"content": "ok"}}},
+			"usage":   map[string]any{"prompt_tokens": 10, "completion_tokens": 5, "cost": 0.00042},
+		})
+	}))
+	defer server.Close()
+
+	c := New(providers.Openrouter, "k")
+	c.provider.baseURL = server.URL
+	resp, err := c.Text.Prompt(context.Background(), "hi")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Usage.Cost != 0.00042 {
+		t.Errorf("expected Usage.Cost = 0.00042, got %v", resp.Usage.Cost)
+	}
+}
+
+func TestUsageCostZeroForNoCostProvider(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{
+			"choices": []map[string]any{{"message": map[string]any{"content": "ok"}}},
+			"usage":   map[string]any{"prompt_tokens": 10, "completion_tokens": 5, "cost": 0.99},
+		})
+	}))
+	defer server.Close()
+
+	// OpenAI declares no usageCostPath, so a stray cost field is ignored.
+	c := New(providers.OpenAI, "k")
+	c.provider.baseURL = server.URL
+	resp, err := c.Text.Prompt(context.Background(), "hi")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Usage.Cost != 0 {
+		t.Errorf("expected Usage.Cost = 0 for no-cost provider, got %v", resp.Usage.Cost)
+	}
+}
+
+// TestAgentCachingAppliesToRequest is the BUG-004 / ADR-026 regression:
+// *Agent.caching() must annotate the request body with cache_control on every
+// turn, exactly as the Text path does. Before the pipeline fix, the agent
+// builder silently dropped caching, so a long stable prefix was never cached
+// (cache_read stayed 0 every turn). Asserting cache_control on the captured
+// request body is the by-construction proof; live cache_read>0 is the
+// integration check.
+func TestAgentCachingAppliesToRequest(t *testing.T) {
+	var captured map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		json.Unmarshal(body, &captured)
+		json.NewEncoder(w).Encode(map[string]any{
+			"content": []map[string]any{{"type": "text", "text": "done"}},
+			"usage":   map[string]any{"input_tokens": 2000, "output_tokens": 5},
+		})
+	}))
+	defer server.Close()
+
+	c := New(providers.Anthropic, "k")
+	c.provider.baseURL = server.URL
+	_, err := c.Agent.System("a long stable system prefix").Caching().Prompt(context.Background(), "hi")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Anthropic uses explicit caching: system becomes a content-block array
+	// carrying cache_control. A plain string means caching never applied.
+	sysBlocks, ok := captured["system"].([]any)
+	if !ok {
+		t.Fatalf("expected system as content-block array (caching applied), got %T", captured["system"])
+	}
+	block := sysBlocks[0].(map[string]any)
+	if _, hasCacheControl := block["cache_control"]; !hasCacheControl {
+		t.Errorf("agent request missing cache_control — caching not applied on the agent path (BUG-004)")
+	}
+}
+
 func TestUnsupportedOption(t *testing.T) {
 	// Anthropic doesn't support seed
 	_, err := New(providers.Anthropic, "key").Text.Seed(42).Prompt(context.Background(), "test")
@@ -1078,7 +1211,10 @@ func TestBuildBatchJSONL(t *testing.T) {
 		{System: "Be brief", User: "World"},
 	}
 	o := resolveOptions(nil)
-	data := buildBatchJSONL(reqs, o, p, cfg, bc)
+	data, err := buildBatchJSONL(context.Background(), reqs, o, p, cfg, bc)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	lines := splitJSONLLines(data)
 	if len(lines) != 2 {

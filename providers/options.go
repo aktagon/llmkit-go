@@ -345,3 +345,26 @@ func OptionOverrides(provider string) map[OptionKey]OptionOverrideDef {
 		return nil
 	}
 }
+
+// ModelOptionOverrideDef is one per-model wire-key override (ADR-024).
+// MatcherKind is "id" (exact ModelID) or "pattern" (literal prefix + trailing '*').
+type ModelOptionOverrideDef struct {
+	MatcherKind  string
+	MatcherValue string
+	Key          OptionKey
+	JSONKey      string
+}
+
+// ModelOptionOverrides returns per-model wire-key overrides for a provider,
+// in precedence order (exact ids first, then longest-prefix globs).
+func ModelOptionOverrides(provider string) []ModelOptionOverrideDef {
+	switch provider {
+	case OpenAI:
+		return []ModelOptionOverrideDef{
+			{MatcherKind: "pattern", MatcherValue: "gpt-5*", Key: OptionMaxTokens, JSONKey: "max_completion_tokens"},
+			{MatcherKind: "pattern", MatcherValue: "o*", Key: OptionMaxTokens, JSONKey: "max_completion_tokens"},
+		}
+	default:
+		return nil
+	}
+}
