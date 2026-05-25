@@ -185,7 +185,11 @@ func buildBatchBody(ctx context.Context, reqs []Request, o *options, p Provider,
 	body := map[string]any{}
 	var items []map[string]any
 	for i, req := range reqs {
-		reqBody, _ := buildRequest(p, req, o, cfg)
+		msgs, err := toInternal(req.Messages)
+		if err != nil {
+			return nil, err
+		}
+		reqBody, _ := buildRequest(p, req, msgs, o, cfg, nil)
 		// Caching is a shared request-construction step (ADR-026), applied on
 		// the batch path like Text/Agent — matching the TS/Python batch paths.
 		if o.caching {
@@ -217,7 +221,11 @@ func buildBatchBody(ctx context.Context, reqs []Request, o *options, p Provider,
 func buildBatchJSONL(ctx context.Context, reqs []Request, o *options, p Provider, cfg providers.ProviderConfig, bc *providers.BatchDef) ([]byte, error) {
 	var buf strings.Builder
 	for i, req := range reqs {
-		reqBody, _ := buildRequest(p, req, o, cfg)
+		msgs, err := toInternal(req.Messages)
+		if err != nil {
+			return nil, err
+		}
+		reqBody, _ := buildRequest(p, req, msgs, o, cfg, nil)
 		if o.caching {
 			if err := applyCaching(ctx, reqBody, p, o, cfg); err != nil {
 				return nil, err
