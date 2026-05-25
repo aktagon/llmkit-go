@@ -733,7 +733,7 @@ func parseResponse(provider string, body []byte) (Response, error) {
 	output := extractIntPath(raw, outputPath)
 	cacheWrite, cacheRead := extractCacheUsage(raw, provider)
 	reasoning := extractReasoningUsage(raw, provider)
-	cost := extractFloatPath(raw, providers.UsageCostPath(provider))
+	cost := extractFloatPath(raw, providers.UsageCostPath(provider)) * providers.UsageCostScale(provider)
 	finishReason, finishMessage := extractFinishSignal(raw, provider)
 
 	return Response{
