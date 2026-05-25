@@ -137,3 +137,14 @@ func UsagePaths(provider string) (inputPath, outputPath string) {
 		return "", ""
 	}
 }
+
+// UsageCostPath returns the JSON path to the provider-reported USD cost,
+// or "" when the provider reports no cost.
+func UsageCostPath(provider string) string {
+	switch provider {
+	case Openrouter:
+		return "usage.cost"
+	default:
+		return ""
+	}
+}

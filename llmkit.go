@@ -386,6 +386,39 @@ func buildURL(p Provider, cfg providers.ProviderConfig) string {
 	return base + endpoint
 }
 
+// resolveOptionKey returns the wire (JSON) key for param on (provider, model).
+//
+// Per-model overrides (ADR-024) outrank the provider default table: an exact
+// ModelID match wins outright, otherwise the longest-prefix glob wins, and
+// failing any override the provider's default supported-options key is used.
+// This is the single resolution path; both the MaxTokens site and the general
+// option loop call it (OPT-005).
+func resolveOptionKey(provider, model string, param providers.OptionKey, supported map[providers.OptionKey]string) (string, bool) {
+	bestKey := ""
+	bestLen := -1
+	for _, ov := range providers.ModelOptionOverrides(provider) {
+		if ov.Key != param {
+			continue
+		}
+		switch ov.MatcherKind {
+		case "id":
+			if ov.MatcherValue == model {
+				return ov.JSONKey, true
+			}
+		case "pattern":
+			prefix := strings.TrimSuffix(ov.MatcherValue, "*")
+			if strings.HasPrefix(model, prefix) && len(prefix) > bestLen {
+				bestKey, bestLen = ov.JSONKey, len(prefix)
+			}
+		}
+	}
+	if bestLen >= 0 {
+		return bestKey, true
+	}
+	key, ok := supported[param]
+	return key, ok
+}
+
 // buildRequest constructs the provider-specific request body and headers.
 func buildRequest(p Provider, req Request, o *options, cfg providers.ProviderConfig) (map[string]any, map[string]string) {
 	body := map[string]any{}
@@ -406,9 +439,9 @@ func buildRequest(p Provider, req Request, o *options, cfg providers.ProviderCon
 		maxTokens = *o.maxTokens
 	}
 
-	// Provider-specific max tokens key
+	// Provider-specific max tokens key (per-model override aware, ADR-024)
 	supported := providers.SupportedOptions(p.Name)
-	if key, ok := supported[providers.OptionMaxTokens]; ok {
+	if key, ok := resolveOptionKey(p.Name, model, providers.OptionMaxTokens, supported); ok {
 		body[key] = maxTokens
 	}
 
@@ -435,9 +468,9 @@ func buildRequest(p Provider, req Request, o *options, cfg providers.ProviderCon
 	// Generation options — may be nested under a wrapper key (e.g., generationConfig for Google)
 	if cfg.WrapsOptionsIn != "" {
 		optBody := map[string]any{}
-		addOptions(optBody, o, p.Name)
+		addOptions(optBody, o, p.Name, model)
 		// Also move max tokens into the wrapper
-		if key, ok := supported[providers.OptionMaxTokens]; ok {
+		if key, ok := resolveOptionKey(p.Name, model, providers.OptionMaxTokens, supported); ok {
 			setNestedField(optBody, key, maxTokens)
 			delete(body, strings.SplitN(key, ".", 2)[0])
 		}
@@ -445,7 +478,7 @@ func buildRequest(p Provider, req Request, o *options, cfg providers.ProviderCon
 			body[cfg.WrapsOptionsIn] = optBody
 		}
 	} else {
-		addOptions(body, o, p.Name)
+		addOptions(body, o, p.Name, model)
 	}
 
 	// Safety settings — top-level field for Gemini (safetySettings array).
@@ -493,12 +526,12 @@ func mapRole(role string, mappings map[string]string) string {
 // require nested objects. Each option's per-provider OptionOverrideDef may
 // also carry ExtraFields — sibling JSON to merge into the same parent path
 // (e.g. {"type":"enabled"} alongside Anthropic's thinking.budget_tokens).
-func addOptions(body map[string]any, o *options, provider string) {
+func addOptions(body map[string]any, o *options, provider, model string) {
 	supported := providers.SupportedOptions(provider)
 	overrides := providers.OptionOverrides(provider)
 
 	apply := func(key providers.OptionKey, value any) {
-		jsonKey, ok := supported[key]
+		jsonKey, ok := resolveOptionKey(provider, model, key, supported)
 		if !ok {
 			return
 		}
@@ -700,6 +733,7 @@ func parseResponse(provider string, body []byte) (Response, error) {
 	output := extractIntPath(raw, outputPath)
 	cacheWrite, cacheRead := extractCacheUsage(raw, provider)
 	reasoning := extractReasoningUsage(raw, provider)
+	cost := extractFloatPath(raw, providers.UsageCostPath(provider))
 	finishReason, finishMessage := extractFinishSignal(raw, provider)
 
 	return Response{
@@ -710,6 +744,7 @@ func parseResponse(provider string, body []byte) (Response, error) {
 			CacheWrite: cacheWrite,
 			CacheRead:  cacheRead,
 			Reasoning:  reasoning,
+			Cost:       cost,
 		},
 		FinishReason:  finishReason,
 		FinishMessage: finishMessage,
@@ -844,6 +879,32 @@ func extractIntPath(data map[string]any, path string) int {
 		return int(v)
 	case int:
 		return v
+	default:
+		return 0
+	}
+}
+
+// extractFloatPath navigates a dotted path and returns the value as a float64,
+// or 0 when the path is empty or absent. Used for provider-reported USD cost
+// (ADR-027), which is fractional.
+func extractFloatPath(data map[string]any, path string) float64 {
+	if path == "" {
+		return 0
+	}
+	parts := strings.Split(path, ".")
+	var current any = data
+	for _, part := range parts {
+		if m, ok := current.(map[string]any); ok {
+			current = m[part]
+		} else {
+			return 0
+		}
+	}
+	switch v := current.(type) {
+	case float64:
+		return v
+	case int:
+		return float64(v)
 	default:
 		return 0
 	}
