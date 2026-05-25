@@ -40,6 +40,11 @@ func promptStream(ctx context.Context, p Provider, req Request, callback StreamC
 		return Response{}, err
 	}
 
+	msgs, err := toInternal(req.Messages)
+	if err != nil {
+		return Response{}, err
+	}
+
 	cfg, ok := providers.Providers()[p.Name]
 	if !ok {
 		return Response{}, &ValidationError{Field: "provider", Message: "unknown: " + p.Name}
@@ -60,7 +65,7 @@ func promptStream(ctx context.Context, p Provider, req Request, callback StreamC
 		return Response{}, err
 	}
 
-	body, headers := buildRequest(p, req, o, cfg)
+	body, headers := buildRequest(p, req, msgs, o, cfg, nil)
 
 	// Apply caching mutations if enabled
 	if o.caching {
@@ -289,6 +294,9 @@ func validateRequest(req Request) error {
 			Message: "set Text(), Parts, History, or Image() before calling Prompt",
 		}
 	}
+	// The carrier invariant (ADR-026: each message holds at most one of
+	// {text content, tool calls, tool result}) is enforced at the single
+	// toInternal boundary (PIPE-008), not here.
 	return nil
 }
 
@@ -420,7 +428,23 @@ func resolveOptionKey(provider, model string, param providers.OptionKey, support
 }
 
 // buildRequest constructs the provider-specific request body and headers.
-func buildRequest(p Provider, req Request, o *options, cfg providers.ProviderConfig) (map[string]any, map[string]string) {
+//
+// msgs is the internal message sum (ADR-026 PIPE-007) — the Text/batch/stream
+// paths convert their public Message list via toInternal at the single
+// carrier-validation boundary (PIPE-008); the Agent builds it directly from its
+// trusted history (agentHistoryToMsgs), with no lossy public-Message hop.
+//
+// Deliberate scope limit (vs the TS slice): only multi-turn history flows
+// through the sum. The single-turn req.User path — which also carries media
+// (req.Files/req.Images) — is handled directly in each message transform's
+// else-branch, because msgText carries only {role, text}. Unifying it (a
+// media-carrying variant so single-turn input also flows through toInternal)
+// is tracked as a follow-up; see CLAUDE.md.
+//
+// tools is the Agent's tool set; the Text/batch paths pass nil, so the
+// tool-def step is a no-op there and their wire body stays byte-identical
+// (ADR-026 PIPE-005).
+func buildRequest(p Provider, req Request, msgs []msg, o *options, cfg providers.ProviderConfig, tools []Tool) (map[string]any, map[string]string) {
 	body := map[string]any{}
 	headers := map[string]string{}
 
@@ -463,7 +487,12 @@ func buildRequest(p Provider, req Request, o *options, cfg providers.ProviderCon
 
 	// Message transform — derived from config, builds the messages/contents array
 	msgTransform := selectMessageTransform(cfg)
-	msgTransform(body, req, cfg)
+	msgTransform(body, msgs, req, cfg)
+
+	// Tool definitions (Agent path). nil tools on Text/batch is a no-op.
+	if len(tools) > 0 {
+		selectToolDefTransform(cfg)(body, tools)
+	}
 
 	// Generation options — may be nested under a wrapper key (e.g., generationConfig for Google)
 	if cfg.WrapsOptionsIn != "" {
