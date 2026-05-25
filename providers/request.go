@@ -91,9 +91,10 @@ func StructuredOutput(provider string) *StructuredOutputDef {
 
 // ToolCallDef holds provider-specific tool call configuration.
 type ToolCallDef struct {
-	ArgsFormat string // "map" or "json_string"
-	ResultRole string
-	IDSource   string // "id_field" or "function_name"
+	ArgsFormat      string // "map" or "json_string"
+	ResultRole      string
+	IDSource        string // "id_field" or "function_name"
+	ParamsWireField string // JSON key for tool params (ADR-025); "parameters" default
 }
 
 // ToolCallConfig returns the tool call config for a provider.
@@ -101,165 +102,192 @@ func ToolCallConfig(provider string) *ToolCallDef {
 	switch provider {
 	case AI21:
 		return &ToolCallDef{
-			ArgsFormat: "json_string",
-			ResultRole: "tool",
-			IDSource:   "id_field",
+			ArgsFormat:      "json_string",
+			ResultRole:      "tool",
+			IDSource:        "id_field",
+			ParamsWireField: "parameters",
 		}
 	case Anthropic:
 		return &ToolCallDef{
-			ArgsFormat: "map",
-			ResultRole: "user",
-			IDSource:   "id_field",
+			ArgsFormat:      "map",
+			ResultRole:      "user",
+			IDSource:        "id_field",
+			ParamsWireField: "parameters",
 		}
 	case Azure:
 		return &ToolCallDef{
-			ArgsFormat: "json_string",
-			ResultRole: "tool",
-			IDSource:   "id_field",
+			ArgsFormat:      "json_string",
+			ResultRole:      "tool",
+			IDSource:        "id_field",
+			ParamsWireField: "parameters",
 		}
 	case Bedrock:
 		return &ToolCallDef{
-			ArgsFormat: "map",
-			ResultRole: "user",
-			IDSource:   "id_field",
+			ArgsFormat:      "map",
+			ResultRole:      "user",
+			IDSource:        "id_field",
+			ParamsWireField: "parameters",
 		}
 	case Cerebras:
 		return &ToolCallDef{
-			ArgsFormat: "json_string",
-			ResultRole: "tool",
-			IDSource:   "id_field",
+			ArgsFormat:      "json_string",
+			ResultRole:      "tool",
+			IDSource:        "id_field",
+			ParamsWireField: "parameters",
 		}
 	case Cohere:
 		return &ToolCallDef{
-			ArgsFormat: "json_string",
-			ResultRole: "tool",
-			IDSource:   "id_field",
+			ArgsFormat:      "json_string",
+			ResultRole:      "tool",
+			IDSource:        "id_field",
+			ParamsWireField: "parameters",
 		}
 	case Deepseek:
 		return &ToolCallDef{
-			ArgsFormat: "json_string",
-			ResultRole: "tool",
-			IDSource:   "id_field",
+			ArgsFormat:      "json_string",
+			ResultRole:      "tool",
+			IDSource:        "id_field",
+			ParamsWireField: "parameters",
 		}
 	case Doubao:
 		return &ToolCallDef{
-			ArgsFormat: "json_string",
-			ResultRole: "tool",
-			IDSource:   "id_field",
+			ArgsFormat:      "json_string",
+			ResultRole:      "tool",
+			IDSource:        "id_field",
+			ParamsWireField: "parameters",
 		}
 	case Ernie:
 		return &ToolCallDef{
-			ArgsFormat: "json_string",
-			ResultRole: "tool",
-			IDSource:   "id_field",
+			ArgsFormat:      "json_string",
+			ResultRole:      "tool",
+			IDSource:        "id_field",
+			ParamsWireField: "parameters",
 		}
 	case Fireworks:
 		return &ToolCallDef{
-			ArgsFormat: "json_string",
-			ResultRole: "tool",
-			IDSource:   "id_field",
+			ArgsFormat:      "json_string",
+			ResultRole:      "tool",
+			IDSource:        "id_field",
+			ParamsWireField: "parameters",
 		}
 	case Google:
 		return &ToolCallDef{
-			ArgsFormat: "map",
-			ResultRole: "user",
-			IDSource:   "function_name",
+			ArgsFormat:      "map",
+			ResultRole:      "user",
+			IDSource:        "function_name",
+			ParamsWireField: "parametersJsonSchema",
 		}
 	case Grok:
 		return &ToolCallDef{
-			ArgsFormat: "json_string",
-			ResultRole: "tool",
-			IDSource:   "id_field",
+			ArgsFormat:      "json_string",
+			ResultRole:      "tool",
+			IDSource:        "id_field",
+			ParamsWireField: "parameters",
 		}
 	case Groq:
 		return &ToolCallDef{
-			ArgsFormat: "json_string",
-			ResultRole: "tool",
-			IDSource:   "id_field",
+			ArgsFormat:      "json_string",
+			ResultRole:      "tool",
+			IDSource:        "id_field",
+			ParamsWireField: "parameters",
 		}
 	case Jan:
 		return &ToolCallDef{
-			ArgsFormat: "json_string",
-			ResultRole: "tool",
-			IDSource:   "id_field",
+			ArgsFormat:      "json_string",
+			ResultRole:      "tool",
+			IDSource:        "id_field",
+			ParamsWireField: "parameters",
 		}
 	case Llamacpp:
 		return &ToolCallDef{
-			ArgsFormat: "json_string",
-			ResultRole: "tool",
-			IDSource:   "id_field",
+			ArgsFormat:      "json_string",
+			ResultRole:      "tool",
+			IDSource:        "id_field",
+			ParamsWireField: "parameters",
 		}
 	case Lmstudio:
 		return &ToolCallDef{
-			ArgsFormat: "json_string",
-			ResultRole: "tool",
-			IDSource:   "id_field",
+			ArgsFormat:      "json_string",
+			ResultRole:      "tool",
+			IDSource:        "id_field",
+			ParamsWireField: "parameters",
 		}
 	case Minimax:
 		return &ToolCallDef{
-			ArgsFormat: "json_string",
-			ResultRole: "tool",
-			IDSource:   "id_field",
+			ArgsFormat:      "json_string",
+			ResultRole:      "tool",
+			IDSource:        "id_field",
+			ParamsWireField: "parameters",
 		}
 	case Mistral:
 		return &ToolCallDef{
-			ArgsFormat: "json_string",
-			ResultRole: "tool",
-			IDSource:   "id_field",
+			ArgsFormat:      "json_string",
+			ResultRole:      "tool",
+			IDSource:        "id_field",
+			ParamsWireField: "parameters",
 		}
 	case Moonshot:
 		return &ToolCallDef{
-			ArgsFormat: "json_string",
-			ResultRole: "tool",
-			IDSource:   "id_field",
+			ArgsFormat:      "json_string",
+			ResultRole:      "tool",
+			IDSource:        "id_field",
+			ParamsWireField: "parameters",
 		}
 	case Ollama:
 		return &ToolCallDef{
-			ArgsFormat: "json_string",
-			ResultRole: "tool",
-			IDSource:   "id_field",
+			ArgsFormat:      "json_string",
+			ResultRole:      "tool",
+			IDSource:        "id_field",
+			ParamsWireField: "parameters",
 		}
 	case OpenAI:
 		return &ToolCallDef{
-			ArgsFormat: "json_string",
-			ResultRole: "tool",
-			IDSource:   "id_field",
+			ArgsFormat:      "json_string",
+			ResultRole:      "tool",
+			IDSource:        "id_field",
+			ParamsWireField: "parameters",
 		}
 	case Openrouter:
 		return &ToolCallDef{
-			ArgsFormat: "json_string",
-			ResultRole: "tool",
-			IDSource:   "id_field",
+			ArgsFormat:      "json_string",
+			ResultRole:      "tool",
+			IDSource:        "id_field",
+			ParamsWireField: "parameters",
 		}
 	case Qwen:
 		return &ToolCallDef{
-			ArgsFormat: "json_string",
-			ResultRole: "tool",
-			IDSource:   "id_field",
+			ArgsFormat:      "json_string",
+			ResultRole:      "tool",
+			IDSource:        "id_field",
+			ParamsWireField: "parameters",
 		}
 	case Sambanova:
 		return &ToolCallDef{
-			ArgsFormat: "json_string",
-			ResultRole: "tool",
-			IDSource:   "id_field",
+			ArgsFormat:      "json_string",
+			ResultRole:      "tool",
+			IDSource:        "id_field",
+			ParamsWireField: "parameters",
 		}
 	case Together:
 		return &ToolCallDef{
-			ArgsFormat: "json_string",
-			ResultRole: "tool",
-			IDSource:   "id_field",
+			ArgsFormat:      "json_string",
+			ResultRole:      "tool",
+			IDSource:        "id_field",
+			ParamsWireField: "parameters",
 		}
 	case Vllm:
 		return &ToolCallDef{
-			ArgsFormat: "json_string",
-			ResultRole: "tool",
-			IDSource:   "id_field",
+			ArgsFormat:      "json_string",
+			ResultRole:      "tool",
+			IDSource:        "id_field",
+			ParamsWireField: "parameters",
 		}
 	case Zhipu:
 		return &ToolCallDef{
-			ArgsFormat: "json_string",
-			ResultRole: "tool",
-			IDSource:   "id_field",
+			ArgsFormat:      "json_string",
+			ResultRole:      "tool",
+			IDSource:        "id_field",
+			ParamsWireField: "parameters",
 		}
 	default:
 		return nil

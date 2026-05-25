@@ -34,7 +34,16 @@ func selectToolDefTransform(cfg providers.ProviderConfig) toolDefTransformFunc {
 		return transformBedrockToolDefs
 	}
 	if cfg.SystemPlacement == providers.PlacementSiblingObject {
-		return transformGoogleFunctionDeclarations
+		// Google carries tool params under a per-provider wire field
+		// (ADR-025): "parametersJsonSchema" to accept native JSON Schema
+		// verbatim, vs the OpenAPI-3.0-subset "parameters" default.
+		field := "parameters"
+		if tc := providers.ToolCallConfig(cfg.Name); tc != nil && tc.ParamsWireField != "" {
+			field = tc.ParamsWireField
+		}
+		return func(body map[string]any, tools []Tool) {
+			transformGoogleFunctionDeclarations(body, tools, field)
+		}
 	}
 	tc := providers.ToolCallConfig(cfg.Name)
 	if tc != nil && tc.ArgsFormat == "map" {
@@ -300,13 +309,13 @@ func transformAnthropicTools(body map[string]any, tools []Tool) {
 	body["tools"] = defs
 }
 
-func transformGoogleFunctionDeclarations(body map[string]any, tools []Tool) {
+func transformGoogleFunctionDeclarations(body map[string]any, tools []Tool, paramsWireField string) {
 	decls := []map[string]any{}
 	for _, t := range tools {
 		decls = append(decls, map[string]any{
-			"name":        t.Name,
-			"description": t.Description,
-			"parameters":  t.Schema,
+			"name":          t.Name,
+			"description":   t.Description,
+			paramsWireField: t.Schema,
 		})
 	}
 	body["tools"] = []map[string]any{{"functionDeclarations": decls}}
