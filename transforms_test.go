@@ -1,6 +1,7 @@
 package llmkit
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/aktagon/llmkit-go/providers"
@@ -21,7 +22,7 @@ func TestTransformGoogleParts(t *testing.T) {
 	req := Request{User: "Hello"}
 	cfg := googleConfig()
 
-	transformGoogleParts(body, req, cfg)
+	transformGoogleParts(body, nil, req, cfg)
 
 	contents, ok := body["contents"].([]map[string]any)
 	if !ok || len(contents) != 1 {
@@ -44,7 +45,11 @@ func TestTransformGooglePartsRoleMapping(t *testing.T) {
 	}}
 	cfg := googleConfig()
 
-	transformGoogleParts(body, req, cfg)
+	msgs, err := toInternal(req.Messages)
+	if err != nil {
+		t.Fatalf("toInternal: %v", err)
+	}
+	transformGoogleParts(body, msgs, req, cfg)
 
 	contents := body["contents"].([]map[string]any)
 	if len(contents) != 2 {
@@ -143,7 +148,7 @@ func TestTransformBedrockConverse(t *testing.T) {
 	req := Request{System: "Be helpful", User: "Hello"}
 	cfg := bedrockConfig()
 
-	transformBedrockConverse(body, req, cfg)
+	transformBedrockConverse(body, nil, req, cfg)
 
 	// System should be array of text blocks
 	system := body["system"].([]map[string]any)
@@ -185,7 +190,7 @@ func TestTransformBedrockToolDefs(t *testing.T) {
 }
 
 func TestTransformBedrockToolCallMsg(t *testing.T) {
-	calls := []toolCall{{id: "tc_1", name: "search", input: map[string]any{"q": "test"}}}
+	calls := []ToolCall{{ID: "tc_1", Name: "search", Input: json.RawMessage(`{"q":"test"}`)}}
 
 	msg := transformBedrockToolCallMsg(calls, map[string]string{})
 	content := msg["content"].([]map[string]any)
@@ -199,7 +204,7 @@ func TestTransformBedrockToolCallMsg(t *testing.T) {
 }
 
 func TestTransformBedrockToolResultMsg(t *testing.T) {
-	result := toolResult{toolUseID: "tc_1", content: "found it"}
+	result := ToolResult{ToolUseID: "tc_1", Content: "found it"}
 
 	msg := transformBedrockToolResultMsg(result, map[string]string{})
 	content := msg["content"].([]map[string]any)
@@ -264,7 +269,7 @@ func TestTransformAnthropicTools(t *testing.T) {
 }
 
 func TestTransformAnthropicToolCallMsg(t *testing.T) {
-	calls := []toolCall{{id: "tu_1", name: "get_weather", input: map[string]any{"city": "Paris"}}}
+	calls := []ToolCall{{ID: "tu_1", Name: "get_weather", Input: json.RawMessage(`{"city":"Paris"}`)}}
 
 	msg := transformAnthropicToolCallMsg(calls, map[string]string{})
 	content := msg["content"].([]map[string]any)
@@ -277,7 +282,7 @@ func TestTransformAnthropicToolCallMsg(t *testing.T) {
 }
 
 func TestTransformAnthropicToolResultMsg(t *testing.T) {
-	result := toolResult{toolUseID: "tu_1", content: "sunny"}
+	result := ToolResult{ToolUseID: "tu_1", Content: "sunny"}
 
 	msg := transformAnthropicToolResultMsg(result, map[string]string{})
 	if msg["role"] != "user" {
@@ -383,7 +388,7 @@ func TestSelectTransformsBedrock(t *testing.T) {
 	// Should pick Bedrock-specific transforms
 	msg := selectMessageTransform(cfg)
 	body := map[string]any{}
-	msg(body, Request{User: "test"}, cfg)
+	msg(body, nil, Request{User: "test"}, cfg)
 	if _, ok := body["messages"]; !ok {
 		t.Error("expected messages key from Bedrock transform")
 	}
@@ -404,7 +409,7 @@ func TestSelectTransformsGoogle(t *testing.T) {
 
 	msg := selectMessageTransform(cfg)
 	body := map[string]any{}
-	msg(body, Request{User: "test"}, cfg)
+	msg(body, nil, Request{User: "test"}, cfg)
 	if _, ok := body["contents"]; !ok {
 		t.Error("expected contents key from Google transform")
 	}
@@ -415,7 +420,7 @@ func TestSelectTransformsOpenAI(t *testing.T) {
 
 	msg := selectMessageTransform(cfg)
 	body := map[string]any{}
-	msg(body, Request{User: "test"}, cfg)
+	msg(body, nil, Request{User: "test"}, cfg)
 	if _, ok := body["messages"]; !ok {
 		t.Error("expected messages key from FlatContent transform")
 	}
