@@ -990,6 +990,51 @@ func TestStructuredOutputAnthropic(t *testing.T) {
 	}
 }
 
+func TestStructuredOutputGoogle(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var req map[string]any
+		json.Unmarshal(body, &req)
+
+		// Google nests structured output under generationConfig as two sibling
+		// fields: responseMimeType (a literal string) and responseSchema.
+		gc, ok := req["generationConfig"].(map[string]any)
+		if !ok {
+			t.Fatal("expected generationConfig in request")
+		}
+		if gc["responseMimeType"] != "application/json" {
+			t.Errorf(`expected responseMimeType "application/json", got %v`, gc["responseMimeType"])
+		}
+		schema, ok := gc["responseSchema"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected responseSchema object, got %T", gc["responseSchema"])
+		}
+		if schema["type"] != "object" {
+			t.Errorf("expected schema type object, got %v", schema["type"])
+		}
+		// Google requires additionalProperties stripped.
+		if _, present := schema["additionalProperties"]; present {
+			t.Error("expected additionalProperties removed for Google")
+		}
+
+		json.NewEncoder(w).Encode(map[string]any{
+			"candidates":    []map[string]any{{"content": map[string]any{"parts": []map[string]any{{"text": `{"color":"blue"}`}}}}},
+			"usageMetadata": map[string]any{"promptTokenCount": 5, "candidatesTokenCount": 3},
+		})
+	}))
+	defer server.Close()
+
+	c := New(providers.Google, "key")
+	c.provider.baseURL = server.URL
+	resp, err := c.Text.Schema(`{"type":"object","properties":{"color":{"type":"string"}},"additionalProperties":false}`).Prompt(context.Background(), "color of sky")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Text != `{"color":"blue"}` {
+		t.Errorf("expected JSON response, got %q", resp.Text)
+	}
+}
+
 func TestWithCachingAnthropic(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
