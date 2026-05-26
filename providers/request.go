@@ -25,6 +25,7 @@ type StructuredOutputDef struct {
 	BetaHeader            string
 	EnforceStrict         bool
 	RemoveAdditionalProps bool
+	SchemaPlacement       string // "WrappedInFormat" (default) or "SiblingOfFormat"
 }
 
 // StructuredOutput returns the structured output config for a provider.
@@ -38,6 +39,7 @@ func StructuredOutput(provider string) *StructuredOutputDef {
 			BetaHeader:            "structured-outputs-2025-11-13",
 			EnforceStrict:         true,
 			RemoveAdditionalProps: false,
+			SchemaPlacement:       "WrappedInFormat",
 		}
 	case Azure:
 		return &StructuredOutputDef{
@@ -47,6 +49,7 @@ func StructuredOutput(provider string) *StructuredOutputDef {
 			BetaHeader:            "",
 			EnforceStrict:         true,
 			RemoveAdditionalProps: false,
+			SchemaPlacement:       "WrappedInFormat",
 		}
 	case Google:
 		return &StructuredOutputDef{
@@ -56,6 +59,7 @@ func StructuredOutput(provider string) *StructuredOutputDef {
 			BetaHeader:            "",
 			EnforceStrict:         false,
 			RemoveAdditionalProps: true,
+			SchemaPlacement:       "SiblingOfFormat",
 		}
 	case Grok:
 		return &StructuredOutputDef{
@@ -65,6 +69,7 @@ func StructuredOutput(provider string) *StructuredOutputDef {
 			BetaHeader:            "",
 			EnforceStrict:         true,
 			RemoveAdditionalProps: false,
+			SchemaPlacement:       "WrappedInFormat",
 		}
 	case Mistral:
 		return &StructuredOutputDef{
@@ -74,6 +79,7 @@ func StructuredOutput(provider string) *StructuredOutputDef {
 			BetaHeader:            "",
 			EnforceStrict:         true,
 			RemoveAdditionalProps: false,
+			SchemaPlacement:       "WrappedInFormat",
 		}
 	case OpenAI:
 		return &StructuredOutputDef{
@@ -83,6 +89,7 @@ func StructuredOutput(provider string) *StructuredOutputDef {
 			BetaHeader:            "",
 			EnforceStrict:         true,
 			RemoveAdditionalProps: false,
+			SchemaPlacement:       "WrappedInFormat",
 		}
 	default:
 		return nil

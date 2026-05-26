@@ -653,6 +653,16 @@ func addStructuredOutput(body map[string]any, headers map[string]string, schema 
 		headers["anthropic-beta"] = soDef.BetaHeader
 	}
 
+	// SiblingOfFormat placement (Google): the format field carries the literal
+	// format type (responseMimeType: "application/json") and the schema is an
+	// independent sibling at SchemaPath (responseSchema), not nested inside a
+	// wrapper object.
+	if soDef.SchemaPlacement == "SiblingOfFormat" {
+		setNestedField(body, soDef.FormatField, soDef.FormatType)
+		setNestedField(body, soDef.SchemaPath, parsedSchema)
+		return
+	}
+
 	// Build the output format structure based on schema path
 	// Paths like "json_schema.schema" mean nested: {type: X, json_schema: {name: Y, schema: Z}}
 	// Paths like "schema" mean flat: {type: X, schema: Z}
