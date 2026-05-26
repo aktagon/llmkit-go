@@ -656,6 +656,16 @@ func addStructuredOutput(body map[string]any, headers map[string]string, schema 
 	//
 	//
 	//
+	//
+	if soDef.SchemaPlacement == "SiblingOfFormat" {
+		setNestedField(body, soDef.FormatField, soDef.FormatType)
+		setNestedField(body, soDef.SchemaPath, parsedSchema)
+		return
+	}
+
+	//
+	//
+	//
 	pathParts := strings.Split(soDef.SchemaPath, ".")
 
 	if len(pathParts) == 1 {
