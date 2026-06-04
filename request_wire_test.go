@@ -2,6 +2,7 @@ package llmkit
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -87,12 +88,19 @@ func captureBody(t *testing.T, provider string, call func(c *Client)) ([]byte, h
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		captured, _ = io.ReadAll(r.Body)
 		capturedHeaders = r.Header.Clone()
-		// A response shape that satisfies the text, agent, and batch-submit
-		// paths (id is the batch-create handle).
+		// A response shape that satisfies the text, agent, batch-submit, and
+		// image paths (id is the batch-create handle; the inlineData part and
+		// the data[] array are the image-shaped fields for the Google and
+		// OpenAI image-generation paths respectively — ADR-028 two-helper
+		// rule: extend the canned response, don't add capture helpers).
 		json.NewEncoder(w).Encode(map[string]any{
-			"id":            "msgbatch_test",
-			"candidates":    []map[string]any{{"content": map[string]any{"parts": []map[string]any{{"text": `{"color":"blue"}`}}}}},
+			"id": "msgbatch_test",
+			"candidates": []map[string]any{{"content": map[string]any{"parts": []map[string]any{
+				{"text": `{"color":"blue"}`},
+				{"inlineData": map[string]any{"mimeType": "image/png", "data": tinyPNGBase64}},
+			}}}},
 			"content":       []map[string]any{{"type": "text", "text": "done"}},
+			"data":          []map[string]any{{"b64_json": tinyPNGBase64}},
 			"usage":         map[string]any{"input_tokens": 2000, "output_tokens": 5},
 			"usageMetadata": map[string]any{"promptTokenCount": 5, "candidatesTokenCount": 3},
 		})
@@ -232,4 +240,233 @@ func TestRequestWire_CachingBatchAnthropic(t *testing.T) {
 		}
 	})
 	assertRequestWireGolden(t, "caching-batch-anthropic", body)
+}
+
+// === M2: options fixtures (ADR-028), one per model family ===
+//
+// Each canonical call sets every option the model family accepts live, so the
+// golden witnesses each application step (M1 dominance lesson: an option not
+// set is an option not witnessed). Families that reject an option on the wire
+// (gpt-5/o* reject `stop` and `temperature`; thinking-enabled Anthropic pins
+// temperature to 1) omit it — WIRE-005 anchoring requires live acceptance.
+
+// tinyPNGBase64 is a 69-byte 1x1 RGB PNG (single brick-red pixel), the FIXED
+// reference image for the image-edit fixture. The SAME base64 constant appears
+// in all four SDK drivers so the inline-image encoding is byte-identical.
+const tinyPNGBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGM4YWQEAALyAS2saifrAAAAAElFTkSuQmCC"
+
+// TestRequestWire_OptionsOpenAIGPT5 witnesses the gpt-5* glob of the ADR-024
+// per-model key override (max_tokens -> max_completion_tokens) plus the
+// reasoning_effort and seed application steps.
+//
+// WIRE-005 provenance: live-anchored 2026-06-04 — golden bytes POSTed to
+// /v1/chat/completions; HTTP 200 from gpt-5-2025-08-07, finish_reason "stop",
+// coherent two-sentence answer (max_completion_tokens + reasoning_effort low
+// + seed all accepted). Probe confirmed gpt-5 REJECTS `stop` and
+// `temperature` ("unsupported_parameter"), so those are deliberately unset.
+func TestRequestWire_OptionsOpenAIGPT5(t *testing.T) {
+	body, _ := captureBody(t, providers.OpenAI, func(c *Client) {
+		_, err := c.Text.Model("gpt-5").MaxTokens(1024).ReasoningEffort("low").Seed(42).
+			Prompt(context.Background(), "Summarize the plot of Hamlet in two sentences.")
+		if err != nil {
+			t.Fatalf("options gpt-5 call: %v", err)
+		}
+	})
+	assertRequestWireGolden(t, "options-openai-gpt5", body)
+}
+
+// TestRequestWire_OptionsOpenAIOSeries witnesses the o* glob of the ADR-024
+// per-model key override (max_tokens -> max_completion_tokens).
+//
+// WIRE-005 provenance: live-anchored 2026-06-04 — golden bytes POSTed to
+// /v1/chat/completions; HTTP 200 from o4-mini-2025-04-16, finish_reason
+// "stop", correct answer (Helsinki). Same reasoning-family restrictions as
+// gpt-5 (`stop`/`temperature` rejected), hence the lean option set.
+func TestRequestWire_OptionsOpenAIOSeries(t *testing.T) {
+	body, _ := captureBody(t, providers.OpenAI, func(c *Client) {
+		_, err := c.Text.Model("o4-mini").MaxTokens(1024).ReasoningEffort("medium").Seed(7).
+			Prompt(context.Background(), "What is the capital of Finland?")
+		if err != nil {
+			t.Fatalf("options o4-mini call: %v", err)
+		}
+	})
+	assertRequestWireGolden(t, "options-openai-o-series", body)
+}
+
+// TestRequestWire_OptionsOpenAIGPT4o is the unaffected-family baseline: gpt-4o
+// keeps the plain max_tokens key and accepts the full classic sampling set
+// (temperature, top_p, stop, seed, frequency/presence penalties).
+//
+// WIRE-005 provenance: live-anchored 2026-06-04 — golden bytes POSTed to
+// /v1/chat/completions; HTTP 200 from gpt-4o-2024-08-06, the stop sequence
+// honored (three colors listed, END_OF_LIST absent from content,
+// finish_reason "stop").
+func TestRequestWire_OptionsOpenAIGPT4o(t *testing.T) {
+	body, _ := captureBody(t, providers.OpenAI, func(c *Client) {
+		_, err := c.Text.Model("gpt-4o").MaxTokens(256).Temperature(0.7).TopP(0.9).
+			StopSequences("END_OF_LIST").Seed(42).FrequencyPenalty(0.25).PresencePenalty(0.15).
+			Prompt(context.Background(), "List three primary colors, then write END_OF_LIST.")
+		if err != nil {
+			t.Fatalf("options gpt-4o call: %v", err)
+		}
+	})
+	assertRequestWireGolden(t, "options-openai-gpt4o", body)
+}
+
+// TestRequestWire_OptionsAnthropic witnesses the thinking_budget dotted-path
+// nesting ({thinking:{budget_tokens,type:"enabled"}} via setNestedField +
+// mergeIntoParent) plus stop_sequences. Temperature is omitted: thinking pins
+// it to 1 (its default), and an integral float crosses the wire as 1 vs 1.0
+// depending on SDK — a formatting divergence outside the suite's value-equal
+// contract (serde_json distinguishes the two variants).
+//
+// WIRE-005 provenance: live-anchored 2026-06-04 — golden bytes POSTed to
+// /v1/messages; HTTP 200 from claude-sonnet-4-6 with a thinking block in
+// content (budget honored) and stop_reason "stop_sequence" naming
+// END_OF_ANSWER exactly. Live finding (WIRE-006 watch, same class as M1's
+// output_config.format): claude-opus-4-7 REJECTS thinking.type "enabled" —
+// "Use thinking.type.adaptive and output_config.effort" — so the newest
+// family has moved off the budget_tokens surface; fixture stays on
+// sonnet-4-6, the newest model accepting the SDK's thinking wire shape.
+func TestRequestWire_OptionsAnthropic(t *testing.T) {
+	body, _ := captureBody(t, providers.Anthropic, func(c *Client) {
+		_, err := c.Text.Model("claude-sonnet-4-6").MaxTokens(2048).
+			ThinkingBudget(1024).StopSequences("END_OF_ANSWER").
+			Prompt(context.Background(), "Explain in one sentence why the sky appears blue at noon, then write END_OF_ANSWER.")
+		if err != nil {
+			t.Fatalf("options anthropic call: %v", err)
+		}
+	})
+	assertRequestWireGolden(t, "options-anthropic", body)
+}
+
+// TestRequestWire_OptionsGoogle witnesses the generationConfig wrapping
+// (wrapsOptionsIn, including the max-tokens move into the wrapper) and the
+// top-level safetySettings wire path, with the full sampling set.
+//
+// WIRE-005 provenance: live-anchored 2026-06-04 — golden bytes POSTed to
+// /v1beta/models/gemini-3.5-flash:generateContent; HTTP 200, stop sequence
+// honored ("Ganymede and Callisto." with END_OF_ANSWER absent), snake_case
+// generationConfig keys accepted. Live finding: the A-Box's newest text
+// model gemini-3-pro-preview now 404s ("no longer available") — fixture
+// substituted the newest accessible family member per the M2 rule; the
+// A-Box catalogue staleness is recorded in ADR-028's change log.
+func TestRequestWire_OptionsGoogle(t *testing.T) {
+	body, _ := captureBody(t, providers.Google, func(c *Client) {
+		_, err := c.Text.Model("gemini-3.5-flash").MaxTokens(1024).Temperature(0.7).TopP(0.9).TopK(40).
+			StopSequences("END_OF_ANSWER").Seed(7).
+			SafetySettings([]SafetySetting{{Category: HarmCategoryDangerousContent, Threshold: HarmBlockThresholdHighOnly}}).
+			Prompt(context.Background(), "Name the two largest moons of Jupiter, then write END_OF_ANSWER.")
+		if err != nil {
+			t.Fatalf("options google call: %v", err)
+		}
+	})
+	assertRequestWireGolden(t, "options-google", body)
+}
+
+// TestRequestWire_OptionsGoogleGemini25 witnesses the one Google behavior
+// branch the gemini-3.5 fixture cannot: a dotted-path option
+// (thinkingConfig.thinkingBudget) nested INSIDE the generationConfig wrapper
+// (setNestedField composed with wrapsOptionsIn). gemini-3.5 rejects
+// thinkingBudget (thinking_level surface), so this rides gemini-2.5-flash.
+//
+// WIRE-005 provenance: live-anchored 2026-06-04 — golden bytes POSTed to
+// /v1beta/models/gemini-2.5-flash:generateContent; HTTP 200, thinking budget
+// honored (thoughtsTokenCount 217 <= 512), correct answer ("8").
+func TestRequestWire_OptionsGoogleGemini25(t *testing.T) {
+	body, _ := captureBody(t, providers.Google, func(c *Client) {
+		_, err := c.Text.Model("gemini-2.5-flash").MaxTokens(1024).Temperature(0.5).ThinkingBudget(512).
+			Prompt(context.Background(), "How many planets orbit the Sun? Answer with a number.")
+		if err != nil {
+			t.Fatalf("options gemini-2.5 call: %v", err)
+		}
+	})
+	assertRequestWireGolden(t, "options-google-gemini25", body)
+}
+
+// === M2: image-generation fixtures (M5 pull-forward, JSON bodies only) ===
+//
+// Multipart edit/upload paths (OpenAI /v1/images/edits) are a WIRE-008
+// documented exclusion this phase; Grok/Vertex are excluded for lack of live
+// keys (WIRE-005 blocks authoring).
+
+// TestRequestWire_ImageGenGoogleFlash witnesses the Google image-gen body:
+// generationConfig.responseModalities, imageConfig.{aspectRatio,imageSize}.
+//
+// WIRE-005 provenance: live-anchored 2026-06-04 — golden bytes POSTed to
+// /v1beta/models/gemini-3.1-flash-image-preview:generateContent; HTTP 200,
+// finishReason STOP, one inlineData image returned (image/jpeg, ~3.3 MB —
+// consistent with the requested 2K size).
+func TestRequestWire_ImageGenGoogleFlash(t *testing.T) {
+	body, _ := captureBody(t, providers.Google, func(c *Client) {
+		_, err := c.Image.Model("gemini-3.1-flash-image-preview").AspectRatio("16:9").ImageSize("2K").
+			Generate(context.Background(), "A lighthouse on a rocky coastline at dusk")
+		if err != nil {
+			t.Fatalf("image gen flash call: %v", err)
+		}
+	})
+	assertRequestWireGolden(t, "image-gen-google-flash", body)
+}
+
+// TestRequestWire_ImageGenGooglePro witnesses the Pro model whitelist entries
+// and the IncludeText branch (responseModalities ["TEXT","IMAGE"]).
+//
+// WIRE-005 provenance: live-anchored 2026-06-04 — golden bytes POSTed to
+// /v1beta/models/gemini-3-pro-image-preview:generateContent; HTTP 200,
+// finishReason STOP, one inlineData image returned (~1.1 MB at 1K); the
+// TEXT+IMAGE modality pair accepted (the model chose to emit no text part
+// for this prompt — acceptance, not emission, is what the body witnesses).
+func TestRequestWire_ImageGenGooglePro(t *testing.T) {
+	body, _ := captureBody(t, providers.Google, func(c *Client) {
+		_, err := c.Image.Model("gemini-3-pro-image-preview").AspectRatio("4:3").ImageSize("1K").IncludeText().
+			Generate(context.Background(), "A watercolor map of the Baltic Sea")
+		if err != nil {
+			t.Fatalf("image gen pro call: %v", err)
+		}
+	})
+	assertRequestWireGolden(t, "image-gen-google-pro", body)
+}
+
+// TestRequestWire_ImageGenOpenAI witnesses the OpenAI generations JSON body:
+// size/quality/output_format/background/n application AND the gpt-image-*
+// response_format omission (the golden carries no response_format key).
+//
+// WIRE-005 provenance: live-anchored 2026-06-04 — golden bytes POSTed to
+// /v1/images/generations; HTTP 200 from gpt-image-2 (newest catalog member,
+// no 404 fallback needed), one b64_json image (676 KB PNG), and the response
+// echoed every option back verbatim: size 1024x1024, quality low,
+// output_format png, background opaque.
+func TestRequestWire_ImageGenOpenAI(t *testing.T) {
+	body, _ := captureBody(t, providers.OpenAI, func(c *Client) {
+		_, err := c.Image.Model("gpt-image-2").ImageSize("1024x1024").Quality("low").
+			OutputFormat("png").Background("opaque").Count(1).
+			Generate(context.Background(), "A minimalist line drawing of a sailboat")
+		if err != nil {
+			t.Fatalf("image gen openai call: %v", err)
+		}
+	})
+	assertRequestWireGolden(t, "image-gen-openai", body)
+}
+
+// TestRequestWire_ImageEditGoogleFlash witnesses inline-image encoding on the
+// edit pass: the fixed tinyPNGBase64 reference image becomes an inlineData
+// part, ordered before the trailing text part (caller-order preservation).
+//
+// WIRE-005 provenance: live-anchored 2026-06-04 — golden bytes POSTed to
+// /v1beta/models/gemini-3.1-flash-image-preview:generateContent; HTTP 200,
+// finishReason STOP, one edited image returned (~423 KB) — the 1x1 PNG
+// reference was accepted as an inlineData edit source.
+func TestRequestWire_ImageEditGoogleFlash(t *testing.T) {
+	png, err := base64.StdEncoding.DecodeString(tinyPNGBase64)
+	if err != nil {
+		t.Fatalf("decode tiny PNG constant: %v", err)
+	}
+	body, _ := captureBody(t, providers.Google, func(c *Client) {
+		_, err := c.Image.Model("gemini-3.1-flash-image-preview").Image("image/png", png).
+			Generate(context.Background(), "Recolor the square to deep blue")
+		if err != nil {
+			t.Fatalf("image edit flash call: %v", err)
+		}
+	})
+	assertRequestWireGolden(t, "image-edit-google-flash", body)
 }
