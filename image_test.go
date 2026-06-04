@@ -37,24 +37,9 @@ func TestGenerateImageGoogleFlash(t *testing.T) {
 			t.Errorf("expected query-param auth, got %q", r.URL.Query().Get("key"))
 		}
 
-		body, _ := io.ReadAll(r.Body)
-		var req map[string]any
-		if err := json.Unmarshal(body, &req); err != nil {
-			t.Fatalf("unmarshal: %v", err)
-		}
-		gen := req["generationConfig"].(map[string]any)
-		mods := gen["responseModalities"].([]any)
-		if len(mods) != 1 || mods[0] != "IMAGE" {
-			t.Errorf("expected responseModalities=[IMAGE], got %v", mods)
-		}
-		imgCfg := gen["imageConfig"].(map[string]any)
-		if imgCfg["aspectRatio"] != "16:9" {
-			t.Errorf("expected aspectRatio=16:9, got %v", imgCfg["aspectRatio"])
-		}
-		if imgCfg["imageSize"] != "2K" {
-			t.Errorf("expected imageSize=2K, got %v", imgCfg["imageSize"])
-		}
-
+		// Body-shape asserts (generationConfig/imageConfig) migrated to the
+		// image-gen-google-flash wire fixture (ADR-028 M2); this test's
+		// remaining subjects are URL/auth shape and response parsing.
 		json.NewEncoder(w).Encode(map[string]any{
 			"candidates": []map[string]any{{
 				"content": map[string]any{
@@ -98,14 +83,9 @@ func TestGenerateImageWithIncludeText(t *testing.T) {
 	encoded := base64.StdEncoding.EncodeToString(fakePNG)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
-		var req map[string]any
-		json.Unmarshal(body, &req)
-		gen := req["generationConfig"].(map[string]any)
-		mods := gen["responseModalities"].([]any)
-		if len(mods) != 2 || mods[0] != "TEXT" || mods[1] != "IMAGE" {
-			t.Errorf("expected [TEXT, IMAGE], got %v", mods)
-		}
+		// The [TEXT, IMAGE] modality body assert migrated to the
+		// image-gen-google-pro wire fixture (ADR-028 M2); this test's
+		// remaining subject is text-part capture in the response.
 		json.NewEncoder(w).Encode(map[string]any{
 			"candidates": []map[string]any{{
 				"content": map[string]any{
@@ -131,68 +111,10 @@ func TestGenerateImageWithIncludeText(t *testing.T) {
 	}
 }
 
-func TestGenerateImagePartsInterleavedCompositional(t *testing.T) {
-	// ADR-008's motivating scenario: caller-controlled positional pairing
-	// of text descriptions and reference images. The wire shape must
-	// preserve the exact ordering supplied in req.Parts so the model
-	// attends to the descriptions and references in the intended pairing.
-	refA := []byte{0x89, 'P', 'N', 'G', 'A'}
-	refB := []byte{0x89, 'P', 'N', 'G', 'B'}
-	encoded := base64.StdEncoding.EncodeToString(fakePNG)
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
-		var req map[string]any
-		json.Unmarshal(body, &req)
-		contents := req["contents"].([]any)
-		first := contents[0].(map[string]any)
-		parts := first["parts"].([]any)
-		if len(parts) != 5 {
-			t.Fatalf("expected 5 parts (text, image, text, image, text), got %d", len(parts))
-		}
-		// Verify the on-wire order matches the input order.
-		if text, ok := parts[0].(map[string]any)["text"].(string); !ok || text != "Person:" {
-			t.Errorf("parts[0]: expected text 'Person:', got %v", parts[0])
-		}
-		inlineA := parts[1].(map[string]any)["inlineData"].(map[string]any)
-		decodedA, _ := base64.StdEncoding.DecodeString(inlineA["data"].(string))
-		if !bytes.Equal(decodedA, refA) {
-			t.Errorf("parts[1]: refA bytes did not round-trip")
-		}
-		if text, ok := parts[2].(map[string]any)["text"].(string); !ok || text != "Outfit:" {
-			t.Errorf("parts[2]: expected text 'Outfit:', got %v", parts[2])
-		}
-		inlineB := parts[3].(map[string]any)["inlineData"].(map[string]any)
-		decodedB, _ := base64.StdEncoding.DecodeString(inlineB["data"].(string))
-		if !bytes.Equal(decodedB, refB) {
-			t.Errorf("parts[3]: refB bytes did not round-trip")
-		}
-		if text, ok := parts[4].(map[string]any)["text"].(string); !ok || text != "Generate the person wearing the outfit." {
-			t.Errorf("parts[4]: expected closing instruction text, got %v", parts[4])
-		}
-
-		json.NewEncoder(w).Encode(map[string]any{
-			"candidates": []map[string]any{{
-				"content": map[string]any{"parts": []map[string]any{
-					{"inlineData": map[string]any{"mimeType": "image/png", "data": encoded}},
-				}},
-			}},
-		})
-	}))
-	defer server.Close()
-
-	c := New(providers.Google, "k")
-	c.provider.baseURL = server.URL
-	_, err := c.Image.Model(flashModel).
-		Text("Person:").
-		Image("image/png", refA).
-		Text("Outfit:").
-		Image("image/png", refB).
-		Generate(context.Background(), "Generate the person wearing the outfit.")
-	if err != nil {
-		t.Fatal(err)
-	}
-}
+// TestGenerateImagePartsInterleavedCompositional (ADR-008 wire-order assert)
+// migrated to the wire-conformance suite: the image-edit-google-flash fixture
+// witnesses inlineData encoding and caller-order preservation byte-for-byte
+// (ADR-028 M2, falsification class d2).
 
 func TestGenerateImageRejectsUnsupportedAspectOnPro(t *testing.T) {
 	// 8:1 is Flash-only; Pro must reject pre-flight.
@@ -989,75 +911,16 @@ func TestGenerateImageGrokMiddlewareFiresBothBranches(t *testing.T) {
 // Plan 020 phase 2 — typed image-gen knob tests
 // =============================================================================
 
-func TestGenerateImageOpenAITypedQuality(t *testing.T) {
-	encoded := base64.StdEncoding.EncodeToString(fakePNG)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
-		var req map[string]any
-		json.Unmarshal(body, &req)
-		if req["quality"] != "high" {
-			t.Errorf("expected quality=high in JSON body, got %v", req["quality"])
-		}
-		json.NewEncoder(w).Encode(openaiImageResponse(encoded, 1))
-	}))
-	defer server.Close()
-
-	c := New(providers.OpenAI, "test-key")
-	c.provider.baseURL = server.URL
-	if _, err := c.Image.Model(openaiImage2).Quality("high").Generate(context.Background(), "x"); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestGenerateImageOpenAITypedOutputFormat(t *testing.T) {
-	encoded := base64.StdEncoding.EncodeToString(fakePNG)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
-		var req map[string]any
-		json.Unmarshal(body, &req)
-		if req["output_format"] != "webp" {
-			t.Errorf("expected output_format=webp in JSON body, got %v", req["output_format"])
-		}
-		json.NewEncoder(w).Encode(openaiImageResponse(encoded, 1))
-	}))
-	defer server.Close()
-
-	c := New(providers.OpenAI, "test-key")
-	c.provider.baseURL = server.URL
-	if _, err := c.Image.Model(openaiImage2).OutputFormat("webp").Generate(context.Background(), "x"); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestGenerateImageOpenAITypedBackground(t *testing.T) {
-	encoded := base64.StdEncoding.EncodeToString(fakePNG)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
-		var req map[string]any
-		json.Unmarshal(body, &req)
-		if req["background"] != "transparent" {
-			t.Errorf("expected background=transparent in JSON body, got %v", req["background"])
-		}
-		json.NewEncoder(w).Encode(openaiImageResponse(encoded, 1))
-	}))
-	defer server.Close()
-
-	c := New(providers.OpenAI, "test-key")
-	c.provider.baseURL = server.URL
-	if _, err := c.Image.Model(openaiImage2).Background("transparent").Generate(context.Background(), "x"); err != nil {
-		t.Fatal(err)
-	}
-}
+// The typed-knob JSON-body asserts (TypedQuality, TypedOutputFormat,
+// TypedBackground, and TypedCount's `n` assert) migrated to the
+// image-gen-openai wire fixture (ADR-028 M2, falsification class d3),
+// which sets all five generations-branch knobs on one canonical call.
+// TypedCount survives trimmed: multi-image response parsing (n=3 ->
+// three decoded images) is a response-side subject no fixture covers.
 
 func TestGenerateImageOpenAITypedCount(t *testing.T) {
 	encoded := base64.StdEncoding.EncodeToString(fakePNG)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
-		var req map[string]any
-		json.Unmarshal(body, &req)
-		if n, ok := req["n"].(float64); !ok || int(n) != 3 {
-			t.Errorf("expected n=3 in JSON body, got %v", req["n"])
-		}
 		json.NewEncoder(w).Encode(openaiImageResponse(encoded, 3))
 	}))
 	defer server.Close()
