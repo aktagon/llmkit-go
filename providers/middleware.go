@@ -12,12 +12,13 @@ import (
 //
 //
 type Usage struct {
-	Input      int     // universal
-	Output     int     // universal
-	CacheWrite int     // scoped to Caching
-	CacheRead  int     // scoped to Caching
-	Reasoning  int     // scoped to Reasoning
-	Cost       float64 // provider-reported USD cost; 0 when unreported
+	Input      int // universal
+	Output     int // universal
+	CacheWrite int // scoped to Caching
+	CacheRead  int // scoped to Caching
+	Reasoning  int // scoped to Reasoning
+	//
+	Cost float64
 }
 
 //
