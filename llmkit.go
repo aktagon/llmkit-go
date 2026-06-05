@@ -497,7 +497,7 @@ func buildRequest(p Provider, req Request, msgs []msg, o *options, cfg providers
 	// Generation options — may be nested under a wrapper key (e.g., generationConfig for Google)
 	if cfg.WrapsOptionsIn != "" {
 		optBody := map[string]any{}
-		addOptions(optBody, o, p.Name, model)
+		addOptions(body, optBody, o, p.Name, model)
 		// Also move max tokens into the wrapper
 		if key, ok := resolveOptionKey(p.Name, model, providers.OptionMaxTokens, supported); ok {
 			setNestedField(optBody, key, maxTokens)
@@ -507,7 +507,7 @@ func buildRequest(p Provider, req Request, msgs []msg, o *options, cfg providers
 			body[cfg.WrapsOptionsIn] = optBody
 		}
 	} else {
-		addOptions(body, o, p.Name, model)
+		addOptions(body, body, o, p.Name, model)
 	}
 
 	// Safety settings — top-level field for Gemini (safetySettings array).
@@ -554,8 +554,13 @@ func mapRole(role string, mappings map[string]string) string {
 // JSON keys may be dotted (e.g. "thinking.budget_tokens") for providers that
 // require nested objects. Each option's per-provider OptionOverrideDef may
 // also carry ExtraFields — sibling JSON to merge into the same parent path
-// (e.g. {"type":"enabled"} alongside Anthropic's thinking.budget_tokens).
-func addOptions(body map[string]any, o *options, provider, model string) {
+// (e.g. {"type":"enabled"} alongside Anthropic's thinking.budget_tokens) —
+// and RootExtraFields (ADR-029 THK-003) — JSON deep-merged at the request
+// body ROOT, for options that imply a sibling object elsewhere in the body
+// (e.g. {"thinking":{"type":"adaptive"}} alongside Anthropic's
+// output_config.effort). root is the true body root; for providers that wrap
+// options (WrapsOptionsIn), target is the wrapper object and root differs.
+func addOptions(root, target map[string]any, o *options, provider, model string) {
 	supported := providers.SupportedOptions(provider)
 	overrides := providers.OptionOverrides(provider)
 
@@ -564,11 +569,19 @@ func addOptions(body map[string]any, o *options, provider, model string) {
 		if !ok {
 			return
 		}
-		setNestedField(body, jsonKey, value)
-		if ov, ok := overrides[key]; ok && ov.ExtraFields != "" {
-			var extras map[string]any
-			if json.Unmarshal([]byte(ov.ExtraFields), &extras) == nil {
-				mergeIntoParent(body, jsonKey, extras)
+		setNestedField(target, jsonKey, value)
+		if ov, ok := overrides[key]; ok {
+			if ov.ExtraFields != "" {
+				var extras map[string]any
+				if json.Unmarshal([]byte(ov.ExtraFields), &extras) == nil {
+					mergeIntoParent(target, jsonKey, extras)
+				}
+			}
+			if ov.RootExtraFields != "" {
+				var extras map[string]any
+				if json.Unmarshal([]byte(ov.RootExtraFields), &extras) == nil {
+					deepMerge(root, extras)
+				}
 			}
 		}
 	}
@@ -599,6 +612,22 @@ func addOptions(body map[string]any, o *options, provider, model string) {
 	}
 	if o.reasoningEffort != "" {
 		apply(providers.OptionReasoningEffort, o.reasoningEffort)
+	}
+}
+
+// deepMerge merges src into dst recursively: when both sides hold an object
+// at the same key the objects merge, otherwise src overwrites. Used for
+// RootExtraFields (ADR-029) so e.g. {"thinking":{"type":"adaptive"}} composes
+// with an existing thinking object rather than replacing it.
+func deepMerge(dst, src map[string]any) {
+	for k, v := range src {
+		if sv, ok := v.(map[string]any); ok {
+			if dv, ok := dst[k].(map[string]any); ok {
+				deepMerge(dv, sv)
+				continue
+			}
+		}
+		dst[k] = v
 	}
 }
 
