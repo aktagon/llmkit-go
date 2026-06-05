@@ -144,7 +144,7 @@ func SupportedOptions(provider string) map[OptionKey]string {
 	case Google:
 		return map[OptionKey]string{
 			OptionMaxTokens:       "max_output_tokens",
-			OptionReasoningEffort: "reasoning_effort",
+			OptionReasoningEffort: "thinkingConfig.thinkingLevel",
 			OptionSeed:            "seed",
 			OptionStopSequences:   "stop_sequences",
 			OptionTemperature:     "temperature",
@@ -331,6 +331,14 @@ func OptionOverrides(provider string) map[OptionKey]OptionOverrideDef {
 				JSONKey:       "thinking.budget_tokens",
 				AllowedValues: "",
 				ExtraFields:   `{"type":"enabled"}`,
+			},
+		}
+	case Google:
+		return map[OptionKey]OptionOverrideDef{
+			OptionReasoningEffort: {
+				JSONKey:       "thinkingConfig.thinkingLevel",
+				AllowedValues: "low,high",
+				ExtraFields:   ``,
 			},
 		}
 	case OpenAI:
