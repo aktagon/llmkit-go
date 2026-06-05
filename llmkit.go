@@ -25,6 +25,30 @@ func (c *Client) WithBaseURL(url string) *Client {
 	return c
 }
 
+// Supports reports whether an explicit request for cap will not
+// hard-fail pre-flight on this client's provider (ADR-030). Gated
+// capabilities (caching, batching, file upload, image generation)
+// dispatch the same generated lookups their strict validation paths
+// use — never a parallel table — so the query and the error cannot
+// drift. Capabilities with no provider-level pre-flight gate return
+// true. Says nothing about per-model or per-option rejections — use
+// the catalogue's ModelInfo.Capabilities for model-level facts. Sync,
+// no IO, infallible.
+func (c *Client) Supports(cap Capability) bool {
+	switch cap {
+	case CapCaching:
+		return providers.CachingConfig(c.provider.name) != nil
+	case CapBatching:
+		return providers.BatchConfig(c.provider.name) != nil
+	case CapFileUpload:
+		return providers.FileUploadConfig(c.provider.name) != nil
+	case CapImageGeneration:
+		return providers.ImageGenConfig(c.provider.name) != nil
+	default:
+		return true
+	}
+}
+
 // promptStream is the internal streaming implementation. The
 // public surface is (*Text).Stream in stream.go (plan-018 D1.3b).
 func promptStream(ctx context.Context, p Provider, req Request, callback StreamCallback, opts ...Option) (Response, error) {
