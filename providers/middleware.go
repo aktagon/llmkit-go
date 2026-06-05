@@ -12,12 +12,13 @@ import (
 // Capability-scoped dimensions (e.g., CacheWrite, Reasoning) are zero
 // when the corresponding capability is inactive or unreported.
 type Usage struct {
-	Input      int     // universal
-	Output     int     // universal
-	CacheWrite int     // scoped to Caching
-	CacheRead  int     // scoped to Caching
-	Reasoning  int     // scoped to Reasoning
-	Cost       float64 // provider-reported USD cost; 0 when unreported
+	Input      int // universal
+	Output     int // universal
+	CacheWrite int // scoped to Caching
+	CacheRead  int // scoped to Caching
+	Reasoning  int // scoped to Reasoning
+	// Cost is the provider-reported request cost in USD (ADR-027). Not a TokenDimension — a distinct monetary field. Only OpenRouter (the request must opt in with usage: {include: true}) and xAI report it. 0 is ambiguous: unreported or genuinely free — providers whose usageCostPath is empty never report cost.
+	Cost float64
 }
 
 // MiddlewarePhase indicates when a middleware fires relative to the operation.
