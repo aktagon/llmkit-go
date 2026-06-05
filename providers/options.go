@@ -27,9 +27,10 @@ type OptionDef struct {
 
 // OptionOverrideDef holds extended override details for a provider option.
 type OptionOverrideDef struct {
-	JSONKey       string // provider-specific JSON key (may be dotted for nesting)
-	AllowedValues string // CSV of valid values (empty = no constraint)
-	ExtraFields   string // JSON of static sibling fields (empty = none)
+	JSONKey         string // provider-specific JSON key (may be dotted for nesting)
+	AllowedValues   string // CSV of valid values (empty = no constraint)
+	ExtraFields     string // JSON of static sibling fields (empty = none)
+	RootExtraFields string // JSON deep-merged at the body root when set (ADR-029; empty = none)
 }
 
 // AllOptions returns definitions for all known generation parameters.
@@ -61,12 +62,13 @@ func SupportedOptions(provider string) map[OptionKey]string {
 		}
 	case Anthropic:
 		return map[OptionKey]string{
-			OptionMaxTokens:      "max_tokens",
-			OptionStopSequences:  "stop_sequences",
-			OptionTemperature:    "temperature",
-			OptionThinkingBudget: "thinking.budget_tokens",
-			OptionTopK:           "top_k",
-			OptionTopP:           "top_p",
+			OptionMaxTokens:       "max_tokens",
+			OptionReasoningEffort: "output_config.effort",
+			OptionStopSequences:   "stop_sequences",
+			OptionTemperature:     "temperature",
+			OptionThinkingBudget:  "thinking.budget_tokens",
+			OptionTopK:            "top_k",
+			OptionTopP:            "top_p",
 		}
 	case Azure:
 		return map[OptionKey]string{
@@ -327,26 +329,35 @@ func OptionOverrides(provider string) map[OptionKey]OptionOverrideDef {
 	switch provider {
 	case Anthropic:
 		return map[OptionKey]OptionOverrideDef{
+			OptionReasoningEffort: {
+				JSONKey:         "output_config.effort",
+				AllowedValues:   "low,medium,high,xhigh,max",
+				ExtraFields:     ``,
+				RootExtraFields: `{"thinking":{"type":"adaptive"}}`,
+			},
 			OptionThinkingBudget: {
-				JSONKey:       "thinking.budget_tokens",
-				AllowedValues: "",
-				ExtraFields:   `{"type":"enabled"}`,
+				JSONKey:         "thinking.budget_tokens",
+				AllowedValues:   "",
+				ExtraFields:     `{"type":"enabled"}`,
+				RootExtraFields: ``,
 			},
 		}
 	case Google:
 		return map[OptionKey]OptionOverrideDef{
 			OptionReasoningEffort: {
-				JSONKey:       "thinkingConfig.thinkingLevel",
-				AllowedValues: "low,high",
-				ExtraFields:   ``,
+				JSONKey:         "thinkingConfig.thinkingLevel",
+				AllowedValues:   "low,high",
+				ExtraFields:     ``,
+				RootExtraFields: ``,
 			},
 		}
 	case OpenAI:
 		return map[OptionKey]OptionOverrideDef{
 			OptionReasoningEffort: {
-				JSONKey:       "reasoning_effort",
-				AllowedValues: "low,medium,high",
-				ExtraFields:   ``,
+				JSONKey:         "reasoning_effort",
+				AllowedValues:   "low,medium,high",
+				ExtraFields:     ``,
+				RootExtraFields: ``,
 			},
 		}
 	default:
