@@ -431,6 +431,35 @@ func TestRequestWire_OptionsAnthropicPlain(t *testing.T) {
 	assertRequestWireGolden(t, "options-anthropic-plain", body)
 }
 
+// TestRequestWire_OptionsAnthropicAdaptive witnesses the adaptive thinking
+// surface (ADR-029): ReasoningEffort resolves to the output_config.effort
+// dotted path AND root-merges {"thinking":{"type":"adaptive"}} via
+// RootExtraFields + deepMerge (THK-003) — the sibling object parent-merge
+// cannot reach. Coexists with options-anthropic (sonnet-4-6, enabled
+// surface): opus-4-7 rejects thinking.type "enabled" outright, so the two
+// surfaces are additive fixtures, not a golden bump. Temperature is omitted
+// for the same thinking-pins-temperature reason as options-anthropic.
+//
+// WIRE-005 provenance: live-anchored 2026-06-05 — golden bytes POSTed to
+// /v1/messages; HTTP 200 from claude-opus-4-7, stop_reason "stop_sequence"
+// naming END_OF_ANSWER exactly, correct answer (100°C). No thinking block in
+// content: opus-4-7 omits thinking display by default (thinking.display
+// "omitted"), so acceptance of the adaptive shape is the witness, not block
+// presence. THK-001 probe matrix (ADR-029 change log): the same body shape is
+// also accepted by sonnet-4-6/opus-4-6; haiku-4-5 rejects effort entirely
+// (THK-004 pass-through, no client matrix).
+func TestRequestWire_OptionsAnthropicAdaptive(t *testing.T) {
+	body, _ := captureBody(t, providers.Anthropic, func(c *Client) {
+		_, err := c.Text.Model(wireOptionsAnthropicAdaptiveModel).MaxTokens(wireOptionsAnthropicAdaptiveMaxTokens).
+			ReasoningEffort(wireOptionsAnthropicAdaptiveReasoningEffort).StopSequences(wireOptionsAnthropicAdaptiveStopSequences).
+			Prompt(context.Background(), wireOptionsAnthropicAdaptivePrompt)
+		if err != nil {
+			t.Fatalf("options anthropic adaptive call: %v", err)
+		}
+	})
+	assertRequestWireGolden(t, "options-anthropic-adaptive", body)
+}
+
 // TestRequestWire_OptionsGoogle witnesses the generationConfig wrapping
 // (wrapsOptionsIn, including the max-tokens move into the wrapper) and the
 // top-level safetySettings wire path, with the full sampling set.
