@@ -497,7 +497,7 @@ func buildRequest(p Provider, req Request, msgs []msg, o *options, cfg providers
 	//
 	if cfg.WrapsOptionsIn != "" {
 		optBody := map[string]any{}
-		addOptions(optBody, o, p.Name, model)
+		addOptions(body, optBody, o, p.Name, model)
 		//
 		if key, ok := resolveOptionKey(p.Name, model, providers.OptionMaxTokens, supported); ok {
 			setNestedField(optBody, key, maxTokens)
@@ -507,7 +507,7 @@ func buildRequest(p Provider, req Request, msgs []msg, o *options, cfg providers
 			body[cfg.WrapsOptionsIn] = optBody
 		}
 	} else {
-		addOptions(body, o, p.Name, model)
+		addOptions(body, body, o, p.Name, model)
 	}
 
 	//
@@ -555,7 +555,12 @@ func mapRole(role string, mappings map[string]string) string {
 //
 //
 //
-func addOptions(body map[string]any, o *options, provider, model string) {
+//
+//
+//
+//
+//
+func addOptions(root, target map[string]any, o *options, provider, model string) {
 	supported := providers.SupportedOptions(provider)
 	overrides := providers.OptionOverrides(provider)
 
@@ -564,11 +569,19 @@ func addOptions(body map[string]any, o *options, provider, model string) {
 		if !ok {
 			return
 		}
-		setNestedField(body, jsonKey, value)
-		if ov, ok := overrides[key]; ok && ov.ExtraFields != "" {
-			var extras map[string]any
-			if json.Unmarshal([]byte(ov.ExtraFields), &extras) == nil {
-				mergeIntoParent(body, jsonKey, extras)
+		setNestedField(target, jsonKey, value)
+		if ov, ok := overrides[key]; ok {
+			if ov.ExtraFields != "" {
+				var extras map[string]any
+				if json.Unmarshal([]byte(ov.ExtraFields), &extras) == nil {
+					mergeIntoParent(target, jsonKey, extras)
+				}
+			}
+			if ov.RootExtraFields != "" {
+				var extras map[string]any
+				if json.Unmarshal([]byte(ov.RootExtraFields), &extras) == nil {
+					deepMerge(root, extras)
+				}
 			}
 		}
 	}
@@ -599,6 +612,22 @@ func addOptions(body map[string]any, o *options, provider, model string) {
 	}
 	if o.reasoningEffort != "" {
 		apply(providers.OptionReasoningEffort, o.reasoningEffort)
+	}
+}
+
+//
+//
+//
+//
+func deepMerge(dst, src map[string]any) {
+	for k, v := range src {
+		if sv, ok := v.(map[string]any); ok {
+			if dv, ok := dst[k].(map[string]any); ok {
+				deepMerge(dv, sv)
+				continue
+			}
+		}
+		dst[k] = v
 	}
 }
 
