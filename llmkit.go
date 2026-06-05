@@ -27,6 +27,30 @@ func (c *Client) WithBaseURL(url string) *Client {
 
 //
 //
+//
+//
+//
+//
+//
+//
+//
+func (c *Client) Supports(cap Capability) bool {
+	switch cap {
+	case CapCaching:
+		return providers.CachingConfig(c.provider.name) != nil
+	case CapBatching:
+		return providers.BatchConfig(c.provider.name) != nil
+	case CapFileUpload:
+		return providers.FileUploadConfig(c.provider.name) != nil
+	case CapImageGeneration:
+		return providers.ImageGenConfig(c.provider.name) != nil
+	default:
+		return true
+	}
+}
+
+//
+//
 func promptStream(ctx context.Context, p Provider, req Request, callback StreamCallback, opts ...Option) (Response, error) {
 	o := resolveOptions(opts)
 
