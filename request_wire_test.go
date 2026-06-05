@@ -97,10 +97,10 @@ func captureBody(t *testing.T, provider string, call func(c *Client)) ([]byte, h
 			"id": "msgbatch_test",
 			"candidates": []map[string]any{{"content": map[string]any{"parts": []map[string]any{
 				{"text": `{"color":"blue"}`},
-				{"inlineData": map[string]any{"mimeType": "image/png", "data": tinyPNGBase64}},
+				{"inlineData": map[string]any{"mimeType": "image/png", "data": wireImageEditGoogleFlashImageBase64}},
 			}}}},
 			"content":       []map[string]any{{"type": "text", "text": "done"}},
-			"data":          []map[string]any{{"b64_json": tinyPNGBase64}},
+			"data":          []map[string]any{{"b64_json": wireImageEditGoogleFlashImageBase64}},
 			"usage":         map[string]any{"input_tokens": 2000, "output_tokens": 5},
 			"usageMetadata": map[string]any{"promptTokenCount": 5, "candidatesTokenCount": 3},
 		})
@@ -116,15 +116,14 @@ func captureBody(t *testing.T, provider string, call func(c *Client)) ([]byte, h
 	return captured, capturedHeaders
 }
 
-// The canonical schema deliberately omits "required" and carries
+// Canonical inputs are single-sourced from ontology/wire-fixtures.ttl
+// (plan 039) and consumed via the generated wire_inputs_test.go consts.
+// The schema deliberately omits "required" and carries
 // "additionalProperties": false, so the goldens witness BOTH normalization
 // behaviors: EnforceStrict (OpenAI/Anthropic auto-populate required + keep
 // additionalProperties false) and RemoveAdditionalProps (Google strips it).
 // A schema that already carries required would make EnforceStrict a no-op
 // and the fixtures could not falsify normalization drift.
-const canonicalStructuredOutputSchema = `{"type":"object","properties":{"color":{"type":"string"}},"additionalProperties":false}`
-
-const canonicalStructuredOutputPrompt = "What color is a clear daytime sky?"
 
 // TestRequestWire_StructuredOutputGoogle asserts the Go SDK's outbound Google
 // structured-output body matches the shared golden (BUG-007).
@@ -135,7 +134,7 @@ const canonicalStructuredOutputPrompt = "What color is a clear daytime sky?"
 // additionalProperties was accepted).
 func TestRequestWire_StructuredOutputGoogle(t *testing.T) {
 	body, _ := captureBody(t, providers.Google, func(c *Client) {
-		_, err := c.Text.Schema(canonicalStructuredOutputSchema).Prompt(context.Background(), canonicalStructuredOutputPrompt)
+		_, err := c.Text.Schema(wireStructuredOutputSchema).Prompt(context.Background(), wireStructuredOutputPrompt)
 		if err != nil {
 			t.Fatalf("structured-output call: %v", err)
 		}
@@ -154,7 +153,7 @@ func TestRequestWire_StructuredOutputGoogle(t *testing.T) {
 // the auto-populated required array).
 func TestRequestWire_StructuredOutputOpenAI(t *testing.T) {
 	body, _ := captureBody(t, providers.OpenAI, func(c *Client) {
-		_, err := c.Text.Schema(canonicalStructuredOutputSchema).Prompt(context.Background(), canonicalStructuredOutputPrompt)
+		_, err := c.Text.Schema(wireStructuredOutputSchema).Prompt(context.Background(), wireStructuredOutputPrompt)
 		if err != nil {
 			t.Fatalf("structured-output call: %v", err)
 		}
@@ -176,7 +175,7 @@ func TestRequestWire_StructuredOutputOpenAI(t *testing.T) {
 // moved to output_config.format (future wire migration; WIRE-006 watch).
 func TestRequestWire_StructuredOutputAnthropic(t *testing.T) {
 	body, headers := captureBody(t, providers.Anthropic, func(c *Client) {
-		_, err := c.Text.Schema(canonicalStructuredOutputSchema).Prompt(context.Background(), canonicalStructuredOutputPrompt)
+		_, err := c.Text.Schema(wireStructuredOutputSchema).Prompt(context.Background(), wireStructuredOutputPrompt)
 		if err != nil {
 			t.Fatalf("structured-output call: %v", err)
 		}
@@ -185,6 +184,75 @@ func TestRequestWire_StructuredOutputAnthropic(t *testing.T) {
 		t.Errorf("anthropic-beta header: got %q, want %q", got, want)
 	}
 	assertRequestWireGolden(t, "structured-output-anthropic", body)
+}
+
+// === Plan 039: nested-schema fixtures (the witness lint's first catch) ===
+//
+// setAdditionalPropertiesFalse and removeAdditionalProperties recurse through
+// `properties` and `items`, but every prior schema fixture was depth 1 — the
+// recursive walk was unwitnessed (the gap class ADR-028 names as
+// input-triggered blindness). The shared nested input (object -> object ->
+// array of objects, depth 3, no `required` anywhere, additionalProperties at
+// every level) makes the recursion observable in the goldens.
+
+// TestRequestWire_StructuredOutputNestedGoogle witnesses the RECURSIVE
+// RemoveAdditionalProps strip: additionalProperties must vanish at depth 2
+// and inside the array-items object at depth 3, not only at the root.
+//
+// WIRE-005 provenance: live-anchored 2026-06-05 — golden bytes POSTed to
+// /v1beta/models/gemini-2.5-flash:generateContent; HTTP 200 and the response
+// honored the nested schema exactly:
+// {"residence":{"addresses":[{"city":"Helsinki"}]}} (the recursively
+// stripped additionalProperties was accepted at every level).
+func TestRequestWire_StructuredOutputNestedGoogle(t *testing.T) {
+	body, _ := captureBody(t, providers.Google, func(c *Client) {
+		_, err := c.Text.Schema(wireStructuredOutputNestedSchema).Prompt(context.Background(), wireStructuredOutputNestedPrompt)
+		if err != nil {
+			t.Fatalf("nested structured-output call: %v", err)
+		}
+	})
+	assertRequestWireGolden(t, "structured-output-nested-google", body)
+}
+
+// TestRequestWire_StructuredOutputNestedOpenAI witnesses the RECURSIVE
+// EnforceStrict walk: `required` auto-populates on the depth-2 object and the
+// depth-3 array-items object, and additionalProperties:false survives at
+// every level (strict mode demands both on ALL objects).
+//
+// WIRE-005 provenance: live-anchored 2026-06-05 — golden bytes POSTed to
+// /v1/chat/completions; HTTP 200 from gpt-4o-2024-08-06, finish_reason
+// "stop", response honored the nested schema exactly:
+// {"residence":{"addresses":[{"city":"Helsinki"}]}} — strict mode accepted
+// the recursively auto-populated required arrays at all three levels.
+func TestRequestWire_StructuredOutputNestedOpenAI(t *testing.T) {
+	body, _ := captureBody(t, providers.OpenAI, func(c *Client) {
+		_, err := c.Text.Schema(wireStructuredOutputNestedSchema).Prompt(context.Background(), wireStructuredOutputNestedPrompt)
+		if err != nil {
+			t.Fatalf("nested structured-output call: %v", err)
+		}
+	})
+	assertRequestWireGolden(t, "structured-output-nested-openai", body)
+}
+
+// TestRequestWire_StructuredOutputNestedAnthropic witnesses the same
+// recursive EnforceStrict walk on the Anthropic surface (beta header
+// asserted in-driver as for the flat fixture).
+//
+// WIRE-005 provenance: live-anchored 2026-06-05 — golden bytes POSTed to
+// /v1/messages with anthropic-beta: structured-outputs-2025-11-13; HTTP 200
+// from claude-sonnet-4-6, stop_reason "end_turn", content text was exactly
+// {"residence":{"addresses":[{"city":"Helsinki"}]}}.
+func TestRequestWire_StructuredOutputNestedAnthropic(t *testing.T) {
+	body, headers := captureBody(t, providers.Anthropic, func(c *Client) {
+		_, err := c.Text.Schema(wireStructuredOutputNestedSchema).Prompt(context.Background(), wireStructuredOutputNestedPrompt)
+		if err != nil {
+			t.Fatalf("nested structured-output call: %v", err)
+		}
+	})
+	if got, want := headers.Get("anthropic-beta"), "structured-outputs-2025-11-13"; got != want {
+		t.Errorf("anthropic-beta header: got %q, want %q", got, want)
+	}
+	assertRequestWireGolden(t, "structured-output-nested-anthropic", body)
 }
 
 // TestRequestWire_CachingAgentAnthropic asserts the Go SDK's outbound Anthropic
@@ -198,7 +266,7 @@ func TestRequestWire_StructuredOutputAnthropic(t *testing.T) {
 // marker itself is honored, not rejected).
 func TestRequestWire_CachingAgentAnthropic(t *testing.T) {
 	body, _ := captureBody(t, providers.Anthropic, func(c *Client) {
-		_, err := c.Agent.System("a long stable system prefix").Caching().Prompt(context.Background(), "hi")
+		_, err := c.Agent.System(wireCachingSystem).Caching().Prompt(context.Background(), wireCachingPrompt)
 		if err != nil {
 			t.Fatalf("agent caching call: %v", err)
 		}
@@ -215,7 +283,7 @@ func TestRequestWire_CachingAgentAnthropic(t *testing.T) {
 // accounting returned.
 func TestRequestWire_CachingTextAnthropic(t *testing.T) {
 	body, _ := captureBody(t, providers.Anthropic, func(c *Client) {
-		_, err := c.Text.System("a long stable system prefix").Caching().Prompt(context.Background(), "hi")
+		_, err := c.Text.System(wireCachingSystem).Caching().Prompt(context.Background(), wireCachingPrompt)
 		if err != nil {
 			t.Fatalf("text caching call: %v", err)
 		}
@@ -234,7 +302,7 @@ func TestRequestWire_CachingTextAnthropic(t *testing.T) {
 // end-to-end).
 func TestRequestWire_CachingBatchAnthropic(t *testing.T) {
 	body, _ := captureBody(t, providers.Anthropic, func(c *Client) {
-		_, err := c.Text.System("a long stable system prefix").Caching().SubmitBatch(context.Background(), "hi")
+		_, err := c.Text.System(wireCachingSystem).Caching().SubmitBatch(context.Background(), wireCachingPrompt)
 		if err != nil {
 			t.Fatalf("batch caching submit: %v", err)
 		}
@@ -250,10 +318,9 @@ func TestRequestWire_CachingBatchAnthropic(t *testing.T) {
 // (gpt-5/o* reject `stop` and `temperature`; thinking-enabled Anthropic pins
 // temperature to 1) omit it — WIRE-005 anchoring requires live acceptance.
 
-// tinyPNGBase64 is a 69-byte 1x1 RGB PNG (single brick-red pixel), the FIXED
-// reference image for the image-edit fixture. The SAME base64 constant appears
-// in all four SDK drivers so the inline-image encoding is byte-identical.
-const tinyPNGBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGM4YWQEAALyAS2saifrAAAAAElFTkSuQmCC"
+// The fixed 1x1 RGB PNG reference image for the image-edit fixture is the
+// generated wireImageEditGoogleFlashImageBase64 const — byte-identical in
+// all four SDK drivers because it is emitted from the same A-Box fact.
 
 // TestRequestWire_OptionsOpenAIGPT5 witnesses the gpt-5* glob of the ADR-024
 // per-model key override (max_tokens -> max_completion_tokens) plus the
@@ -266,8 +333,8 @@ const tinyPNGBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4n
 // `temperature` ("unsupported_parameter"), so those are deliberately unset.
 func TestRequestWire_OptionsOpenAIGPT5(t *testing.T) {
 	body, _ := captureBody(t, providers.OpenAI, func(c *Client) {
-		_, err := c.Text.Model("gpt-5").MaxTokens(1024).ReasoningEffort("low").Seed(42).
-			Prompt(context.Background(), "Summarize the plot of Hamlet in two sentences.")
+		_, err := c.Text.Model(wireOptionsOpenaiGpt5Model).MaxTokens(wireOptionsOpenaiGpt5MaxTokens).ReasoningEffort(wireOptionsOpenaiGpt5ReasoningEffort).Seed(wireOptionsOpenaiGpt5Seed).
+			Prompt(context.Background(), wireOptionsOpenaiGpt5Prompt)
 		if err != nil {
 			t.Fatalf("options gpt-5 call: %v", err)
 		}
@@ -284,8 +351,8 @@ func TestRequestWire_OptionsOpenAIGPT5(t *testing.T) {
 // gpt-5 (`stop`/`temperature` rejected), hence the lean option set.
 func TestRequestWire_OptionsOpenAIOSeries(t *testing.T) {
 	body, _ := captureBody(t, providers.OpenAI, func(c *Client) {
-		_, err := c.Text.Model("o4-mini").MaxTokens(1024).ReasoningEffort("medium").Seed(7).
-			Prompt(context.Background(), "What is the capital of Finland?")
+		_, err := c.Text.Model(wireOptionsOpenaiOSeriesModel).MaxTokens(wireOptionsOpenaiOSeriesMaxTokens).ReasoningEffort(wireOptionsOpenaiOSeriesReasoningEffort).Seed(wireOptionsOpenaiOSeriesSeed).
+			Prompt(context.Background(), wireOptionsOpenaiOSeriesPrompt)
 		if err != nil {
 			t.Fatalf("options o4-mini call: %v", err)
 		}
@@ -303,9 +370,9 @@ func TestRequestWire_OptionsOpenAIOSeries(t *testing.T) {
 // finish_reason "stop").
 func TestRequestWire_OptionsOpenAIGPT4o(t *testing.T) {
 	body, _ := captureBody(t, providers.OpenAI, func(c *Client) {
-		_, err := c.Text.Model("gpt-4o").MaxTokens(256).Temperature(0.7).TopP(0.9).
-			StopSequences("END_OF_LIST").Seed(42).FrequencyPenalty(0.25).PresencePenalty(0.15).
-			Prompt(context.Background(), "List three primary colors, then write END_OF_LIST.")
+		_, err := c.Text.Model(wireOptionsOpenaiGpt4oModel).MaxTokens(wireOptionsOpenaiGpt4oMaxTokens).Temperature(wireOptionsOpenaiGpt4oTemperature).TopP(wireOptionsOpenaiGpt4oTopP).
+			StopSequences(wireOptionsOpenaiGpt4oStopSequences).Seed(wireOptionsOpenaiGpt4oSeed).FrequencyPenalty(wireOptionsOpenaiGpt4oFrequencyPenalty).PresencePenalty(wireOptionsOpenaiGpt4oPresencePenalty).
+			Prompt(context.Background(), wireOptionsOpenaiGpt4oPrompt)
 		if err != nil {
 			t.Fatalf("options gpt-4o call: %v", err)
 		}
@@ -330,14 +397,38 @@ func TestRequestWire_OptionsOpenAIGPT4o(t *testing.T) {
 // sonnet-4-6, the newest model accepting the SDK's thinking wire shape.
 func TestRequestWire_OptionsAnthropic(t *testing.T) {
 	body, _ := captureBody(t, providers.Anthropic, func(c *Client) {
-		_, err := c.Text.Model("claude-sonnet-4-6").MaxTokens(2048).
-			ThinkingBudget(1024).StopSequences("END_OF_ANSWER").
-			Prompt(context.Background(), "Explain in one sentence why the sky appears blue at noon, then write END_OF_ANSWER.")
+		_, err := c.Text.Model(wireOptionsAnthropicModel).MaxTokens(wireOptionsAnthropicMaxTokens).
+			ThinkingBudget(wireOptionsAnthropicThinkingBudget).StopSequences(wireOptionsAnthropicStopSequences).
+			Prompt(context.Background(), wireOptionsAnthropicPrompt)
 		if err != nil {
 			t.Fatalf("options anthropic call: %v", err)
 		}
 	})
 	assertRequestWireGolden(t, "options-anthropic", body)
+}
+
+// TestRequestWire_OptionsAnthropicPlain witnesses the thinking-OFF Anthropic
+// option set — Temperature and TopK application, which the thinking fixture
+// cannot carry (plan 039 witness-lint finding: both were supported but
+// unwitnessed). TopP is deliberately absent: live Anthropic rejects
+// temperature+top_p together ("use only one", probed 2026-06-05), so TopP
+// stays a documented exclusion in lint_wire_witness.py.
+//
+// WIRE-005 provenance: live-anchored 2026-06-05 — golden bytes POSTed to
+// /v1/messages; HTTP 200 from claude-sonnet-4-6, stop_reason
+// "stop_sequence" naming END_OF_ANSWER exactly (temperature 0.7 + top_k 40
+// accepted together; correct answer, the Kemijoki).
+func TestRequestWire_OptionsAnthropicPlain(t *testing.T) {
+	body, _ := captureBody(t, providers.Anthropic, func(c *Client) {
+		_, err := c.Text.Model(wireOptionsAnthropicPlainModel).MaxTokens(wireOptionsAnthropicPlainMaxTokens).
+			Temperature(wireOptionsAnthropicPlainTemperature).TopK(wireOptionsAnthropicPlainTopK).
+			StopSequences(wireOptionsAnthropicPlainStopSequences).
+			Prompt(context.Background(), wireOptionsAnthropicPlainPrompt)
+		if err != nil {
+			t.Fatalf("options anthropic plain call: %v", err)
+		}
+	})
+	assertRequestWireGolden(t, "options-anthropic-plain", body)
 }
 
 // TestRequestWire_OptionsGoogle witnesses the generationConfig wrapping
@@ -351,12 +442,21 @@ func TestRequestWire_OptionsAnthropic(t *testing.T) {
 // model gemini-3-pro-preview now 404s ("no longer available") — fixture
 // substituted the newest accessible family member per the M2 rule; the
 // A-Box catalogue staleness is recorded in ADR-028's change log.
+//
+// Re-minted + re-anchored 2026-06-05 (plan 039): the witness lint flagged
+// ReasoningEffort as supported-but-unwitnessed, and the live probe showed
+// the table default generationConfig.reasoning_effort is REJECTED ("Unknown
+// name") — a latent BUG-001-class fact fixed with the
+// thinkingConfig.thinkingLevel override in abox-google.ttl. Golden now
+// carries thinkingConfig.thinkingLevel "low"; POSTed live: HTTP 200, stop
+// sequence still honored ("Ganymede and Callisto.").
 func TestRequestWire_OptionsGoogle(t *testing.T) {
 	body, _ := captureBody(t, providers.Google, func(c *Client) {
-		_, err := c.Text.Model("gemini-3.5-flash").MaxTokens(1024).Temperature(0.7).TopP(0.9).TopK(40).
-			StopSequences("END_OF_ANSWER").Seed(7).
-			SafetySettings([]SafetySetting{{Category: HarmCategoryDangerousContent, Threshold: HarmBlockThresholdHighOnly}}).
-			Prompt(context.Background(), "Name the two largest moons of Jupiter, then write END_OF_ANSWER.")
+		_, err := c.Text.Model(wireOptionsGoogleModel).MaxTokens(wireOptionsGoogleMaxTokens).Temperature(wireOptionsGoogleTemperature).TopP(wireOptionsGoogleTopP).TopK(wireOptionsGoogleTopK).
+			StopSequences(wireOptionsGoogleStopSequences).Seed(wireOptionsGoogleSeed).
+			ReasoningEffort(wireOptionsGoogleReasoningEffort).
+			SafetySettings([]SafetySetting{{Category: wireOptionsGoogleSafetyCategory, Threshold: wireOptionsGoogleSafetyThreshold}}).
+			Prompt(context.Background(), wireOptionsGooglePrompt)
 		if err != nil {
 			t.Fatalf("options google call: %v", err)
 		}
@@ -375,8 +475,8 @@ func TestRequestWire_OptionsGoogle(t *testing.T) {
 // honored (thoughtsTokenCount 217 <= 512), correct answer ("8").
 func TestRequestWire_OptionsGoogleGemini25(t *testing.T) {
 	body, _ := captureBody(t, providers.Google, func(c *Client) {
-		_, err := c.Text.Model("gemini-2.5-flash").MaxTokens(1024).Temperature(0.5).ThinkingBudget(512).
-			Prompt(context.Background(), "How many planets orbit the Sun? Answer with a number.")
+		_, err := c.Text.Model(wireOptionsGoogleGemini25Model).MaxTokens(wireOptionsGoogleGemini25MaxTokens).Temperature(wireOptionsGoogleGemini25Temperature).ThinkingBudget(wireOptionsGoogleGemini25ThinkingBudget).
+			Prompt(context.Background(), wireOptionsGoogleGemini25Prompt)
 		if err != nil {
 			t.Fatalf("options gemini-2.5 call: %v", err)
 		}
@@ -399,8 +499,8 @@ func TestRequestWire_OptionsGoogleGemini25(t *testing.T) {
 // consistent with the requested 2K size).
 func TestRequestWire_ImageGenGoogleFlash(t *testing.T) {
 	body, _ := captureBody(t, providers.Google, func(c *Client) {
-		_, err := c.Image.Model("gemini-3.1-flash-image-preview").AspectRatio("16:9").ImageSize("2K").
-			Generate(context.Background(), "A lighthouse on a rocky coastline at dusk")
+		_, err := c.Image.Model(wireImageGenGoogleFlashModel).AspectRatio(wireImageGenGoogleFlashAspectRatio).ImageSize(wireImageGenGoogleFlashImageSize).
+			Generate(context.Background(), wireImageGenGoogleFlashPrompt)
 		if err != nil {
 			t.Fatalf("image gen flash call: %v", err)
 		}
@@ -418,8 +518,8 @@ func TestRequestWire_ImageGenGoogleFlash(t *testing.T) {
 // for this prompt — acceptance, not emission, is what the body witnesses).
 func TestRequestWire_ImageGenGooglePro(t *testing.T) {
 	body, _ := captureBody(t, providers.Google, func(c *Client) {
-		_, err := c.Image.Model("gemini-3-pro-image-preview").AspectRatio("4:3").ImageSize("1K").IncludeText().
-			Generate(context.Background(), "A watercolor map of the Baltic Sea")
+		_, err := c.Image.Model(wireImageGenGoogleProModel).AspectRatio(wireImageGenGoogleProAspectRatio).ImageSize(wireImageGenGoogleProImageSize).IncludeText().
+			Generate(context.Background(), wireImageGenGoogleProPrompt)
 		if err != nil {
 			t.Fatalf("image gen pro call: %v", err)
 		}
@@ -438,9 +538,9 @@ func TestRequestWire_ImageGenGooglePro(t *testing.T) {
 // output_format png, background opaque.
 func TestRequestWire_ImageGenOpenAI(t *testing.T) {
 	body, _ := captureBody(t, providers.OpenAI, func(c *Client) {
-		_, err := c.Image.Model("gpt-image-2").ImageSize("1024x1024").Quality("low").
-			OutputFormat("png").Background("opaque").Count(1).
-			Generate(context.Background(), "A minimalist line drawing of a sailboat")
+		_, err := c.Image.Model(wireImageGenOpenaiModel).ImageSize(wireImageGenOpenaiImageSize).Quality(wireImageGenOpenaiQuality).
+			OutputFormat(wireImageGenOpenaiOutputFormat).Background(wireImageGenOpenaiBackground).Count(wireImageGenOpenaiCount).
+			Generate(context.Background(), wireImageGenOpenaiPrompt)
 		if err != nil {
 			t.Fatalf("image gen openai call: %v", err)
 		}
@@ -449,7 +549,7 @@ func TestRequestWire_ImageGenOpenAI(t *testing.T) {
 }
 
 // TestRequestWire_ImageEditGoogleFlash witnesses inline-image encoding on the
-// edit pass: the fixed tinyPNGBase64 reference image becomes an inlineData
+// edit pass: the fixed wireImageEditGoogleFlashImageBase64 reference image becomes an inlineData
 // part, ordered before the trailing text part (caller-order preservation).
 //
 // WIRE-005 provenance: live-anchored 2026-06-04 — golden bytes POSTed to
@@ -457,13 +557,13 @@ func TestRequestWire_ImageGenOpenAI(t *testing.T) {
 // finishReason STOP, one edited image returned (~423 KB) — the 1x1 PNG
 // reference was accepted as an inlineData edit source.
 func TestRequestWire_ImageEditGoogleFlash(t *testing.T) {
-	png, err := base64.StdEncoding.DecodeString(tinyPNGBase64)
+	png, err := base64.StdEncoding.DecodeString(wireImageEditGoogleFlashImageBase64)
 	if err != nil {
 		t.Fatalf("decode tiny PNG constant: %v", err)
 	}
 	body, _ := captureBody(t, providers.Google, func(c *Client) {
-		_, err := c.Image.Model("gemini-3.1-flash-image-preview").Image("image/png", png).
-			Generate(context.Background(), "Recolor the square to deep blue")
+		_, err := c.Image.Model(wireImageEditGoogleFlashModel).Image(wireImageEditGoogleFlashImageMime, png).
+			Generate(context.Background(), wireImageEditGoogleFlashPrompt)
 		if err != nil {
 			t.Fatalf("image edit flash call: %v", err)
 		}
