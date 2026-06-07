@@ -39,10 +39,14 @@ func (b *Text) Prompt(ctx context.Context, finalText string) (Response, error) {
 		return Response{}, &ValidationError{Field: "provider", Message: "unknown: " + p.Name}
 	}
 
+	model, err := resolveModel(p, cfg)
+	if err != nil {
+		return Response{}, err
+	}
 	baseEvent := providers.Event{
 		Op:       providers.OpLLMRequest,
 		Provider: p.Name,
-		Model:    resolveModel(p, cfg),
+		Model:    model,
 	}
 	start := time.Now()
 	if err := firePre(ctx, o.middleware, baseEvent); err != nil {
