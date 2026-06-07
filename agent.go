@@ -72,6 +72,11 @@ func (a *legacyAgent) runToolLoop(ctx context.Context) (Response, error) {
 	tcConfig := providers.ToolCallConfig(a.provider.Name)
 	tcExtractor := selectToolCallExtractor(cfg)
 
+	model, err := resolveModel(a.provider, cfg)
+	if err != nil {
+		return Response{}, err
+	}
+
 	var totalUsage Usage
 
 	for i := 0; i < a.opts.maxToolIterations; i++ {
@@ -97,7 +102,7 @@ func (a *legacyAgent) runToolLoop(ctx context.Context) (Response, error) {
 		llmEvent := providers.Event{
 			Op:       providers.OpLLMRequest,
 			Provider: a.provider.Name,
-			Model:    resolveModel(a.provider, cfg),
+			Model:    model,
 		}
 		llmStart := time.Now()
 		if err := firePre(ctx, a.opts.middleware, llmEvent); err != nil {
@@ -200,7 +205,7 @@ func (a *legacyAgent) runToolLoop(ctx context.Context) (Response, error) {
 			toolEv := providers.Event{
 				Op:       providers.OpToolCall,
 				Provider: a.provider.Name,
-				Model:    resolveModel(a.provider, cfg),
+				Model:    model,
 				Tool:     tc.name,
 				Args:     tc.input,
 			}
