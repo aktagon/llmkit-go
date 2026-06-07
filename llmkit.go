@@ -79,10 +79,14 @@ func promptStream(ctx context.Context, p Provider, req Request, callback StreamC
 		return Response{}, &ValidationError{Field: "provider", Message: "streaming not supported: " + p.Name}
 	}
 
+	model, err := resolveModel(p, cfg)
+	if err != nil {
+		return Response{}, err
+	}
 	baseEvent := providers.Event{
 		Op:       providers.OpLLMRequest,
 		Provider: p.Name,
-		Model:    resolveModel(p, cfg),
+		Model:    model,
 	}
 	start := time.Now()
 	if err := firePre(ctx, o.middleware, baseEvent); err != nil {
@@ -153,10 +157,9 @@ func buildStreamURL(p Provider, cfg providers.ProviderConfig, streamCfg *provide
 	}
 	endpoint := streamCfg.Endpoint
 
-	model := p.Model
-	if model == "" {
-		model = cfg.DefaultModel
-	}
+	// Both-empty is rejected by resolveModel at every entry point before
+	// URL building runs, so the error is unreachable here.
+	model, _ := resolveModel(p, cfg)
 	endpoint = strings.ReplaceAll(endpoint, "{model}", model)
 	endpoint = strings.ReplaceAll(endpoint, "{apiKey}", p.APIKey)
 
@@ -194,10 +197,14 @@ func uploadFile(ctx context.Context, p Provider, data []byte, name, mime string,
 
 	o := resolveOptions(opts)
 
+	model, err := resolveModel(p, cfg)
+	if err != nil {
+		return File{}, err
+	}
 	baseEvent := providers.Event{
 		Op:       providers.OpUpload,
 		Provider: p.Name,
-		Model:    resolveModel(p, cfg),
+		Model:    model,
 	}
 	start := time.Now()
 	if err := firePre(ctx, o.middleware, baseEvent); err != nil {
@@ -401,11 +408,9 @@ func buildURL(p Provider, cfg providers.ProviderConfig) string {
 		endpoint = endpoint + "?" + cfg.AuthQueryParam + "=" + p.APIKey
 	}
 
-	// Handle endpoint template placeholders
-	model := p.Model
-	if model == "" {
-		model = cfg.DefaultModel
-	}
+	// Handle endpoint template placeholders. Both-empty is rejected by
+	// resolveModel at every entry point before URL building runs.
+	model, _ := resolveModel(p, cfg)
 	endpoint = strings.ReplaceAll(endpoint, "{model}", model)
 	endpoint = strings.ReplaceAll(endpoint, "{apiKey}", p.APIKey)
 
@@ -472,11 +477,9 @@ func buildRequest(p Provider, req Request, msgs []msg, o *options, cfg providers
 	body := map[string]any{}
 	headers := map[string]string{}
 
-	// Model
-	model := p.Model
-	if model == "" {
-		model = cfg.DefaultModel
-	}
+	// Model. Both-empty is rejected by resolveModel at every entry point
+	// before the shared builder runs (ADR-031 honest no-default contract).
+	model, _ := resolveModel(p, cfg)
 	if cfg.ModelInBody {
 		body["model"] = model
 	}

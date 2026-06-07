@@ -108,11 +108,9 @@ func applyResourceCaching(ctx context.Context, body map[string]any, p Provider, 
 		return fmt.Errorf("resource caching requires lifecycle config")
 	}
 
-	// Determine model
-	model := p.Model
-	if model == "" {
-		model = cfg.DefaultModel
-	}
+	// Determine model. Both-empty is rejected by resolveModel at every
+	// entry point before caching applies.
+	model, _ := resolveModel(p, cfg)
 
 	baseEvent := providers.Event{
 		Op:       providers.OpCacheCreate,
