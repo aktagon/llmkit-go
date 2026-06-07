@@ -47,10 +47,14 @@ func submitBatch(ctx context.Context, p Provider, reqs []Request, opts ...Option
 		return BatchHandle{}, &ValidationError{Field: "provider", Message: "async batching not supported: " + p.Name}
 	}
 
+	model, err := resolveModel(p, cfg)
+	if err != nil {
+		return BatchHandle{}, err
+	}
 	baseEvent := providers.Event{
 		Op:       providers.OpBatchSubmit,
 		Provider: p.Name,
-		Model:    resolveModel(p, cfg),
+		Model:    model,
 	}
 	start := time.Now()
 	if err := firePre(ctx, o.middleware, baseEvent); err != nil {
