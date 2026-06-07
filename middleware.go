@@ -52,9 +52,18 @@ func firePost(ctx context.Context, mws []providers.MiddlewareFn, base providers.
 
 //
 //
-func resolveModel(p Provider, cfg providers.ProviderConfig) string {
+//
+//
+//
+func resolveModel(p Provider, cfg providers.ProviderConfig) (string, error) {
 	if p.Model != "" {
-		return p.Model
+		return p.Model, nil
 	}
-	return cfg.DefaultModel
+	if cfg.DefaultModel == "" {
+		return "", &ValidationError{
+			Field:   "model",
+			Message: "no model chosen and \"" + p.Name + "\" declares no default; pick one (Models.Live() lists what the daemon serves)",
+		}
+	}
+	return cfg.DefaultModel, nil
 }

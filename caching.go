@@ -109,10 +109,8 @@ func applyResourceCaching(ctx context.Context, body map[string]any, p Provider, 
 	}
 
 	//
-	model := p.Model
-	if model == "" {
-		model = cfg.DefaultModel
-	}
+	//
+	model, _ := resolveModel(p, cfg)
 
 	baseEvent := providers.Event{
 		Op:       providers.OpCacheCreate,
