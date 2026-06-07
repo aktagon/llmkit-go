@@ -50,11 +50,20 @@ func firePost(ctx context.Context, mws []providers.MiddlewareFn, base providers.
 	}
 }
 
-// resolveModel returns the caller-specified model or falls back to the provider default.
-// Used for stamping Event.Model consistently across entry points.
-func resolveModel(p Provider, cfg providers.ProviderConfig) string {
+// resolveModel returns the caller-specified model or the provider's curated
+// default. It is the single predicate every resolution point dispatches on.
+// Both empty is a ValidationError: local daemons declare no default — what a
+// daemon serves is runtime inventory, not a registry fact (ADR-031) — so the
+// SDK asks the caller to pick instead of guessing a model that may 404.
+func resolveModel(p Provider, cfg providers.ProviderConfig) (string, error) {
 	if p.Model != "" {
-		return p.Model
+		return p.Model, nil
 	}
-	return cfg.DefaultModel
+	if cfg.DefaultModel == "" {
+		return "", &ValidationError{
+			Field:   "model",
+			Message: "no model chosen and \"" + p.Name + "\" declares no default; pick one (Models.Live() lists what the daemon serves)",
+		}
+	}
+	return cfg.DefaultModel, nil
 }
