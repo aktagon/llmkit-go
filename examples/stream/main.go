@@ -23,6 +23,7 @@ func main() {
 	}
 	c := llmkit.New("anthropic", key)
 
+	// #region stream
 	stream := c.Text.System("Be brief").Stream(context.Background(), "Tell me a one-line joke")
 	for chunk, err := range stream.Chunks() {
 		if err != nil {
@@ -34,4 +35,5 @@ func main() {
 	final := stream.Response()
 	fmt.Printf("input=%d output=%d finish_reason=%s\n",
 		final.Usage.Input, final.Usage.Output, final.FinishReason)
+	// #endregion
 }
