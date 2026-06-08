@@ -50,6 +50,8 @@ const (
 	//
 	OpMusicGeneration MiddlewareOp = "music_generation"
 	//
+	OpVideoGeneration MiddlewareOp = "video_generation"
+	//
 	OpModelsList MiddlewareOp = "models_list"
 )
 

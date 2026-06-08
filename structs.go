@@ -203,3 +203,48 @@ type ToolResult struct {
 	//
 	Content string
 }
+
+//
+type VideoData struct {
+	//
+	MimeType string
+
+	//
+	URL string
+
+	//
+	Bytes []byte
+
+	//
+	DurationSeconds int
+}
+
+//
+type VideoHandle struct {
+	//
+	ID string
+
+	//
+	Provider Provider
+
+	//
+	Raw bool
+}
+
+//
+type VideoResponse struct {
+	//
+	Videos []VideoData
+
+	//
+	Usage Usage
+
+	//
+	FinishReason string
+
+	//
+	FinishMessage string
+
+	//
+	Raw json.RawMessage
+}

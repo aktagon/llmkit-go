@@ -83,9 +83,11 @@ func APIEntryPoints() []APIEntryPointDef {
 		{GoFunc: "Prompt", GoParamType: "Request", Comment: "One-shot synchronous request. Returns Response with text + Usage tokens."},
 		{GoFunc: "PromptBatch", GoParamType: "[]Request", Comment: "Blocks until all responses ready. Handles async polling internally."},
 		{GoFunc: "PromptStream", GoParamType: "Request", Comment: "Streaming variant. Calls a per-chunk callback as deltas arrive; returns the accumulated Response on stream close."},
+		{GoFunc: "Submit", GoParamType: "VideoRequest", Comment: "Asynchronous text/image-to-video submit. Input is VideoRequest{ Model, Prompt, Parts []Part } where Parts is a positionally-ordered sequence of llm:Part (text prompt or image-to-video reference). Prompt is a sugar field for the prompt-only case (XOR with Parts; runtime synthesises []Part{Text(Prompt)} when only Prompt is set). Returns a VideoHandle immediately; poll it with Wait."},
 		{GoFunc: "SubmitBatch", GoParamType: "[]Request", Comment: "Returns BatchHandle immediately. Use WaitBatch to get results."},
 		{GoFunc: "Supports", GoParamType: "Capability", Comment: "Client.Supports(Capability) — true iff an explicit request for the capability will not hard-fail pre-flight on this client's provider (ADR-030). Gated arms (caching, batching, file_upload, image_generation) dispatch the same generated *_config(provider) lookup as the strict validation paths, so the query and the error cannot drift; capabilities with no provider-level pre-flight gate return true. Says nothing about per-model or per-option rejections — use the catalogue's ModelInfo.Capabilities for model-level facts. Sync, no IO, infallible."},
 		{GoFunc: "UploadFile", GoParamType: "Bytes", Comment: "Uploads a file and returns a File handle suitable for inclusion in a Request.files slice."},
+		{GoFunc: "Wait", GoParamType: "VideoHandle", Comment: "Polls the provider (per the handle's submit endpoint + wire shape) until the job reaches a terminal state (status=done), then returns a VideoResponse. Poll cadence + timeout use per-provider defaults, overridable via chain option (ADR-034 D2). A failed/expired job surfaces as an error. Hand-written on VideoHandle (not a *Video builder terminal), mirroring BatchHandle.Wait."},
 		{GoFunc: "WaitBatch", GoParamType: "BatchHandle", Comment: "Polls the provider until the batch handle reaches terminal state, then returns the ordered list of Responses."},
 	}
 }
@@ -103,6 +105,7 @@ func CacheResponseFields() []APIResponseFieldDef {
 		{GoFieldName: "Output", GoFieldType: "int", SourcePath: "usageOutputPath"},
 		{GoFieldName: "Reasoning", GoFieldType: "int", SourcePath: "reasoningTokensPath"},
 		{GoFieldName: "Text", GoFieldType: "string", SourcePath: "candidates[0].content.parts[*].text"},
+		{GoFieldName: "Videos", GoFieldType: "[]VideoData", SourcePath: "video"},
 	}
 }
 

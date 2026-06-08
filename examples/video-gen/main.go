@@ -1,0 +1,83 @@
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+package main
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"log"
+	"net/http"
+	"os"
+
+	"github.com/aktagon/llmkit-go"
+)
+
+const grokVideoModel = "grok-imagine-video"
+
+func main() {
+	key := os.Getenv("XAI_API_KEY")
+	if key == "" {
+		log.Fatal("XAI_API_KEY must be set")
+	}
+
+	ctx := context.Background()
+	c := llmkit.Grok(key)
+
+	h, err := c.Video.Model(grokVideoModel).Submit(
+		ctx,
+		"a slow cinematic drone shot flying over snow-capped alpine peaks at golden hour",
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("submitted; request id = %s\npolling...\n", h.ID)
+
+	resp, err := h.Wait(ctx)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if len(resp.Videos) == 0 {
+		log.Fatalf("no video returned (finish: %s %s)", resp.FinishReason, resp.FinishMessage)
+	}
+
+	v := resp.Videos[0]
+	fmt.Printf("done: url=%s duration=%ds mime=%s\n", v.URL, v.DurationSeconds, v.MimeType)
+
+	//
+	out := "grok_video.mp4"
+	if err := download(ctx, v.URL, out); err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("wrote %s\n", out)
+}
+
+func download(ctx context.Context, url, path string) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		return fmt.Errorf("download %s: status %d", url, resp.StatusCode)
+	}
+	f, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	_, err = io.Copy(f, resp.Body)
+	return err
+}
