@@ -30,3 +30,11 @@ func TestImage(t *testing.T) {
 		t.Errorf("Text should be empty, got %q", got.Text)
 	}
 }
+
+func TestLyrics(t *testing.T) {
+	got := Lyrics("[verse] neon lights")
+	want := llmkit.Part{Lyrics: "[verse] neon lights"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("Lyrics(...) = %+v, want %+v", got, want)
+	}
+}
