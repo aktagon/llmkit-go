@@ -29,6 +29,7 @@ type Client struct {
 	provider  providerConfig
 	Text      *Text
 	Image     *Image
+	Music     *Music
 	Agent     *Agent
 	Upload    *Upload
 	Models    *Models
@@ -39,6 +40,7 @@ func newClient(name, apiKey string) *Client {
 	c := &Client{provider: providerConfig{name: name, apiKey: apiKey}}
 	c.Text = &Text{client: c}
 	c.Image = &Image{client: c}
+	c.Music = &Music{client: c}
 	c.Agent = &Agent{client: c}
 	c.Upload = &Upload{client: c}
 	c.Models = &Models{client: c}
@@ -230,6 +232,37 @@ func (b *Image) SafetySettings(s []SafetySetting) *Image {
 	return &out
 }
 func (b *Image) Text(s string) *Image {
+	out := *b
+	out.parts = append(append([]Part{}, b.parts...), Part{Text: s})
+	return &out
+} // ordered
+
+// === *Music — MusicGeneration builder ===
+
+// Music accumulates configuration for a MusicGeneration
+// call. Chain methods return new instances (immutable); skipped
+// terminals live in hand-written text.go / image.go.
+type Music struct {
+	client     *Client
+	middleware []MiddlewareFn
+	parts      []Part
+	model      string
+	raw        bool
+}
+
+func (b *Music) AddMiddleware(fns ...MiddlewareFn) *Music {
+	out := *b
+	out.middleware = append(append([]MiddlewareFn{}, b.middleware...), fns...)
+	return &out
+}
+func (b *Music) Lyrics(s string) *Music {
+	out := *b
+	out.parts = append(append([]Part{}, b.parts...), Part{Lyrics: s})
+	return &out
+}                                         // ordered
+func (b *Music) Model(name string) *Music { out := *b; out.model = name; return &out }
+func (b *Music) Raw() *Music              { out := *b; out.raw = true; return &out }
+func (b *Music) Text(s string) *Music {
 	out := *b
 	out.parts = append(append([]Part{}, b.parts...), Part{Text: s})
 	return &out

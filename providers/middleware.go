@@ -47,6 +47,8 @@ const (
 	OpBatchSubmit MiddlewareOp = "batch_submit"
 	// OpImageGeneration — GenerateImage call. Phase=pre fires before the HTTP request; Phase=post after decoding image bytes.
 	OpImageGeneration MiddlewareOp = "image_generation"
+	// OpMusicGeneration — GenerateMusic call. Phase=pre fires before the HTTP request; Phase=post after decoding audio bytes.
+	OpMusicGeneration MiddlewareOp = "music_generation"
 	// OpModelsList — Live catalogue HTTP call. Fires around each provider GET in Models().Live() and Models().Provider(p).List/Get (ADR-019).
 	OpModelsList MiddlewareOp = "models_list"
 )
