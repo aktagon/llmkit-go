@@ -78,11 +78,11 @@ resp, err := c.Text.
     Prompt(ctx, "What is 2+2?")
 
 fmt.Println(resp.Text)               // "4"
-fmt.Println(resp.Tokens.Input)       // prompt tokens
-fmt.Println(resp.Tokens.Output)      // completion tokens
-fmt.Println(resp.Tokens.CacheRead)   // tokens served from cache (all caching modes)
-fmt.Println(resp.Tokens.CacheWrite)  // tokens written to cache (Anthropic explicit caching)
-fmt.Println(resp.Tokens.Reasoning)   // internal reasoning tokens (OpenAI o1/o3/o4, Gemini 2.5+ thinking)
+fmt.Println(resp.Usage.Input)       // prompt tokens
+fmt.Println(resp.Usage.Output)      // completion tokens
+fmt.Println(resp.Usage.CacheRead)   // tokens served from cache (all caching modes)
+fmt.Println(resp.Usage.CacheWrite)  // tokens written to cache (Anthropic explicit caching)
+fmt.Println(resp.Usage.Reasoning)   // internal reasoning tokens (OpenAI o1/o3/o4, Gemini 2.5+ thinking)
 ```
 
 Capability-scoped fields (`CacheRead`, `CacheWrite`, `Reasoning`) are zero when the provider doesn't report them separately.
@@ -102,7 +102,7 @@ for chunk, err := range stream.Chunks() {
     fmt.Print(chunk)
 }
 final := stream.Response()
-fmt.Println("\ntokens:", final.Tokens.Input, "in,", final.Tokens.Output, "out")
+fmt.Println("\ntokens:", final.Usage.Input, "in,", final.Usage.Output, "out")
 ```
 
 Breaking the range loop cancels the producer goroutine cleanly.
@@ -279,7 +279,7 @@ Edit-mode (single image into `instances[0].image`) and inpainting
 Imagen-specific knobs like `negativePrompt` and `safetySetting` are
 reachable through `ExtraFields(...)` — they spread into the request's
 `parameters` block. Vertex's `:predict` response does not carry token
-counts; `resp.Tokens` stays zero.
+counts; `resp.Usage` stays zero.
 
 ### Music — text-to-music
 

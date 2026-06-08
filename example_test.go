@@ -68,6 +68,78 @@ func ExampleClient_text() {
 	// 7 1
 }
 
+// ExampleClient_caching walks the prompt-caching path against Anthropic's
+// wire shape. The mock returns the cache-token split (cache_creation /
+// cache_read) so resp.Usage.CacheWrite and CacheRead read back non-zero.
+func ExampleClient_caching() {
+	server := mockJSON(map[string]any{
+		"content": []map[string]any{
+			{"type": "text", "text": "cached!"},
+		},
+		"usage": map[string]any{
+			"input_tokens":                12,
+			"output_tokens":               5,
+			"cache_creation_input_tokens": 100,
+			"cache_read_input_tokens":     80,
+		},
+	})
+	defer server.Close()
+
+	c := New(providers.Anthropic, "sk-test")
+	c.provider.baseURL = server.URL
+
+	resp, err := c.Text.
+		System("You are helpful").
+		Caching().
+		Prompt(context.Background(), "Hi")
+	if err != nil {
+		fmt.Println("err:", err)
+		return
+	}
+	fmt.Println(resp.Text)
+	fmt.Println("cache read:", resp.Usage.CacheRead)
+	fmt.Println("cache write:", resp.Usage.CacheWrite)
+	// Output:
+	// cached!
+	// cache read: 80
+	// cache write: 100
+}
+
+// ExampleClient_reasoning walks the reasoning-effort path against OpenAI's
+// o-series wire shape. The mock returns completion_tokens_details.
+// reasoning_tokens so resp.Usage.Reasoning reads back non-zero.
+func ExampleClient_reasoning() {
+	server := mockJSON(map[string]any{
+		"choices": []map[string]any{
+			{"message": map[string]any{"content": "There are 3 r's."}},
+		},
+		"usage": map[string]any{
+			"prompt_tokens":     40,
+			"completion_tokens": 25,
+			"completion_tokens_details": map[string]any{
+				"reasoning_tokens": 17,
+			},
+		},
+	})
+	defer server.Close()
+
+	c := New(providers.OpenAI, "sk-test")
+	c.provider.baseURL = server.URL
+
+	resp, err := c.Text.
+		ReasoningEffort("high").
+		Prompt(context.Background(), "How many r's are in strawberry?")
+	if err != nil {
+		fmt.Println("err:", err)
+		return
+	}
+	fmt.Println(resp.Text)
+	fmt.Println("reasoning tokens:", resp.Usage.Reasoning)
+	// Output:
+	// There are 3 r's.
+	// reasoning tokens: 17
+}
+
 // ExampleClient_agent walks the stateful agent path. The mock server
 // returns a tool-free final response so the loop exits after one
 // iteration. The chain composes System + Tool + MaxToolIterations.
