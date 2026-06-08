@@ -33,13 +33,16 @@ type ImageRequest struct {
 	Parts  []Part
 }
 
-// Part is the universal multimodal input atom. Exactly one of Text or
-// Image is set; both empty or both set is invalid (rejected by pre-flight
-// validation). Construct via the parts/ sub-package: parts.Text(s) /
-// parts.Image(mime, bytes).
+// Part is the universal multimodal input atom. Exactly one of Text, Image,
+// or Lyrics is set; none or more than one is invalid (rejected by pre-flight
+// validation). Lyrics is a text payload tagged as song lyrics, used only by
+// music generation (ADR-033) — image and text generation reject it.
+// Construct via the parts/ sub-package: parts.Text(s) / parts.Image(mime,
+// bytes) / parts.Lyrics(s).
 type Part struct {
-	Text  string
-	Image *MediaRef
+	Text   string
+	Image  *MediaRef
+	Lyrics string
 }
 
 // ImageData and ImageResponse are declared in go/structs.go (ADR-018, API-PDS-002).
