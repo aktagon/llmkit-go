@@ -28,3 +28,8 @@ func Text(s string) llmkit.Part { return llmkit.Part{Text: s} }
 func Image(mime string, b []byte) llmkit.Part {
 	return llmkit.Part{Image: &llmkit.MediaRef{MimeType: mime, Bytes: b}}
 }
+
+// Lyrics constructs a lyrics-bearing Part for music generation (ADR-033).
+// Providers with a dedicated lyrics field map it there; single-prompt
+// providers fold it into the prompt. Instrumental-only models reject it.
+func Lyrics(s string) llmkit.Part { return llmkit.Part{Lyrics: s} }
