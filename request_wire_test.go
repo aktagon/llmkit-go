@@ -94,7 +94,9 @@ func captureBody(t *testing.T, provider string, call func(c *Client)) ([]byte, h
 		// OpenAI image-generation paths respectively — ADR-028 two-helper
 		// rule: extend the canned response, don't add capture helpers).
 		json.NewEncoder(w).Encode(map[string]any{
-			"id": "msgbatch_test",
+			"id":         "msgbatch_test",
+			"request_id": "vid_test", // VID-007: Grok video-submit handle id
+
 			"candidates": []map[string]any{{"content": map[string]any{"parts": []map[string]any{
 				{"text": `{"color":"blue"}`},
 				{"inlineData": map[string]any{"mimeType": "image/png", "data": wireImageEditGoogleFlashImageBase64}},
@@ -598,4 +600,25 @@ func TestRequestWire_ImageEditGoogleFlash(t *testing.T) {
 		}
 	})
 	assertRequestWireGolden(t, "image-edit-google-flash", body)
+}
+
+// === ADR-034 / VID-007: video generation submit body ===
+
+// TestRequestWire_VideoGrok witnesses the Grok video-submit body: {model,
+// prompt} POSTed to /v1/videos/generations. The async VideoHandle is returned
+// but discarded — only the outbound submit bytes are asserted (the poll/GET
+// path is delivery-side, not request-wire).
+//
+// WIRE-005 provenance: live-anchored 2026-06-08 — the slice-1 Grok round-trip
+// (committed 611b793) POSTed this body, received a request_id, and polled to
+// status=done with an mp4 url. The canned response carries request_id so
+// Submit parses a handle.
+func TestRequestWire_VideoGrok(t *testing.T) {
+	body, _ := captureBody(t, providers.Grok, func(c *Client) {
+		_, err := c.Video.Model(wireVideoGrokModel).Submit(context.Background(), wireVideoGrokPrompt)
+		if err != nil {
+			t.Fatalf("video submit grok call: %v", err)
+		}
+	})
+	assertRequestWireGolden(t, "video-grok", body)
 }
