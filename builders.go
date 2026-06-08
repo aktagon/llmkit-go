@@ -30,6 +30,7 @@ type Client struct {
 	Text      *Text
 	Image     *Image
 	Music     *Music
+	Video     *Video
 	Agent     *Agent
 	Upload    *Upload
 	Models    *Models
@@ -41,6 +42,7 @@ func newClient(name, apiKey string) *Client {
 	c.Text = &Text{client: c}
 	c.Image = &Image{client: c}
 	c.Music = &Music{client: c}
+	c.Video = &Video{client: c}
 	c.Agent = &Agent{client: c}
 	c.Upload = &Upload{client: c}
 	c.Models = &Models{client: c}
@@ -263,6 +265,32 @@ func (b *Music) Lyrics(s string) *Music {
 func (b *Music) Model(name string) *Music { out := *b; out.model = name; return &out }
 func (b *Music) Raw() *Music              { out := *b; out.raw = true; return &out }
 func (b *Music) Text(s string) *Music {
+	out := *b
+	out.parts = append(append([]Part{}, b.parts...), Part{Text: s})
+	return &out
+} // ordered
+
+// === *Video — VideoGeneration builder ===
+
+// Video accumulates configuration for a VideoGeneration
+// call. Chain methods return new instances (immutable); skipped
+// terminals live in hand-written text.go / image.go.
+type Video struct {
+	client     *Client
+	middleware []MiddlewareFn
+	model      string
+	raw        bool
+	parts      []Part
+}
+
+func (b *Video) AddMiddleware(fns ...MiddlewareFn) *Video {
+	out := *b
+	out.middleware = append(append([]MiddlewareFn{}, b.middleware...), fns...)
+	return &out
+}
+func (b *Video) Model(name string) *Video { out := *b; out.model = name; return &out }
+func (b *Video) Raw() *Video              { out := *b; out.raw = true; return &out }
+func (b *Video) Text(s string) *Video {
 	out := *b
 	out.parts = append(append([]Part{}, b.parts...), Part{Text: s})
 	return &out
