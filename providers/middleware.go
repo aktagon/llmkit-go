@@ -48,6 +48,8 @@ const (
 	//
 	OpImageGeneration MiddlewareOp = "image_generation"
 	//
+	OpMusicGeneration MiddlewareOp = "music_generation"
+	//
 	OpModelsList MiddlewareOp = "models_list"
 )
 

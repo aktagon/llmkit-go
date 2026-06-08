@@ -7,6 +7,15 @@ import (
 )
 
 //
+type AudioData struct {
+	//
+	MimeType string
+
+	//
+	Bytes []byte
+}
+
+//
 type BatchHandle struct {
 	//
 	ID string
@@ -121,6 +130,27 @@ type ModelInfo struct {
 
 	//
 	Created int
+
+	//
+	Raw json.RawMessage
+}
+
+//
+type MusicResponse struct {
+	//
+	Audio []AudioData
+
+	//
+	Text string
+
+	//
+	Usage Usage
+
+	//
+	FinishReason string
+
+	//
+	FinishMessage string
 
 	//
 	Raw json.RawMessage

@@ -37,9 +37,12 @@ type ImageRequest struct {
 //
 //
 //
+//
+//
 type Part struct {
-	Text  string
-	Image *MediaRef
+	Text   string
+	Image  *MediaRef
+	Lyrics string
 }
 
 //
