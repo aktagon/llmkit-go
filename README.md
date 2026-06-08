@@ -281,6 +281,40 @@ reachable through `ExtraFields(...)` — they spread into the request's
 `parameters` block. Vertex's `:predict` response does not carry token
 counts; `resp.Tokens` stays zero.
 
+### Music — text-to-music
+
+Generate audio from a text prompt. Use the typed-builder chain on
+`c.Music`; the trailing `Generate(ctx, prompt)` argument is the prompt
+text. Decoded audio bytes come back on `resp.Audio[0].Bytes`.
+
+```go
+c := llmkit.Vertex(token).WithBaseURL(vertexBaseURL)
+resp, err := c.Music.Model("lyria-002").
+    Generate(ctx, "a calm, slow instrumental with warm piano and soft strings")
+os.WriteFile("out.wav", resp.Audio[0].Bytes, 0o644)
+```
+
+Models that support vocals take lyrics via the `.Lyrics(...)` chain
+method (use section tags like `[verse]` / `[chorus]`):
+
+```go
+c := llmkit.New(providers.Google, key)
+resp, err := c.Music.Model("lyria-3-pro-preview").
+    Lyrics("[verse] neon lights over the avenue").
+    Generate(ctx, "dream pop, 90 bpm")
+```
+
+Instrumental-only models reject lyrics before the request is sent.
+
+| Provider | Model(s)                                       | Lyrics | Output     |
+| -------- | ---------------------------------------------- | ------ | ---------- |
+| Vertex   | `lyria-002` (Lyria 2)                          | no     | WAV (~30s) |
+| Google   | `lyria-3-pro-preview`, `lyria-3-clip-preview`  | yes    | MP3        |
+| MiniMax  | `music-2.6`                                    | yes    | MP3        |
+
+Vertex Lyria 2 uses the same OAuth bearer flow as Vertex Imagen above.
+See `examples/music-gen` for an end-to-end runnable sample.
+
 ### Safety Settings
 
 Control content filtering for Gemini providers. `SafetySettings` applies to text
