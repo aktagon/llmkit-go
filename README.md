@@ -93,16 +93,19 @@ Streaming with a trailing-handle iterator. `Stream` returns a
 `*TextStream`; range over `Chunks()` to consume deltas, then read
 `Response()` for the accumulated text + token counts:
 
+<!-- llmkit:include go/examples/stream/main.go#stream -->
 ```go
-stream := c.Text.System("Count to 5").Stream(ctx, "Go")
+stream := c.Text.System("Be brief").Stream(context.Background(), "Tell me a one-line joke")
 for chunk, err := range stream.Chunks() {
-    if err != nil {
-        return err
-    }
-    fmt.Print(chunk)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Print(chunk)
 }
+fmt.Println()
 final := stream.Response()
-fmt.Println("\ntokens:", final.Usage.Input, "in,", final.Usage.Output, "out")
+fmt.Printf("input=%d output=%d finish_reason=%s\n",
+	final.Usage.Input, final.Usage.Output, final.FinishReason)
 ```
 
 Breaking the range loop cancels the producer goroutine cleanly.
