@@ -642,3 +642,24 @@ func TestRequestWire_VideoZhipu(t *testing.T) {
 	})
 	assertRequestWireGolden(t, "video-zhipu", body)
 }
+
+// TestRequestWire_VideoTogether witnesses the Together video-submit body:
+// {model, prompt} POSTed to /v2/videos — structurally identical to the Grok
+// and Zhipu submit bodies (the shared {model, prompt} arm). The lifecycle
+// divergence (poll path, status values, outputs.video_url) is delivery-side,
+// exercised by the unit tests, not the request-wire suite.
+//
+// WIRE-005 provenance: NOT live-anchored (no Together key available). The body
+// is the documented Together text-to-video submit (api.together.xyz): prompt is
+// the only required field beyond model on the prompt-only hot path. WIRE watch:
+// Together's API may require width/height — the SDK ships the prompt-only body
+// for now (matches grok/zhipu scope).
+func TestRequestWire_VideoTogether(t *testing.T) {
+	body, _ := captureBody(t, providers.Together, func(c *Client) {
+		_, err := c.Video.Model(wireVideoTogetherModel).Submit(context.Background(), wireVideoTogetherPrompt)
+		if err != nil {
+			t.Fatalf("video submit together call: %v", err)
+		}
+	})
+	assertRequestWireGolden(t, "video-together", body)
+}

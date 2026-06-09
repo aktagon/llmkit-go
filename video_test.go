@@ -198,6 +198,100 @@ func TestVideoWaitFailedZhipu(t *testing.T) {
 	}
 }
 
+const togetherVideoModel = "minimax/video-01-director"
+
+// togetherVideoServer serves the Together submit + poll endpoints. Submit
+// returns the poll handle as the top-level `id` with status=queued; the poll
+// GET /v2/videos/{id} returns status=in_progress for the first pendingPolls
+// calls, then the supplied done body.
+func togetherVideoServer(t *testing.T, pendingPolls int32, doneBody map[string]any) *httptest.Server {
+	t.Helper()
+	var polls int32
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
+			t.Errorf("expected bearer auth, got %q", got)
+		}
+		switch {
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/v2/videos"):
+			var body map[string]any
+			json.NewDecoder(r.Body).Decode(&body)
+			if body["model"] != togetherVideoModel {
+				t.Errorf("expected model %q, got %v", togetherVideoModel, body["model"])
+			}
+			if body["prompt"] == "" {
+				t.Error("expected non-empty prompt in submit body")
+			}
+			json.NewEncoder(w).Encode(map[string]any{"id": "together-vid-1", "status": "queued"})
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/v2/videos/together-vid-1"):
+			if atomic.AddInt32(&polls, 1) <= pendingPolls {
+				json.NewEncoder(w).Encode(map[string]any{"status": "in_progress"})
+				return
+			}
+			json.NewEncoder(w).Encode(doneBody)
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			http.Error(w, "unexpected", http.StatusNotFound)
+		}
+	}))
+}
+
+func TestSubmitAndWaitVideoTogether(t *testing.T) {
+	fastVideoPoll(t)
+	done := map[string]any{
+		"status":  "completed",
+		"outputs": map[string]any{"video_url": "https://api.together.xyz/files/v.mp4"},
+		"model":   togetherVideoModel,
+	}
+	server := togetherVideoServer(t, 2, done)
+	defer server.Close()
+
+	c := New(providers.Together, "test-token")
+	c.provider.baseURL = server.URL
+
+	h, err := c.Video.Model(togetherVideoModel).Submit(context.Background(), "a drone shot over the alps")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h.ID != "together-vid-1" {
+		t.Fatalf("expected handle id from top-level id (together-vid-1), got %q", h.ID)
+	}
+
+	resp, err := h.Wait(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Videos) != 1 {
+		t.Fatalf("expected 1 video, got %d", len(resp.Videos))
+	}
+	if got := resp.Videos[0].URL; got != "https://api.together.xyz/files/v.mp4" {
+		t.Errorf("expected outputs.video_url, got %q", got)
+	}
+	if got := resp.Videos[0].MimeType; got != "video/mp4" {
+		t.Errorf("expected video/mp4, got %q", got)
+	}
+	if len(resp.Videos[0].Bytes) != 0 {
+		t.Error("url delivery must not download bytes")
+	}
+}
+
+func TestVideoWaitCancelledTogether(t *testing.T) {
+	fastVideoPoll(t)
+	done := map[string]any{"status": "cancelled"}
+	server := togetherVideoServer(t, 0, done)
+	defer server.Close()
+
+	c := New(providers.Together, "test-token")
+	c.provider.baseURL = server.URL
+
+	h, err := c.Video.Model(togetherVideoModel).Submit(context.Background(), "cancelled prompt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = h.Wait(context.Background()); err == nil {
+		t.Fatal("expected error for cancelled job")
+	}
+}
+
 func TestVideoRawCapturesPollBody(t *testing.T) {
 	fastVideoPoll(t)
 	done := map[string]any{"status": "done", "video": map[string]any{"url": "https://vidgen.x.ai/x.mp4"}}
