@@ -622,3 +622,23 @@ func TestRequestWire_VideoGrok(t *testing.T) {
 	})
 	assertRequestWireGolden(t, "video-grok", body)
 }
+
+// TestRequestWire_VideoZhipu witnesses the Zhipu CogVideoX video-submit body:
+// {model, prompt} POSTed to /v4/videos/generations — structurally identical to
+// the Grok submit body, which is the point of the shared {model, prompt} arm.
+// The lifecycle divergence (poll path, task_status, video_result) is delivery-
+// side, exercised by the unit tests, not the request-wire suite.
+//
+// WIRE-005 provenance: NOT live-anchored (no Zhipu key available). The body is
+// the documented CogVideoX text-to-video submit (bigmodel.cn): prompt is the
+// only required field beyond model; optional quality/with_audio/size/fps/
+// duration are unset on the prompt-only hot path.
+func TestRequestWire_VideoZhipu(t *testing.T) {
+	body, _ := captureBody(t, providers.Zhipu, func(c *Client) {
+		_, err := c.Video.Model(wireVideoZhipuModel).Submit(context.Background(), wireVideoZhipuPrompt)
+		if err != nil {
+			t.Fatalf("video submit zhipu call: %v", err)
+		}
+	})
+	assertRequestWireGolden(t, "video-zhipu", body)
+}
