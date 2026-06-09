@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/aktagon/llmkit-go/providers"
@@ -163,8 +164,6 @@ func submitVideo(ctx context.Context, p Provider, req VideoRequest, opts ...Vide
 //
 //
 //
-//
-//
 func dispatchVideoSubmit(
 	ctx context.Context,
 	client *http.Client,
@@ -188,21 +187,8 @@ func dispatchVideoSubmit(
 	if err != nil {
 		return "", fmt.Errorf("marshal video request: %w", err)
 	}
-	//
-	//
-	//
-	//
-	var idField string
-	switch vgCfg.WireShape {
-	case providers.VideoShapeGrok:
-		idField = "request_id"
-	case providers.VideoShapeZhipu:
-		idField = "id"
-	default:
-		return "", fmt.Errorf("video submit: unsupported wire shape %q", vgCfg.WireShape)
-	}
 
-	respBody, err := doPost(ctx, client, base+vgCfg.GenEndpoint, jsonBody, headers)
+	respBody, err := doPost(ctx, client, resolveVideoEndpoint(base, vgCfg.GenEndpoint), jsonBody, headers)
 	if err != nil {
 		return "", err
 	}
@@ -211,9 +197,9 @@ func dispatchVideoSubmit(
 		return "", fmt.Errorf("unmarshal video submit response: %w", err)
 	}
 
-	id, _ := raw[idField].(string)
+	id := lookupHandleField(raw, vgCfg.SubmitHandleField)
 	if id == "" {
-		return "", fmt.Errorf("video submit: empty %s", idField)
+		return "", fmt.Errorf("video submit: empty handle field %q", vgCfg.SubmitHandleField)
 	}
 	return id, nil
 }
@@ -248,7 +234,7 @@ func (h VideoHandle) Wait(ctx context.Context, opts ...VideoOption) (VideoRespon
 	}
 
 	deadline := time.Now().Add(videoPollTimeout)
-	pollURL := videoPollURL(vgCfg.WireShape, base, h.ID)
+	pollURL := videoPollURL(vgCfg.PollEndpoint, base, h.ID)
 
 	for {
 		select {
@@ -284,13 +270,37 @@ func (h VideoHandle) Wait(ctx context.Context, opts ...VideoOption) (VideoRespon
 //
 //
 //
-func videoPollURL(wireShape, base, id string) string {
-	switch wireShape {
-	case providers.VideoShapeZhipu:
-		return base + "/v4/async-result/" + id
-	default: // VideoGrok
-		return base + "/v1/videos/" + id
+func videoPollURL(pollEndpoint, base, id string) string {
+	return resolveVideoEndpoint(base, strings.Replace(pollEndpoint, "{id}", id, 1))
+}
+
+//
+//
+//
+func resolveVideoEndpoint(base, endpoint string) string {
+	if strings.HasPrefix(endpoint, "http://") || strings.HasPrefix(endpoint, "https://") {
+		return endpoint
 	}
+	return base + endpoint
+}
+
+//
+//
+//
+func lookupHandleField(raw map[string]any, path string) string {
+	if path == "" {
+		return ""
+	}
+	var cur any = raw
+	for _, seg := range strings.Split(path, ".") {
+		m, ok := cur.(map[string]any)
+		if !ok {
+			return ""
+		}
+		cur = m[seg]
+	}
+	s, _ := cur.(string)
+	return s
 }
 
 //
