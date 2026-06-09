@@ -160,6 +160,11 @@ func submitVideo(ctx context.Context, p Provider, req VideoRequest, opts ...Vide
 //
 //
 //
+//
+//
+//
+//
+//
 func dispatchVideoSubmit(
 	ctx context.Context,
 	client *http.Client,
@@ -175,30 +180,32 @@ func dispatchVideoSubmit(
 		base = cfg.BaseURL
 	}
 
-	switch vgCfg.WireShape {
-	default: // VideoGrok
-		body := map[string]any{
-			"model":  model,
-			"prompt": joinPromptText(parts),
-		}
-		jsonBody, err := json.Marshal(body)
-		if err != nil {
-			return "", fmt.Errorf("marshal video request: %w", err)
-		}
-		respBody, err := doPost(ctx, client, base+vgCfg.GenEndpoint, jsonBody, headers)
-		if err != nil {
-			return "", err
-		}
-		var raw map[string]any
-		if err := json.Unmarshal(respBody, &raw); err != nil {
-			return "", fmt.Errorf("unmarshal video submit response: %w", err)
-		}
-		requestID, _ := raw["request_id"].(string)
-		if requestID == "" {
-			return "", fmt.Errorf("video submit: empty request_id")
-		}
-		return requestID, nil
+	body := map[string]any{
+		"model":  model,
+		"prompt": joinPromptText(parts),
 	}
+	jsonBody, err := json.Marshal(body)
+	if err != nil {
+		return "", fmt.Errorf("marshal video request: %w", err)
+	}
+	respBody, err := doPost(ctx, client, base+vgCfg.GenEndpoint, jsonBody, headers)
+	if err != nil {
+		return "", err
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(respBody, &raw); err != nil {
+		return "", fmt.Errorf("unmarshal video submit response: %w", err)
+	}
+
+	idField := "request_id"
+	if vgCfg.WireShape == providers.VideoShapeZhipu {
+		idField = "id"
+	}
+	id, _ := raw[idField].(string)
+	if id == "" {
+		return "", fmt.Errorf("video submit: empty %s", idField)
+	}
+	return id, nil
 }
 
 //
@@ -266,13 +273,20 @@ func (h VideoHandle) Wait(ctx context.Context, opts ...VideoOption) (VideoRespon
 //
 //
 //
+//
 func videoPollURL(wireShape, base, id string) string {
 	switch wireShape {
+	case providers.VideoShapeZhipu:
+		return base + "/v4/async-result/" + id
 	default: // VideoGrok
 		return base + "/v1/videos/" + id
 	}
 }
 
+//
+//
+//
+//
 //
 //
 //
@@ -289,20 +303,33 @@ func parseVideoPoll(vgCfg *providers.VideoGenDef, body []byte) (VideoResponse, b
 		return VideoResponse{}, false, fmt.Errorf("unmarshal video poll response: %w", err)
 	}
 
-	status, _ := raw["status"].(string)
-	switch status {
-	case "done":
-		return videoResultFromGrok(vgCfg, raw), true, nil
-	case "failed", "expired":
-		msg := status
-		if errObj, ok := raw["error"].(map[string]any); ok {
-			if m, ok := errObj["message"].(string); ok && m != "" {
-				msg = m
-			}
+	switch vgCfg.WireShape {
+	case providers.VideoShapeZhipu:
+		status, _ := raw["task_status"].(string)
+		switch status {
+		case "SUCCESS":
+			return videoResultFromZhipu(vgCfg, raw), true, nil
+		case "FAIL":
+			return VideoResponse{}, false, fmt.Errorf("video generation failed")
+		default: // PROCESSING (or any non-terminal status)
+			return VideoResponse{}, false, nil
 		}
-		return VideoResponse{}, false, fmt.Errorf("video generation %s: %s", status, msg)
-	default: // pending (or any non-terminal status)
-		return VideoResponse{}, false, nil
+	default: // VideoGrok
+		status, _ := raw["status"].(string)
+		switch status {
+		case "done":
+			return videoResultFromGrok(vgCfg, raw), true, nil
+		case "failed", "expired":
+			msg := status
+			if errObj, ok := raw["error"].(map[string]any); ok {
+				if m, ok := errObj["message"].(string); ok && m != "" {
+					msg = m
+				}
+			}
+			return VideoResponse{}, false, fmt.Errorf("video generation %s: %s", status, msg)
+		default: // pending (or any non-terminal status)
+			return VideoResponse{}, false, nil
+		}
 	}
 }
 
@@ -321,6 +348,24 @@ func videoResultFromGrok(vgCfg *providers.VideoGenDef, raw map[string]any) Video
 		data.DurationSeconds = int(d)
 	}
 	return VideoResponse{Videos: []VideoData{data}}
+}
+
+//
+//
+//
+//
+func videoResultFromZhipu(vgCfg *providers.VideoGenDef, raw map[string]any) VideoResponse {
+	mime := videoFallbackMime(vgCfg)
+	results, _ := raw["video_result"].([]any)
+	if len(results) == 0 {
+		return VideoResponse{}
+	}
+	first, _ := results[0].(map[string]any)
+	if first == nil {
+		return VideoResponse{}
+	}
+	url, _ := first["url"].(string)
+	return VideoResponse{Videos: []VideoData{{MimeType: mime, URL: url}}}
 }
 
 //
