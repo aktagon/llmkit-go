@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/aktagon/llmkit-go/providers"
@@ -154,17 +155,15 @@ func submitVideo(ctx context.Context, p Provider, req VideoRequest, opts ...Vide
 	return VideoHandle{ID: requestID, Provider: p, Raw: o.raw}, nil
 }
 
-// dispatchVideoSubmit POSTs the submit body per wire shape (never by provider
-// name — the wire shape is the single discriminator) and returns the
-// provider-assigned poll handle id.
+// dispatchVideoSubmit POSTs the submit body and returns the provider-assigned
+// poll handle id. The submit endpoint is resolved from config (absolute when
+// the video host differs from the chat base) and the handle id is read from the
+// config-declared dotted path (OQ7) — both are A-Box facts, not per-wire-shape
+// code branches.
 //
-//   - VideoGrok (xAI) and VideoZhipu (CogVideoX) share the simple {model,
-//     prompt} submit body. They differ only in which response field carries
-//     the poll handle: Grok returns it as request_id, Zhipu as the top-level
-//     id (alongside its own request_id, which is NOT the poll key).
-//
-// A future shape with a different submit body (e.g. minimax's hex body or
-// Google's generateContent) adds an arm that builds its own body.
+// VideoGrok (xAI) and VideoZhipu (CogVideoX) share the simple {model, prompt}
+// submit body. A future shape with a different body (minimax hex, Google
+// generateContent) adds a wire-shape arm here that builds its own body.
 func dispatchVideoSubmit(
 	ctx context.Context,
 	client *http.Client,
@@ -188,21 +187,8 @@ func dispatchVideoSubmit(
 	if err != nil {
 		return "", fmt.Errorf("marshal video request: %w", err)
 	}
-	// The submit-response field holding the poll handle id is the only
-	// per-shape difference for the {model, prompt} body. An unknown shape is
-	// rejected (not defaulted to Grok) so a config-only provider addition that
-	// forgets its runtime arm fails loud instead of silently POSTing as Grok.
-	var idField string
-	switch vgCfg.WireShape {
-	case providers.VideoShapeGrok:
-		idField = "request_id"
-	case providers.VideoShapeZhipu:
-		idField = "id"
-	default:
-		return "", fmt.Errorf("video submit: unsupported wire shape %q", vgCfg.WireShape)
-	}
 
-	respBody, err := doPost(ctx, client, base+vgCfg.GenEndpoint, jsonBody, headers)
+	respBody, err := doPost(ctx, client, resolveVideoEndpoint(base, vgCfg.GenEndpoint), jsonBody, headers)
 	if err != nil {
 		return "", err
 	}
@@ -211,9 +197,9 @@ func dispatchVideoSubmit(
 		return "", fmt.Errorf("unmarshal video submit response: %w", err)
 	}
 
-	id, _ := raw[idField].(string)
+	id := lookupHandleField(raw, vgCfg.SubmitHandleField)
 	if id == "" {
-		return "", fmt.Errorf("video submit: empty %s", idField)
+		return "", fmt.Errorf("video submit: empty handle field %q", vgCfg.SubmitHandleField)
 	}
 	return id, nil
 }
@@ -248,7 +234,7 @@ func (h VideoHandle) Wait(ctx context.Context, opts ...VideoOption) (VideoRespon
 	}
 
 	deadline := time.Now().Add(videoPollTimeout)
-	pollURL := videoPollURL(vgCfg.WireShape, base, h.ID)
+	pollURL := videoPollURL(vgCfg.PollEndpoint, base, h.ID)
 
 	for {
 		select {
@@ -280,17 +266,41 @@ func (h VideoHandle) Wait(ctx context.Context, opts ...VideoOption) (VideoRespon
 	}
 }
 
-// videoPollURL builds the per-wire-shape poll URL.
-//
-//   - VideoGrok: GET {base}/v1/videos/{id}.
-//   - VideoZhipu: GET {base}/v4/async-result/{id}.
-func videoPollURL(wireShape, base, id string) string {
-	switch wireShape {
-	case providers.VideoShapeZhipu:
-		return base + "/v4/async-result/" + id
-	default: // VideoGrok
-		return base + "/v1/videos/" + id
+// videoPollURL builds the poll URL from the config template (OQ7): the {id}
+// placeholder is substituted with the handle id, and the result is used
+// verbatim when absolute or joined to base otherwise. The poll path is an
+// A-Box fact (hasVideoPollEndpoint), not a per-wire-shape code constant.
+func videoPollURL(pollEndpoint, base, id string) string {
+	return resolveVideoEndpoint(base, strings.Replace(pollEndpoint, "{id}", id, 1))
+}
+
+// resolveVideoEndpoint returns endpoint verbatim when it is absolute
+// (http(s)://, e.g. a video host that differs from the chat base), else joins
+// it to base.
+func resolveVideoEndpoint(base, endpoint string) string {
+	if strings.HasPrefix(endpoint, "http://") || strings.HasPrefix(endpoint, "https://") {
+		return endpoint
 	}
+	return base + endpoint
+}
+
+// lookupHandleField descends a dotted path (e.g. "id", "output.task_id")
+// through the decoded submit response and returns the string at the leaf, or
+// "" if any segment is missing or the leaf is not a string.
+func lookupHandleField(raw map[string]any, path string) string {
+	if path == "" {
+		return ""
+	}
+	var cur any = raw
+	for _, seg := range strings.Split(path, ".") {
+		m, ok := cur.(map[string]any)
+		if !ok {
+			return ""
+		}
+		cur = m[seg]
+	}
+	s, _ := cur.(string)
+	return s
 }
 
 // parseVideoPoll decodes one poll response per wire shape. Returns
