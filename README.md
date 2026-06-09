@@ -318,6 +318,29 @@ Instrumental-only models reject lyrics before the request is sent.
 Vertex Lyria 2 uses the same OAuth bearer flow as Vertex Imagen above.
 See `examples/music-gen` for an end-to-end runnable sample.
 
+### Video — text-to-video
+
+Generate video from a text prompt. Video generation is asynchronous: `Submit`
+returns a `VideoHandle` immediately; `Wait` polls until the job finishes. The
+result carries a temporary hosted URL on `resp.Videos[0].URL` — download it
+yourself (url delivery). The handle holds the request id and provider, so
+`Wait` works across process boundaries.
+
+```go
+c := llmkit.Grok(key)
+h, err := c.Video.Model("grok-imagine-video").
+    Submit(ctx, "a slow cinematic drone shot over snow-capped alpine peaks")
+resp, err := h.Wait(ctx)
+v := resp.Videos[0]
+fmt.Printf("url=%s duration=%ds mime=%s\n", v.URL, v.DurationSeconds, v.MimeType)
+```
+
+| Provider | Model                | Delivery |
+| -------- | -------------------- | -------- |
+| Grok     | `grok-imagine-video` | URL      |
+
+See `examples/video-gen` for an end-to-end runnable sample.
+
 ### Safety Settings
 
 Control content filtering for Gemini providers. `SafetySettings` applies to text
