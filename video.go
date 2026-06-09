@@ -317,6 +317,9 @@ func lookupHandleField(raw map[string]any, path string) string {
 //
 //   - VideoZhipu: {"task_status": "SUCCESS"|"FAIL"|"PROCESSING",
 //     "video_result": [{"url"}]}.
+//
+//   - VideoTogether: {"status": "completed"|"failed"|"cancelled"|"queued"|
+//     "in_progress", "outputs": {"video_url"}}.
 func parseVideoPoll(vgCfg *providers.VideoGenDef, body []byte) (VideoResponse, bool, error) {
 	var raw map[string]any
 	if err := json.Unmarshal(body, &raw); err != nil {
@@ -324,6 +327,16 @@ func parseVideoPoll(vgCfg *providers.VideoGenDef, body []byte) (VideoResponse, b
 	}
 
 	switch vgCfg.WireShape {
+	case providers.VideoShapeTogether:
+		status, _ := raw["status"].(string)
+		switch status {
+		case "completed":
+			return videoResultFromTogether(vgCfg, raw), true, nil
+		case "failed", "cancelled":
+			return VideoResponse{}, false, fmt.Errorf("video generation %s", status)
+		default: // queued, in_progress (or any non-terminal status)
+			return VideoResponse{}, false, nil
+		}
 	case providers.VideoShapeZhipu:
 		status, _ := raw["task_status"].(string)
 		switch status {
@@ -387,6 +400,20 @@ func videoResultFromZhipu(vgCfg *providers.VideoGenDef, raw map[string]any) Vide
 		return VideoResponse{}
 	}
 	url, _ := first["url"].(string)
+	return VideoResponse{Videos: []VideoData{{MimeType: mime, URL: url}}}
+}
+
+// videoResultFromTogether extracts the finished video from a Together poll
+// response. Together uses url delivery: the finished video sits at
+// outputs.video_url, so VideoData.URL carries the temporary Together-hosted
+// URL and Bytes stays empty.
+func videoResultFromTogether(vgCfg *providers.VideoGenDef, raw map[string]any) VideoResponse {
+	mime := videoFallbackMime(vgCfg)
+	outputs, _ := raw["outputs"].(map[string]any)
+	if outputs == nil {
+		return VideoResponse{}
+	}
+	url, _ := outputs["video_url"].(string)
 	return VideoResponse{Videos: []VideoData{{MimeType: mime, URL: url}}}
 }
 
