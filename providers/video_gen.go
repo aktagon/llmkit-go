@@ -5,8 +5,9 @@ package providers
 // Video wire-shape discriminators. Each selects the submit-body build,
 // poll mechanism, and result-extraction transform.
 const (
-	VideoShapeGrok  = "VideoGrok"
-	VideoShapeZhipu = "VideoZhipu"
+	VideoShapeGrok     = "VideoGrok"
+	VideoShapeZhipu    = "VideoZhipu"
+	VideoShapeTogether = "VideoTogether"
 )
 
 // Video output-delivery modes. Drive whether the runtime downloads
@@ -32,7 +33,7 @@ type VideoModelDef struct {
 // GenEndpoint is the submit endpoint path. RequiresOutputURI is true
 // only for caller-S3 providers (Bedrock Nova Reel).
 type VideoGenDef struct {
-	WireShape         string // VideoShapeGrok | VideoShapeZhipu
+	WireShape         string // VideoShapeGrok | VideoShapeZhipu | VideoShapeTogether
 	OutputDelivery    string // VideoDeliveryDownload | VideoDeliveryURL | VideoDeliveryOutputURI
 	GenEndpoint       string // submit endpoint path (relative, or absolute http(s)://)
 	PollEndpoint      string // poll endpoint template with {id} (relative or absolute)
@@ -61,6 +62,25 @@ func VideoGenConfig(provider string) *VideoGenDef {
 					MaxDurationSeconds:   15,
 					OutputMime:           "video/mp4",
 					Resolutions:          []string{"480p", "720p"},
+				},
+			},
+		}
+	case Together:
+		return &VideoGenDef{
+			WireShape:         "VideoTogether",
+			OutputDelivery:    "DeliveryURL",
+			GenEndpoint:       "/v2/videos",
+			PollEndpoint:      "/v2/videos/{id}",
+			SubmitHandleField: "id",
+			RequiresOutputURI: false,
+			Models: []VideoModelDef{
+				{
+					ModelID:              "minimax/video-01-director",
+					Label:                "MiniMax Video 01 Director (Together)",
+					SupportsImageToVideo: true,
+					MaxDurationSeconds:   6,
+					OutputMime:           "video/mp4",
+					Resolutions:          []string{"720p"},
 				},
 			},
 		}
