@@ -188,6 +188,20 @@ func dispatchVideoSubmit(
 	if err != nil {
 		return "", fmt.Errorf("marshal video request: %w", err)
 	}
+	// The submit-response field holding the poll handle id is the only
+	// per-shape difference for the {model, prompt} body. An unknown shape is
+	// rejected (not defaulted to Grok) so a config-only provider addition that
+	// forgets its runtime arm fails loud instead of silently POSTing as Grok.
+	var idField string
+	switch vgCfg.WireShape {
+	case providers.VideoShapeGrok:
+		idField = "request_id"
+	case providers.VideoShapeZhipu:
+		idField = "id"
+	default:
+		return "", fmt.Errorf("video submit: unsupported wire shape %q", vgCfg.WireShape)
+	}
+
 	respBody, err := doPost(ctx, client, base+vgCfg.GenEndpoint, jsonBody, headers)
 	if err != nil {
 		return "", err
@@ -197,10 +211,6 @@ func dispatchVideoSubmit(
 		return "", fmt.Errorf("unmarshal video submit response: %w", err)
 	}
 
-	idField := "request_id"
-	if vgCfg.WireShape == providers.VideoShapeZhipu {
-		idField = "id"
-	}
 	id, _ := raw[idField].(string)
 	if id == "" {
 		return "", fmt.Errorf("video submit: empty %s", idField)
@@ -314,7 +324,7 @@ func parseVideoPoll(vgCfg *providers.VideoGenDef, body []byte) (VideoResponse, b
 		default: // PROCESSING (or any non-terminal status)
 			return VideoResponse{}, false, nil
 		}
-	default: // VideoGrok
+	case providers.VideoShapeGrok:
 		status, _ := raw["status"].(string)
 		switch status {
 		case "done":
@@ -330,6 +340,8 @@ func parseVideoPoll(vgCfg *providers.VideoGenDef, body []byte) (VideoResponse, b
 		default: // pending (or any non-terminal status)
 			return VideoResponse{}, false, nil
 		}
+	default:
+		return VideoResponse{}, false, fmt.Errorf("video poll: unsupported wire shape %q", vgCfg.WireShape)
 	}
 }
 
