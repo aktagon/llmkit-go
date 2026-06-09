@@ -156,10 +156,15 @@ func submitVideo(ctx context.Context, p Provider, req VideoRequest, opts ...Vide
 
 // dispatchVideoSubmit POSTs the submit body per wire shape (never by provider
 // name — the wire shape is the single discriminator) and returns the
-// provider-assigned request id.
+// provider-assigned poll handle id.
 //
-//   - VideoGrok (xAI): POST {model, prompt} to GenEndpoint; the response is
-//     {"request_id": "..."}.
+//   - VideoGrok (xAI) and VideoZhipu (CogVideoX) share the simple {model,
+//     prompt} submit body. They differ only in which response field carries
+//     the poll handle: Grok returns it as request_id, Zhipu as the top-level
+//     id (alongside its own request_id, which is NOT the poll key).
+//
+// A future shape with a different submit body (e.g. minimax's hex body or
+// Google's generateContent) adds an arm that builds its own body.
 func dispatchVideoSubmit(
 	ctx context.Context,
 	client *http.Client,
@@ -175,30 +180,32 @@ func dispatchVideoSubmit(
 		base = cfg.BaseURL
 	}
 
-	switch vgCfg.WireShape {
-	default: // VideoGrok
-		body := map[string]any{
-			"model":  model,
-			"prompt": joinPromptText(parts),
-		}
-		jsonBody, err := json.Marshal(body)
-		if err != nil {
-			return "", fmt.Errorf("marshal video request: %w", err)
-		}
-		respBody, err := doPost(ctx, client, base+vgCfg.GenEndpoint, jsonBody, headers)
-		if err != nil {
-			return "", err
-		}
-		var raw map[string]any
-		if err := json.Unmarshal(respBody, &raw); err != nil {
-			return "", fmt.Errorf("unmarshal video submit response: %w", err)
-		}
-		requestID, _ := raw["request_id"].(string)
-		if requestID == "" {
-			return "", fmt.Errorf("video submit: empty request_id")
-		}
-		return requestID, nil
+	body := map[string]any{
+		"model":  model,
+		"prompt": joinPromptText(parts),
 	}
+	jsonBody, err := json.Marshal(body)
+	if err != nil {
+		return "", fmt.Errorf("marshal video request: %w", err)
+	}
+	respBody, err := doPost(ctx, client, base+vgCfg.GenEndpoint, jsonBody, headers)
+	if err != nil {
+		return "", err
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(respBody, &raw); err != nil {
+		return "", fmt.Errorf("unmarshal video submit response: %w", err)
+	}
+
+	idField := "request_id"
+	if vgCfg.WireShape == providers.VideoShapeZhipu {
+		idField = "id"
+	}
+	id, _ := raw[idField].(string)
+	if id == "" {
+		return "", fmt.Errorf("video submit: empty %s", idField)
+	}
+	return id, nil
 }
 
 // Wait polls the provider until the video job reaches a terminal state, then
@@ -266,14 +273,18 @@ func (h VideoHandle) Wait(ctx context.Context, opts ...VideoOption) (VideoRespon
 // videoPollURL builds the per-wire-shape poll URL.
 //
 //   - VideoGrok: GET {base}/v1/videos/{id}.
+//   - VideoZhipu: GET {base}/v4/async-result/{id}.
 func videoPollURL(wireShape, base, id string) string {
 	switch wireShape {
+	case providers.VideoShapeZhipu:
+		return base + "/v4/async-result/" + id
 	default: // VideoGrok
 		return base + "/v1/videos/" + id
 	}
 }
 
-// parseVideoPoll decodes one poll response. Returns (resp, done, err):
+// parseVideoPoll decodes one poll response per wire shape. Returns
+// (resp, done, err):
 //
 //   - done=false when the job is still pending (caller keeps polling).
 //
@@ -283,26 +294,42 @@ func videoPollURL(wireShape, base, id string) string {
 //
 //   - VideoGrok: {"status": "...", "video": {"url", "duration"}} or
 //     {"status": "failed", "error": {"code", "message"}}.
+//
+//   - VideoZhipu: {"task_status": "SUCCESS"|"FAIL"|"PROCESSING",
+//     "video_result": [{"url"}]}.
 func parseVideoPoll(vgCfg *providers.VideoGenDef, body []byte) (VideoResponse, bool, error) {
 	var raw map[string]any
 	if err := json.Unmarshal(body, &raw); err != nil {
 		return VideoResponse{}, false, fmt.Errorf("unmarshal video poll response: %w", err)
 	}
 
-	status, _ := raw["status"].(string)
-	switch status {
-	case "done":
-		return videoResultFromGrok(vgCfg, raw), true, nil
-	case "failed", "expired":
-		msg := status
-		if errObj, ok := raw["error"].(map[string]any); ok {
-			if m, ok := errObj["message"].(string); ok && m != "" {
-				msg = m
-			}
+	switch vgCfg.WireShape {
+	case providers.VideoShapeZhipu:
+		status, _ := raw["task_status"].(string)
+		switch status {
+		case "SUCCESS":
+			return videoResultFromZhipu(vgCfg, raw), true, nil
+		case "FAIL":
+			return VideoResponse{}, false, fmt.Errorf("video generation failed")
+		default: // PROCESSING (or any non-terminal status)
+			return VideoResponse{}, false, nil
 		}
-		return VideoResponse{}, false, fmt.Errorf("video generation %s: %s", status, msg)
-	default: // pending (or any non-terminal status)
-		return VideoResponse{}, false, nil
+	default: // VideoGrok
+		status, _ := raw["status"].(string)
+		switch status {
+		case "done":
+			return videoResultFromGrok(vgCfg, raw), true, nil
+		case "failed", "expired":
+			msg := status
+			if errObj, ok := raw["error"].(map[string]any); ok {
+				if m, ok := errObj["message"].(string); ok && m != "" {
+					msg = m
+				}
+			}
+			return VideoResponse{}, false, fmt.Errorf("video generation %s: %s", status, msg)
+		default: // pending (or any non-terminal status)
+			return VideoResponse{}, false, nil
+		}
 	}
 }
 
@@ -321,6 +348,24 @@ func videoResultFromGrok(vgCfg *providers.VideoGenDef, raw map[string]any) Video
 		data.DurationSeconds = int(d)
 	}
 	return VideoResponse{Videos: []VideoData{data}}
+}
+
+// videoResultFromZhipu extracts the finished video from a Zhipu CogVideoX
+// poll response. Zhipu uses url delivery: the finished video sits at
+// video_result[0].url (no duration field on the result), so VideoData.URL
+// carries the temporary Zhipu-hosted URL and Bytes stays empty.
+func videoResultFromZhipu(vgCfg *providers.VideoGenDef, raw map[string]any) VideoResponse {
+	mime := videoFallbackMime(vgCfg)
+	results, _ := raw["video_result"].([]any)
+	if len(results) == 0 {
+		return VideoResponse{}
+	}
+	first, _ := results[0].(map[string]any)
+	if first == nil {
+		return VideoResponse{}
+	}
+	url, _ := first["url"].(string)
+	return VideoResponse{Videos: []VideoData{{MimeType: mime, URL: url}}}
 }
 
 // videoFallbackMime returns the first model's output MIME, used when the
