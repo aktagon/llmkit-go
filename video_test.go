@@ -103,6 +103,101 @@ func TestSubmitAndWaitVideoGrok(t *testing.T) {
 	}
 }
 
+const zhipuVideoModel = "cogvideox-3"
+
+// zhipuVideoServer serves the Zhipu CogVideoX submit + async-result endpoints.
+// Submit returns the poll handle as the top-level `id` (Zhipu's own
+// `request_id` is present but is NOT the poll key); the async-result poll
+// returns `task_status: PROCESSING` for the first pendingPolls calls, then the
+// supplied done body.
+func zhipuVideoServer(t *testing.T, pendingPolls int32, doneBody map[string]any) *httptest.Server {
+	t.Helper()
+	var polls int32
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
+			t.Errorf("expected bearer auth, got %q", got)
+		}
+		switch {
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/v4/videos/generations"):
+			var body map[string]any
+			json.NewDecoder(r.Body).Decode(&body)
+			if body["model"] != zhipuVideoModel {
+				t.Errorf("expected model %q, got %v", zhipuVideoModel, body["model"])
+			}
+			if body["prompt"] == "" {
+				t.Error("expected non-empty prompt in submit body")
+			}
+			json.NewEncoder(w).Encode(map[string]any{"id": "zhipu-vid-1", "request_id": "rq-xyz", "task_status": "PROCESSING"})
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/v4/async-result/zhipu-vid-1"):
+			if atomic.AddInt32(&polls, 1) <= pendingPolls {
+				json.NewEncoder(w).Encode(map[string]any{"task_status": "PROCESSING"})
+				return
+			}
+			json.NewEncoder(w).Encode(doneBody)
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			http.Error(w, "unexpected", http.StatusNotFound)
+		}
+	}))
+}
+
+func TestSubmitAndWaitVideoZhipu(t *testing.T) {
+	fastVideoPoll(t)
+	done := map[string]any{
+		"task_status":  "SUCCESS",
+		"video_result": []any{map[string]any{"url": "https://cogvideo.bigmodel.cn/abc/v.mp4", "cover_image_url": "https://cogvideo.bigmodel.cn/abc/c.jpg"}},
+		"model":        zhipuVideoModel,
+	}
+	server := zhipuVideoServer(t, 2, done)
+	defer server.Close()
+
+	c := New(providers.Zhipu, "test-token")
+	c.provider.baseURL = server.URL
+
+	h, err := c.Video.Model(zhipuVideoModel).Submit(context.Background(), "a drone shot over the alps")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h.ID != "zhipu-vid-1" {
+		t.Fatalf("expected handle id from top-level id (zhipu-vid-1), got %q", h.ID)
+	}
+
+	resp, err := h.Wait(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Videos) != 1 {
+		t.Fatalf("expected 1 video, got %d", len(resp.Videos))
+	}
+	if got := resp.Videos[0].URL; got != "https://cogvideo.bigmodel.cn/abc/v.mp4" {
+		t.Errorf("expected video_result url, got %q", got)
+	}
+	if got := resp.Videos[0].MimeType; got != "video/mp4" {
+		t.Errorf("expected video/mp4, got %q", got)
+	}
+	if len(resp.Videos[0].Bytes) != 0 {
+		t.Error("url delivery must not download bytes")
+	}
+}
+
+func TestVideoWaitFailedZhipu(t *testing.T) {
+	fastVideoPoll(t)
+	done := map[string]any{"task_status": "FAIL"}
+	server := zhipuVideoServer(t, 0, done)
+	defer server.Close()
+
+	c := New(providers.Zhipu, "test-token")
+	c.provider.baseURL = server.URL
+
+	h, err := c.Video.Model(zhipuVideoModel).Submit(context.Background(), "blocked prompt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = h.Wait(context.Background()); err == nil {
+		t.Fatal("expected error for failed job")
+	}
+}
+
 func TestVideoRawCapturesPollBody(t *testing.T) {
 	fastVideoPoll(t)
 	done := map[string]any{"status": "done", "video": map[string]any{"url": "https://vidgen.x.ai/x.mp4"}}
