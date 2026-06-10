@@ -20,8 +20,8 @@ resp, err := c.Text.System("You are helpful").Prompt(ctx, "Hello")
 fmt.Println(resp.Text)
 ```
 
-`c.Text`, `c.Image`, `c.Agent`, and `c.Upload` are pointer fields on
-`*Client`, not method calls. Chain methods clone the prototype and
+`c.Text`, `c.Image`, `c.Music`, `c.Video`, `c.Agent`, and `c.Upload` are
+pointer fields on `*Client`, not method calls. Chain methods clone the prototype and
 return a fresh builder, so successive `c.Text.System(...)` calls each
 yield a new `*Text`.
 
