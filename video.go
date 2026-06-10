@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -266,6 +267,15 @@ func (h VideoHandle) Wait(ctx context.Context, opts ...VideoOption) (VideoRespon
 			return VideoResponse{}, err
 		}
 		if done {
+			// Two-hop providers (vgCfg.FileEndpoint set, e.g. minimax): the
+			// terminal poll carried a file reference, not a video URL — resolve
+			// it with one more GET before returning.
+			if vgCfg.FileEndpoint != "" {
+				resp, err = resolveVideoFile(ctx, client, base, vgCfg, respBody, headers)
+				if err != nil {
+					return VideoResponse{}, err
+				}
+			}
 			if o.raw || h.Raw {
 				resp.Raw = append(json.RawMessage(nil), respBody...)
 			}
@@ -386,6 +396,19 @@ func parseVideoPoll(vgCfg *providers.VideoGenDef, body []byte) (VideoResponse, b
 		default: // PROCESSING (or any non-terminal status)
 			return VideoResponse{}, false, nil
 		}
+	case providers.VideoShapeMinimax:
+		// Two-hop: terminal-success yields a file_id, not a URL. Report done
+		// with an empty result; Wait performs the file-retrieve hop (gated on
+		// vgCfg.FileEndpoint) and fills the URL.
+		status, _ := raw["status"].(string)
+		switch status {
+		case "Success":
+			return VideoResponse{}, true, nil
+		case "Fail":
+			return VideoResponse{}, false, fmt.Errorf("video generation failed")
+		default: // Queueing, Preparing, Processing (or any non-terminal status)
+			return VideoResponse{}, false, nil
+		}
 	case providers.VideoShapeGrok:
 		status, _ := raw["status"].(string)
 		switch status {
@@ -467,6 +490,59 @@ func videoResultFromQwen(vgCfg *providers.VideoGenDef, raw map[string]any) Video
 		return VideoResponse{}
 	}
 	url, _ := output["video_url"].(string)
+	return VideoResponse{Videos: []VideoData{{MimeType: mime, URL: url}}}
+}
+
+// resolveVideoFile performs the two-hop file-retrieve step for providers whose
+// terminal poll yields a file reference rather than a finished video URL
+// (vgCfg.FileEndpoint set, e.g. minimax). It extracts the file id from the
+// terminal poll body, GETs the file endpoint (joined to the resolved video
+// base), and extracts the finished reference. The file-id and result
+// locations are wire-shape-keyed (the transform); the endpoint is config.
+func resolveVideoFile(ctx context.Context, client *http.Client, base string, vgCfg *providers.VideoGenDef, pollBody []byte, headers map[string]string) (VideoResponse, error) {
+	var poll map[string]any
+	if err := json.Unmarshal(pollBody, &poll); err != nil {
+		return VideoResponse{}, fmt.Errorf("unmarshal video poll for file hop: %w", err)
+	}
+	fileID := videoFileID(poll)
+	if fileID == "" {
+		return VideoResponse{}, fmt.Errorf("video file hop: terminal poll carried no file_id")
+	}
+	fileURL := base + strings.Replace(vgCfg.FileEndpoint, "{file_id}", fileID, 1)
+	fileBody, err := doGet(ctx, client, fileURL, headers)
+	if err != nil {
+		return VideoResponse{}, fmt.Errorf("video file retrieve: %w", err)
+	}
+	var file map[string]any
+	if err := json.Unmarshal(fileBody, &file); err != nil {
+		return VideoResponse{}, fmt.Errorf("unmarshal video file response: %w", err)
+	}
+	return videoResultFromMinimaxFile(vgCfg, file), nil
+}
+
+// videoFileID reads the minimax terminal poll's file_id, which the API may
+// encode as a string or a (large) integer.
+func videoFileID(poll map[string]any) string {
+	switch v := poll["file_id"].(type) {
+	case string:
+		return v
+	case float64:
+		return strconv.FormatInt(int64(v), 10)
+	default:
+		return ""
+	}
+}
+
+// videoResultFromMinimaxFile extracts the finished video from a minimax
+// file-retrieve response. minimax uses url delivery: the download URL sits at
+// file.download_url, so VideoData.URL carries it and Bytes stays empty.
+func videoResultFromMinimaxFile(vgCfg *providers.VideoGenDef, raw map[string]any) VideoResponse {
+	mime := videoFallbackMime(vgCfg)
+	fileObj, _ := raw["file"].(map[string]any)
+	if fileObj == nil {
+		return VideoResponse{}
+	}
+	url, _ := fileObj["download_url"].(string)
 	return VideoResponse{Videos: []VideoData{{MimeType: mime, URL: url}}}
 }
 
