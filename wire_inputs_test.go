@@ -85,6 +85,8 @@ const (
 	wireStructuredOutputNestedSchema            = "{\"type\":\"object\",\"properties\":{\"residence\":{\"type\":\"object\",\"properties\":{\"addresses\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"additionalProperties\":false}}},\"additionalProperties\":false}},\"additionalProperties\":false}"
 	wireVideoGrokModel                          = "grok-imagine-video"
 	wireVideoGrokPrompt                         = "A drone shot sweeping over snow-capped alpine peaks at sunrise"
+	wireVideoMinimaxModel                       = "MiniMax-Hailuo-2.3"
+	wireVideoMinimaxPrompt                      = "A drone shot sweeping over snow-capped alpine peaks at sunrise"
 	wireVideoQwenModel                          = "wan2.2-t2v-plus"
 	wireVideoQwenPrompt                         = "A drone shot sweeping over snow-capped alpine peaks at sunrise"
 	wireVideoTogetherModel                      = "minimax/video-01-director"
