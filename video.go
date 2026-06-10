@@ -174,10 +174,7 @@ func dispatchVideoSubmit(
 	parts []Part,
 	headers map[string]string,
 ) (string, error) {
-	base := p.BaseURL
-	if base == "" {
-		base = cfg.BaseURL
-	}
+	base := videoBaseURL(p, cfg, vgCfg)
 
 	body := map[string]any{
 		"model":  model,
@@ -188,7 +185,7 @@ func dispatchVideoSubmit(
 		return "", fmt.Errorf("marshal video request: %w", err)
 	}
 
-	respBody, err := doPost(ctx, client, resolveVideoEndpoint(base, vgCfg.GenEndpoint), jsonBody, headers)
+	respBody, err := doPost(ctx, client, base+vgCfg.GenEndpoint, jsonBody, headers)
 	if err != nil {
 		return "", err
 	}
@@ -222,10 +219,7 @@ func (h VideoHandle) Wait(ctx context.Context, opts ...VideoOption) (VideoRespon
 		return VideoResponse{}, &ValidationError{Field: "provider", Message: p.Name + " does not support video generation"}
 	}
 
-	base := p.BaseURL
-	if base == "" {
-		base = cfg.BaseURL
-	}
+	base := videoBaseURL(p, cfg, vgCfg)
 	headers := buildAuthHeaders(p, cfg)
 
 	client := o.httpClient
@@ -270,18 +264,23 @@ func (h VideoHandle) Wait(ctx context.Context, opts ...VideoOption) (VideoRespon
 //
 //
 //
-func videoPollURL(pollEndpoint, base, id string) string {
-	return resolveVideoEndpoint(base, strings.Replace(pollEndpoint, "{id}", id, 1))
+//
+//
+func videoBaseURL(p Provider, cfg providers.ProviderConfig, vgCfg *providers.VideoGenDef) string {
+	if p.BaseURL != "" {
+		return p.BaseURL
+	}
+	if vgCfg.VideoBaseURL != "" {
+		return vgCfg.VideoBaseURL
+	}
+	return cfg.BaseURL
 }
 
 //
 //
 //
-func resolveVideoEndpoint(base, endpoint string) string {
-	if strings.HasPrefix(endpoint, "http://") || strings.HasPrefix(endpoint, "https://") {
-		return endpoint
-	}
-	return base + endpoint
+func videoPollURL(pollEndpoint, base, id string) string {
+	return base + strings.Replace(pollEndpoint, "{id}", id, 1)
 }
 
 //
