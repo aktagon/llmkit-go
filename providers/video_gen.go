@@ -9,6 +9,7 @@ const (
 	VideoShapeZhipu    = "VideoZhipu"
 	VideoShapeTogether = "VideoTogether"
 	VideoShapeQwen     = "VideoQwen"
+	VideoShapeMinimax  = "VideoMinimax"
 )
 
 // Video output-delivery modes. Drive whether the runtime downloads
@@ -39,6 +40,7 @@ type VideoGenDef struct {
 	VideoBaseURL      string // base for the video API when it differs from the chat base; "" = use chat base
 	GenEndpoint       string // submit endpoint path, relative to the resolved video base
 	PollEndpoint      string // poll endpoint template with {id}, relative to the resolved video base
+	FileEndpoint      string // file-retrieve template with {file_id} for two-hop providers; "" = single-hop
 	SubmitHandleField string // dotted path to the poll handle id in the submit response
 	RequiresOutputURI bool
 	Models            []VideoModelDef
@@ -55,6 +57,7 @@ func VideoGenConfig(provider string) *VideoGenDef {
 			VideoBaseURL:      "",
 			GenEndpoint:       "/v1/videos/generations",
 			PollEndpoint:      "/v1/videos/{id}",
+			FileEndpoint:      "",
 			SubmitHandleField: "request_id",
 			RequiresOutputURI: false,
 			Models: []VideoModelDef{
@@ -68,6 +71,27 @@ func VideoGenConfig(provider string) *VideoGenDef {
 				},
 			},
 		}
+	case Minimax:
+		return &VideoGenDef{
+			WireShape:         "VideoMinimax",
+			OutputDelivery:    "DeliveryURL",
+			VideoBaseURL:      "https://api.minimax.io",
+			GenEndpoint:       "/v1/video_generation",
+			PollEndpoint:      "/v1/query/video_generation?task_id={id}",
+			FileEndpoint:      "/v1/files/retrieve?file_id={file_id}",
+			SubmitHandleField: "task_id",
+			RequiresOutputURI: false,
+			Models: []VideoModelDef{
+				{
+					ModelID:              "MiniMax-Hailuo-2.3",
+					Label:                "MiniMax Hailuo 2.3",
+					SupportsImageToVideo: true,
+					MaxDurationSeconds:   6,
+					OutputMime:           "video/mp4",
+					Resolutions:          []string{"1080p", "768p"},
+				},
+			},
+		}
 	case Qwen:
 		return &VideoGenDef{
 			WireShape:         "VideoQwen",
@@ -75,6 +99,7 @@ func VideoGenConfig(provider string) *VideoGenDef {
 			VideoBaseURL:      "https://dashscope-intl.aliyuncs.com",
 			GenEndpoint:       "/api/v1/services/aigc/video-generation/video-synthesis",
 			PollEndpoint:      "/api/v1/tasks/{id}",
+			FileEndpoint:      "",
 			SubmitHandleField: "output.task_id",
 			RequiresOutputURI: false,
 			Models: []VideoModelDef{
@@ -95,6 +120,7 @@ func VideoGenConfig(provider string) *VideoGenDef {
 			VideoBaseURL:      "",
 			GenEndpoint:       "/v2/videos",
 			PollEndpoint:      "/v2/videos/{id}",
+			FileEndpoint:      "",
 			SubmitHandleField: "id",
 			RequiresOutputURI: false,
 			Models: []VideoModelDef{
@@ -115,6 +141,7 @@ func VideoGenConfig(provider string) *VideoGenDef {
 			VideoBaseURL:      "",
 			GenEndpoint:       "/v4/videos/generations",
 			PollEndpoint:      "/v4/async-result/{id}",
+			FileEndpoint:      "",
 			SubmitHandleField: "id",
 			RequiresOutputURI: false,
 			Models: []VideoModelDef{
