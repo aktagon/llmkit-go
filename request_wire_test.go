@@ -95,7 +95,8 @@ func captureBody(t *testing.T, provider string, call func(c *Client)) ([]byte, h
 		// rule: extend the canned response, don't add capture helpers).
 		json.NewEncoder(w).Encode(map[string]any{
 			"id":         "msgbatch_test",
-			"request_id": "vid_test", // VID-007: Grok video-submit handle id
+			"request_id": "vid_test",                                                      // VID-007: Grok video-submit handle id
+			"output":     map[string]any{"task_id": "vid_test", "task_status": "PENDING"}, // VideoQwen: output.task_id submit handle
 
 			"candidates": []map[string]any{{"content": map[string]any{"parts": []map[string]any{
 				{"text": `{"color":"blue"}`},
@@ -662,4 +663,30 @@ func TestRequestWire_VideoTogether(t *testing.T) {
 		}
 	})
 	assertRequestWireGolden(t, "video-together", body)
+}
+
+// TestRequestWire_VideoQwen witnesses the Qwen (DashScope) video-submit body:
+// the NESTED {model, input:{prompt}} shape POSTed to the video-synthesis
+// endpoint — the first divergent submit body (the prior shapes share flat
+// {model, prompt}). It also asserts the load-bearing X-DashScope-Async: enable
+// header in-driver (mirrors the Anthropic beta-header assert; the async header
+// is required for the DashScope job-submit endpoint). The lifecycle divergence
+// (output.task_id handle, /api/v1/tasks/{id} poll, output.task_status,
+// output.video_url) is delivery-side, exercised by the unit tests.
+//
+// WIRE-005 provenance: NOT live-anchored (no DASHSCOPE_API_KEY available). The
+// body and header are the documented DashScope async text-to-video submit
+// (dashscope-intl.aliyuncs.com): the prompt is nested under input, the optional
+// parameters object is omitted on the prompt-only hot path.
+func TestRequestWire_VideoQwen(t *testing.T) {
+	body, headers := captureBody(t, providers.Qwen, func(c *Client) {
+		_, err := c.Video.Model(wireVideoQwenModel).Submit(context.Background(), wireVideoQwenPrompt)
+		if err != nil {
+			t.Fatalf("video submit qwen call: %v", err)
+		}
+	})
+	if got, want := headers.Get("X-DashScope-Async"), "enable"; got != want {
+		t.Errorf("X-DashScope-Async header: got %q, want %q", got, want)
+	}
+	assertRequestWireGolden(t, "video-qwen", body)
 }

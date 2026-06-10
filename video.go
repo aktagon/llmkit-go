@@ -161,9 +161,12 @@ func submitVideo(ctx context.Context, p Provider, req VideoRequest, opts ...Vide
 // config-declared dotted path (OQ7) — both are A-Box facts, not per-wire-shape
 // code branches.
 //
-// VideoGrok (xAI) and VideoZhipu (CogVideoX) share the simple {model, prompt}
-// submit body. A future shape with a different body (minimax hex, Google
-// generateContent) adds a wire-shape arm here that builds its own body.
+// VideoGrok (xAI), VideoZhipu (CogVideoX), and VideoTogether share the simple
+// {model, prompt} submit body. VideoQwen (DashScope) diverges: it nests the
+// prompt under an `input` object ({model, input:{prompt}}) and requires the
+// X-DashScope-Async: enable header. The body and any per-shape headers are
+// selected by wire shape (never provider name); the poll handle id is always
+// read from the config-declared dotted path (vgCfg.SubmitHandleField).
 func dispatchVideoSubmit(
 	ctx context.Context,
 	client *http.Client,
@@ -176,9 +179,22 @@ func dispatchVideoSubmit(
 ) (string, error) {
 	base := videoBaseURL(p, cfg, vgCfg)
 
-	body := map[string]any{
-		"model":  model,
-		"prompt": joinPromptText(parts),
+	var body map[string]any
+	switch vgCfg.WireShape {
+	case providers.VideoShapeQwen:
+		body = map[string]any{
+			"model": model,
+			"input": map[string]any{"prompt": joinPromptText(parts)},
+		}
+		// DashScope's async submit requires this header; without it the
+		// endpoint rejects the request. Set per-request only.
+		headers = cloneStringMap(headers)
+		headers["X-DashScope-Async"] = "enable"
+	default:
+		body = map[string]any{
+			"model":  model,
+			"prompt": joinPromptText(parts),
+		}
 	}
 	jsonBody, err := json.Marshal(body)
 	if err != nil {
@@ -260,6 +276,16 @@ func (h VideoHandle) Wait(ctx context.Context, opts ...VideoOption) (VideoRespon
 	}
 }
 
+// cloneStringMap returns a shallow copy so a per-request header mutation (e.g.
+// VideoQwen's X-DashScope-Async) never leaks into the shared auth-header map.
+func cloneStringMap(m map[string]string) map[string]string {
+	out := make(map[string]string, len(m)+1)
+	for k, v := range m {
+		out[k] = v
+	}
+	return out
+}
+
 // videoBaseURL resolves the base for the video API (Option D): an explicit
 // per-client override wins (tests point it at a mock; users at a proxy), else
 // the provider's distinct video base (vgCfg.VideoBaseURL) when the video host
@@ -319,6 +345,9 @@ func lookupHandleField(raw map[string]any, path string) string {
 //
 //   - VideoTogether: {"status": "completed"|"failed"|"cancelled"|"queued"|
 //     "in_progress", "outputs": {"video_url"}}.
+//
+//   - VideoQwen: {"output": {"task_status": "SUCCEEDED"|"FAILED"|"CANCELED"|
+//     "PENDING"|"RUNNING"|"UNKNOWN", "video_url"}}.
 func parseVideoPoll(vgCfg *providers.VideoGenDef, body []byte) (VideoResponse, bool, error) {
 	var raw map[string]any
 	if err := json.Unmarshal(body, &raw); err != nil {
@@ -326,6 +355,17 @@ func parseVideoPoll(vgCfg *providers.VideoGenDef, body []byte) (VideoResponse, b
 	}
 
 	switch vgCfg.WireShape {
+	case providers.VideoShapeQwen:
+		output, _ := raw["output"].(map[string]any)
+		status, _ := output["task_status"].(string)
+		switch status {
+		case "SUCCEEDED":
+			return videoResultFromQwen(vgCfg, raw), true, nil
+		case "FAILED", "CANCELED":
+			return VideoResponse{}, false, fmt.Errorf("video generation %s", status)
+		default: // PENDING, RUNNING, UNKNOWN (or any non-terminal status)
+			return VideoResponse{}, false, nil
+		}
 	case providers.VideoShapeTogether:
 		status, _ := raw["status"].(string)
 		switch status {
@@ -413,6 +453,20 @@ func videoResultFromTogether(vgCfg *providers.VideoGenDef, raw map[string]any) V
 		return VideoResponse{}
 	}
 	url, _ := outputs["video_url"].(string)
+	return VideoResponse{Videos: []VideoData{{MimeType: mime, URL: url}}}
+}
+
+// videoResultFromQwen extracts the finished video from a DashScope (Qwen) poll
+// response. Qwen uses url delivery: the finished video sits at
+// output.video_url, so VideoData.URL carries the temporary DashScope-hosted URL
+// and Bytes stays empty.
+func videoResultFromQwen(vgCfg *providers.VideoGenDef, raw map[string]any) VideoResponse {
+	mime := videoFallbackMime(vgCfg)
+	output, _ := raw["output"].(map[string]any)
+	if output == nil {
+		return VideoResponse{}
+	}
+	url, _ := output["video_url"].(string)
 	return VideoResponse{Videos: []VideoData{{MimeType: mime, URL: url}}}
 }
 
