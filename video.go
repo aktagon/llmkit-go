@@ -174,10 +174,7 @@ func dispatchVideoSubmit(
 	parts []Part,
 	headers map[string]string,
 ) (string, error) {
-	base := p.BaseURL
-	if base == "" {
-		base = cfg.BaseURL
-	}
+	base := videoBaseURL(p, cfg, vgCfg)
 
 	body := map[string]any{
 		"model":  model,
@@ -188,7 +185,7 @@ func dispatchVideoSubmit(
 		return "", fmt.Errorf("marshal video request: %w", err)
 	}
 
-	respBody, err := doPost(ctx, client, resolveVideoEndpoint(base, vgCfg.GenEndpoint), jsonBody, headers)
+	respBody, err := doPost(ctx, client, base+vgCfg.GenEndpoint, jsonBody, headers)
 	if err != nil {
 		return "", err
 	}
@@ -222,10 +219,7 @@ func (h VideoHandle) Wait(ctx context.Context, opts ...VideoOption) (VideoRespon
 		return VideoResponse{}, &ValidationError{Field: "provider", Message: p.Name + " does not support video generation"}
 	}
 
-	base := p.BaseURL
-	if base == "" {
-		base = cfg.BaseURL
-	}
+	base := videoBaseURL(p, cfg, vgCfg)
 	headers := buildAuthHeaders(p, cfg)
 
 	client := o.httpClient
@@ -266,22 +260,27 @@ func (h VideoHandle) Wait(ctx context.Context, opts ...VideoOption) (VideoRespon
 	}
 }
 
-// videoPollURL builds the poll URL from the config template (OQ7): the {id}
-// placeholder is substituted with the handle id, and the result is used
-// verbatim when absolute or joined to base otherwise. The poll path is an
-// A-Box fact (hasVideoPollEndpoint), not a per-wire-shape code constant.
-func videoPollURL(pollEndpoint, base, id string) string {
-	return resolveVideoEndpoint(base, strings.Replace(pollEndpoint, "{id}", id, 1))
+// videoBaseURL resolves the base for the video API (Option D): an explicit
+// per-client override wins (tests point it at a mock; users at a proxy), else
+// the provider's distinct video base (vgCfg.VideoBaseURL) when the video host
+// differs from chat, else the chat base. Submit/poll endpoints are always
+// relative paths joined to this base — never absolute — so the host stays a
+// fact, overridable and mockable.
+func videoBaseURL(p Provider, cfg providers.ProviderConfig, vgCfg *providers.VideoGenDef) string {
+	if p.BaseURL != "" {
+		return p.BaseURL
+	}
+	if vgCfg.VideoBaseURL != "" {
+		return vgCfg.VideoBaseURL
+	}
+	return cfg.BaseURL
 }
 
-// resolveVideoEndpoint returns endpoint verbatim when it is absolute
-// (http(s)://, e.g. a video host that differs from the chat base), else joins
-// it to base.
-func resolveVideoEndpoint(base, endpoint string) string {
-	if strings.HasPrefix(endpoint, "http://") || strings.HasPrefix(endpoint, "https://") {
-		return endpoint
-	}
-	return base + endpoint
+// videoPollURL builds the poll URL: the {id} placeholder in the config poll
+// template (an A-Box fact, OQ7) is substituted with the handle id and joined
+// to the resolved video base.
+func videoPollURL(pollEndpoint, base, id string) string {
+	return base + strings.Replace(pollEndpoint, "{id}", id, 1)
 }
 
 // lookupHandleField descends a dotted path (e.g. "id", "output.task_id")
