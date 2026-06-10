@@ -292,6 +292,116 @@ func TestVideoWaitCancelledTogether(t *testing.T) {
 	}
 }
 
+const qwenVideoModel = "wan2.2-t2v-plus"
+
+// qwenVideoServer serves the DashScope (Qwen) submit + poll endpoints. Submit
+// returns the poll handle as output.task_id (the dotted-path handle) with
+// output.task_status=PENDING and asserts the nested {model, input:{prompt}}
+// body plus the required X-DashScope-Async: enable header. The poll GET
+// /api/v1/tasks/{id} returns output.task_status=RUNNING for the first
+// pendingPolls calls, then the supplied done body.
+func qwenVideoServer(t *testing.T, pendingPolls int32, doneBody map[string]any) *httptest.Server {
+	t.Helper()
+	var polls int32
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
+			t.Errorf("expected bearer auth, got %q", got)
+		}
+		switch {
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/video-synthesis"):
+			if got := r.Header.Get("X-DashScope-Async"); got != "enable" {
+				t.Errorf("expected X-DashScope-Async: enable, got %q", got)
+			}
+			var body map[string]any
+			json.NewDecoder(r.Body).Decode(&body)
+			if body["model"] != qwenVideoModel {
+				t.Errorf("expected model %q, got %v", qwenVideoModel, body["model"])
+			}
+			input, ok := body["input"].(map[string]any)
+			if !ok {
+				t.Fatalf("expected nested input object, got %v", body["input"])
+			}
+			if input["prompt"] == "" || input["prompt"] == nil {
+				t.Error("expected non-empty input.prompt in submit body")
+			}
+			if _, hasFlat := body["prompt"]; hasFlat {
+				t.Error("submit body must NOT carry a top-level prompt (nested under input)")
+			}
+			json.NewEncoder(w).Encode(map[string]any{
+				"output":     map[string]any{"task_id": "qwen-vid-1", "task_status": "PENDING"},
+				"request_id": "req-1",
+			})
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/api/v1/tasks/qwen-vid-1"):
+			if atomic.AddInt32(&polls, 1) <= pendingPolls {
+				json.NewEncoder(w).Encode(map[string]any{"output": map[string]any{"task_status": "RUNNING"}})
+				return
+			}
+			json.NewEncoder(w).Encode(doneBody)
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			http.Error(w, "unexpected", http.StatusNotFound)
+		}
+	}))
+}
+
+func TestSubmitAndWaitVideoQwen(t *testing.T) {
+	fastVideoPoll(t)
+	done := map[string]any{
+		"output": map[string]any{
+			"task_status": "SUCCEEDED",
+			"video_url":   "https://dashscope-result.oss-cn.aliyuncs.com/v.mp4",
+		},
+	}
+	server := qwenVideoServer(t, 2, done)
+	defer server.Close()
+
+	c := New(providers.Qwen, "test-token")
+	c.provider.baseURL = server.URL
+
+	h, err := c.Video.Model(qwenVideoModel).Submit(context.Background(), "a drone shot over the alps")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h.ID != "qwen-vid-1" {
+		t.Fatalf("expected handle id from output.task_id (qwen-vid-1), got %q", h.ID)
+	}
+
+	resp, err := h.Wait(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Videos) != 1 {
+		t.Fatalf("expected 1 video, got %d", len(resp.Videos))
+	}
+	if got := resp.Videos[0].URL; got != "https://dashscope-result.oss-cn.aliyuncs.com/v.mp4" {
+		t.Errorf("expected output.video_url, got %q", got)
+	}
+	if got := resp.Videos[0].MimeType; got != "video/mp4" {
+		t.Errorf("expected video/mp4, got %q", got)
+	}
+	if len(resp.Videos[0].Bytes) != 0 {
+		t.Error("url delivery must not download bytes")
+	}
+}
+
+func TestVideoWaitFailedQwen(t *testing.T) {
+	fastVideoPoll(t)
+	done := map[string]any{"output": map[string]any{"task_status": "FAILED"}}
+	server := qwenVideoServer(t, 0, done)
+	defer server.Close()
+
+	c := New(providers.Qwen, "test-token")
+	c.provider.baseURL = server.URL
+
+	h, err := c.Video.Model(qwenVideoModel).Submit(context.Background(), "failed prompt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = h.Wait(context.Background()); err == nil {
+		t.Fatal("expected error for failed job")
+	}
+}
+
 func TestVideoRawCapturesPollBody(t *testing.T) {
 	fastVideoPoll(t)
 	done := map[string]any{"status": "done", "video": map[string]any{"url": "https://vidgen.x.ai/x.mp4"}}
