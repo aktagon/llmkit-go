@@ -35,8 +35,9 @@ type VideoModelDef struct {
 type VideoGenDef struct {
 	WireShape         string // VideoShapeGrok | VideoShapeZhipu | VideoShapeTogether
 	OutputDelivery    string // VideoDeliveryDownload | VideoDeliveryURL | VideoDeliveryOutputURI
-	GenEndpoint       string // submit endpoint path (relative, or absolute http(s)://)
-	PollEndpoint      string // poll endpoint template with {id} (relative or absolute)
+	VideoBaseURL      string // base for the video API when it differs from the chat base; "" = use chat base
+	GenEndpoint       string // submit endpoint path, relative to the resolved video base
+	PollEndpoint      string // poll endpoint template with {id}, relative to the resolved video base
 	SubmitHandleField string // dotted path to the poll handle id in the submit response
 	RequiresOutputURI bool
 	Models            []VideoModelDef
@@ -50,6 +51,7 @@ func VideoGenConfig(provider string) *VideoGenDef {
 		return &VideoGenDef{
 			WireShape:         "VideoGrok",
 			OutputDelivery:    "DeliveryURL",
+			VideoBaseURL:      "",
 			GenEndpoint:       "/v1/videos/generations",
 			PollEndpoint:      "/v1/videos/{id}",
 			SubmitHandleField: "request_id",
@@ -69,6 +71,7 @@ func VideoGenConfig(provider string) *VideoGenDef {
 		return &VideoGenDef{
 			WireShape:         "VideoTogether",
 			OutputDelivery:    "DeliveryURL",
+			VideoBaseURL:      "",
 			GenEndpoint:       "/v2/videos",
 			PollEndpoint:      "/v2/videos/{id}",
 			SubmitHandleField: "id",
@@ -88,6 +91,7 @@ func VideoGenConfig(provider string) *VideoGenDef {
 		return &VideoGenDef{
 			WireShape:         "VideoZhipu",
 			OutputDelivery:    "DeliveryURL",
+			VideoBaseURL:      "",
 			GenEndpoint:       "/v4/videos/generations",
 			PollEndpoint:      "/v4/async-result/{id}",
 			SubmitHandleField: "id",
