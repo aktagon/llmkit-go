@@ -96,6 +96,7 @@ func captureBody(t *testing.T, provider string, call func(c *Client)) ([]byte, h
 		json.NewEncoder(w).Encode(map[string]any{
 			"id":         "msgbatch_test",
 			"request_id": "vid_test",                                                      // VID-007: Grok video-submit handle id
+			"task_id":    "vid_test",                                                      // VideoMinimax: top-level task_id submit handle
 			"output":     map[string]any{"task_id": "vid_test", "task_status": "PENDING"}, // VideoQwen: output.task_id submit handle
 
 			"candidates": []map[string]any{{"content": map[string]any{"parts": []map[string]any{
@@ -689,4 +690,19 @@ func TestRequestWire_VideoQwen(t *testing.T) {
 		t.Errorf("X-DashScope-Async header: got %q, want %q", got, want)
 	}
 	assertRequestWireGolden(t, "video-qwen", body)
+}
+
+// TestRequestWire_VideoMinimax witnesses the MiniMax video-submit body: the
+// shared {model, prompt} POSTed to /v1/video_generation. The two-hop result
+// (poll file_id -> file-retrieve download_url) is delivery-side, exercised by
+// the unit tests, not the request-wire suite. WIRE-005: NOT live-anchored
+// (no MINIMAX key).
+func TestRequestWire_VideoMinimax(t *testing.T) {
+	body, _ := captureBody(t, providers.Minimax, func(c *Client) {
+		_, err := c.Video.Model(wireVideoMinimaxModel).Submit(context.Background(), wireVideoMinimaxPrompt)
+		if err != nil {
+			t.Fatalf("video submit minimax call: %v", err)
+		}
+	})
+	assertRequestWireGolden(t, "video-minimax", body)
 }

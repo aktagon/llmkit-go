@@ -402,6 +402,100 @@ func TestVideoWaitFailedQwen(t *testing.T) {
 	}
 }
 
+const minimaxVideoModel = "MiniMax-Hailuo-2.3"
+
+// minimaxVideoServer serves the MiniMax two-hop flow: submit -> {task_id};
+// query poll returns Processing for the first pendingPolls calls, then
+// {status:Success, file_id}; the file-retrieve hop returns the download URL.
+// file_id is served as a JSON number (minimax encodes it as an integer).
+func minimaxVideoServer(t *testing.T, pendingPolls int32, downloadURL string, failStatus bool) *httptest.Server {
+	t.Helper()
+	var polls int32
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/v1/video_generation"):
+			var body map[string]any
+			json.NewDecoder(r.Body).Decode(&body)
+			if body["model"] != minimaxVideoModel {
+				t.Errorf("expected model %q, got %v", minimaxVideoModel, body["model"])
+			}
+			if body["prompt"] == "" {
+				t.Error("expected non-empty prompt in submit body")
+			}
+			json.NewEncoder(w).Encode(map[string]any{"task_id": "mmtask-1", "base_resp": map[string]any{"status_code": 0}})
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/v1/query/video_generation"):
+			if got := r.URL.Query().Get("task_id"); got != "mmtask-1" {
+				t.Errorf("expected task_id mmtask-1 in poll query, got %q", got)
+			}
+			if failStatus {
+				json.NewEncoder(w).Encode(map[string]any{"status": "Fail"})
+				return
+			}
+			if atomic.AddInt32(&polls, 1) <= pendingPolls {
+				json.NewEncoder(w).Encode(map[string]any{"status": "Processing"})
+				return
+			}
+			json.NewEncoder(w).Encode(map[string]any{"status": "Success", "file_id": 99887766})
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/v1/files/retrieve"):
+			if got := r.URL.Query().Get("file_id"); got != "99887766" {
+				t.Errorf("expected file_id 99887766 in file-retrieve query, got %q", got)
+			}
+			json.NewEncoder(w).Encode(map[string]any{"file": map[string]any{"download_url": downloadURL}})
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			http.Error(w, "unexpected", http.StatusNotFound)
+		}
+	}))
+}
+
+func TestSubmitAndWaitVideoMinimax(t *testing.T) {
+	fastVideoPoll(t)
+	server := minimaxVideoServer(t, 2, "https://files.minimax.io/abc/v.mp4", false)
+	defer server.Close()
+
+	c := New(providers.Minimax, "test-token")
+	c.provider.baseURL = server.URL // override wins (Option D) → all three hops hit the mock
+
+	h, err := c.Video.Model(minimaxVideoModel).Submit(context.Background(), "a drone shot over the alps")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h.ID != "mmtask-1" {
+		t.Fatalf("expected handle id mmtask-1, got %q", h.ID)
+	}
+
+	resp, err := h.Wait(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Videos) != 1 {
+		t.Fatalf("expected 1 video, got %d", len(resp.Videos))
+	}
+	if got := resp.Videos[0].URL; got != "https://files.minimax.io/abc/v.mp4" {
+		t.Errorf("expected file.download_url from the two-hop fetch, got %q", got)
+	}
+	if len(resp.Videos[0].Bytes) != 0 {
+		t.Error("url delivery must not download bytes")
+	}
+}
+
+func TestVideoWaitFailedMinimax(t *testing.T) {
+	fastVideoPoll(t)
+	server := minimaxVideoServer(t, 0, "", true)
+	defer server.Close()
+
+	c := New(providers.Minimax, "test-token")
+	c.provider.baseURL = server.URL
+
+	h, err := c.Video.Model(minimaxVideoModel).Submit(context.Background(), "blocked prompt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = h.Wait(context.Background()); err == nil {
+		t.Fatal("expected error for Fail status")
+	}
+}
+
 func TestVideoRawCapturesPollBody(t *testing.T) {
 	fastVideoPoll(t)
 	done := map[string]any{"status": "done", "video": map[string]any{"url": "https://vidgen.x.ai/x.mp4"}}
