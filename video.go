@@ -164,6 +164,9 @@ func submitVideo(ctx context.Context, p Provider, req VideoRequest, opts ...Vide
 //
 //
 //
+//
+//
+//
 func dispatchVideoSubmit(
 	ctx context.Context,
 	client *http.Client,
@@ -176,9 +179,22 @@ func dispatchVideoSubmit(
 ) (string, error) {
 	base := videoBaseURL(p, cfg, vgCfg)
 
-	body := map[string]any{
-		"model":  model,
-		"prompt": joinPromptText(parts),
+	var body map[string]any
+	switch vgCfg.WireShape {
+	case providers.VideoShapeQwen:
+		body = map[string]any{
+			"model": model,
+			"input": map[string]any{"prompt": joinPromptText(parts)},
+		}
+		//
+		//
+		headers = cloneStringMap(headers)
+		headers["X-DashScope-Async"] = "enable"
+	default:
+		body = map[string]any{
+			"model":  model,
+			"prompt": joinPromptText(parts),
+		}
 	}
 	jsonBody, err := json.Marshal(body)
 	if err != nil {
@@ -262,6 +278,16 @@ func (h VideoHandle) Wait(ctx context.Context, opts ...VideoOption) (VideoRespon
 
 //
 //
+func cloneStringMap(m map[string]string) map[string]string {
+	out := make(map[string]string, len(m)+1)
+	for k, v := range m {
+		out[k] = v
+	}
+	return out
+}
+
+//
+//
 //
 //
 //
@@ -319,6 +345,9 @@ func lookupHandleField(raw map[string]any, path string) string {
 //
 //
 //
+//
+//
+//
 func parseVideoPoll(vgCfg *providers.VideoGenDef, body []byte) (VideoResponse, bool, error) {
 	var raw map[string]any
 	if err := json.Unmarshal(body, &raw); err != nil {
@@ -326,6 +355,17 @@ func parseVideoPoll(vgCfg *providers.VideoGenDef, body []byte) (VideoResponse, b
 	}
 
 	switch vgCfg.WireShape {
+	case providers.VideoShapeQwen:
+		output, _ := raw["output"].(map[string]any)
+		status, _ := output["task_status"].(string)
+		switch status {
+		case "SUCCEEDED":
+			return videoResultFromQwen(vgCfg, raw), true, nil
+		case "FAILED", "CANCELED":
+			return VideoResponse{}, false, fmt.Errorf("video generation %s", status)
+		default: // PENDING, RUNNING, UNKNOWN (or any non-terminal status)
+			return VideoResponse{}, false, nil
+		}
 	case providers.VideoShapeTogether:
 		status, _ := raw["status"].(string)
 		switch status {
@@ -413,6 +453,20 @@ func videoResultFromTogether(vgCfg *providers.VideoGenDef, raw map[string]any) V
 		return VideoResponse{}
 	}
 	url, _ := outputs["video_url"].(string)
+	return VideoResponse{Videos: []VideoData{{MimeType: mime, URL: url}}}
+}
+
+//
+//
+//
+//
+func videoResultFromQwen(vgCfg *providers.VideoGenDef, raw map[string]any) VideoResponse {
+	mime := videoFallbackMime(vgCfg)
+	output, _ := raw["output"].(map[string]any)
+	if output == nil {
+		return VideoResponse{}
+	}
+	url, _ := output["video_url"].(string)
 	return VideoResponse{Videos: []VideoData{{MimeType: mime, URL: url}}}
 }
 
