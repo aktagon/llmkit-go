@@ -10,6 +10,7 @@ const (
 	VideoShapeTogether = "VideoTogether"
 	VideoShapeQwen     = "VideoQwen"
 	VideoShapeMinimax  = "VideoMinimax"
+	VideoShapeVeo      = "VideoVeo"
 )
 
 // Video output-delivery modes. Drive whether the runtime downloads
@@ -50,6 +51,27 @@ type VideoGenDef struct {
 // if the provider does not support video generation.
 func VideoGenConfig(provider string) *VideoGenDef {
 	switch provider {
+	case Google:
+		return &VideoGenDef{
+			WireShape:         "VideoVeo",
+			OutputDelivery:    "DeliveryDownload",
+			VideoBaseURL:      "",
+			GenEndpoint:       "/v1beta/models/{model}:predictLongRunning",
+			PollEndpoint:      "/v1beta/{id}",
+			FileEndpoint:      "",
+			SubmitHandleField: "name",
+			RequiresOutputURI: false,
+			Models: []VideoModelDef{
+				{
+					ModelID:              "veo-3.1-generate-preview",
+					Label:                "Veo 3.1",
+					SupportsImageToVideo: true,
+					MaxDurationSeconds:   8,
+					OutputMime:           "video/mp4",
+					Resolutions:          []string{"1080p", "720p"},
+				},
+			},
+		}
 	case Grok:
 		return &VideoGenDef{
 			WireShape:         "VideoGrok",

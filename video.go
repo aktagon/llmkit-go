@@ -191,6 +191,14 @@ func dispatchVideoSubmit(
 		// endpoint rejects the request. Set per-request only.
 		headers = cloneStringMap(headers)
 		headers["X-DashScope-Async"] = "enable"
+	case providers.VideoShapeVeo:
+		// Veo carries the model in the submit PATH (:predictLongRunning), not
+		// the body — so the body has no model field. The prompt nests under
+		// instances[]; the optional parameters object {aspectRatio, resolution}
+		// is omitted on the prompt-only hot path.
+		body = map[string]any{
+			"instances": []map[string]any{{"prompt": joinPromptText(parts)}},
+		}
 	default:
 		body = map[string]any{
 			"model":  model,
@@ -202,7 +210,12 @@ func dispatchVideoSubmit(
 		return "", fmt.Errorf("marshal video request: %w", err)
 	}
 
-	respBody, err := doPost(ctx, client, base+vgCfg.GenEndpoint, jsonBody, headers)
+	// {model} in the submit endpoint is substituted with the per-call model
+	// (Veo's :predictLongRunning path); a no-op for providers that carry the
+	// model in the body. Query-param auth (Google ?key=) is appended last.
+	submitEndpoint := strings.ReplaceAll(vgCfg.GenEndpoint, "{model}", model)
+	submitURL := appendVideoAuth(base+submitEndpoint, p, cfg)
+	respBody, err := doPost(ctx, client, submitURL, jsonBody, headers)
 	if err != nil {
 		return "", err
 	}
@@ -245,7 +258,7 @@ func (h VideoHandle) Wait(ctx context.Context, opts ...VideoOption) (VideoRespon
 	}
 
 	deadline := time.Now().Add(videoPollTimeout)
-	pollURL := videoPollURL(vgCfg.PollEndpoint, base, h.ID)
+	pollURL := appendVideoAuth(videoPollURL(vgCfg.PollEndpoint, base, h.ID), p, cfg)
 
 	for {
 		select {
@@ -269,9 +282,19 @@ func (h VideoHandle) Wait(ctx context.Context, opts ...VideoOption) (VideoRespon
 		if done {
 			// Two-hop providers (vgCfg.FileEndpoint set, e.g. minimax): the
 			// terminal poll carried a file reference, not a video URL — resolve
-			// it with one more GET before returning.
+			// it with one more GET before delivery.
 			if vgCfg.FileEndpoint != "" {
 				resp, err = resolveVideoFile(ctx, client, base, vgCfg, respBody, headers)
+				if err != nil {
+					return VideoResponse{}, err
+				}
+			}
+			// Delivery dispatch (VID-005). download-delivery providers (Veo)
+			// returned a temporary fetch URI in VideoData.URL; the SDK GETs it
+			// and fills VideoData.Bytes (clearing URL, per the source-XOR
+			// contract). url- and output-uri-delivery providers leave the URL.
+			if vgCfg.OutputDelivery == providers.VideoDeliveryDownload {
+				resp, err = downloadVideoBytes(ctx, client, p, cfg, resp)
 				if err != nil {
 					return VideoResponse{}, err
 				}
@@ -314,7 +337,9 @@ func videoBaseURL(p Provider, cfg providers.ProviderConfig, vgCfg *providers.Vid
 
 // videoPollURL builds the poll URL: the {id} placeholder in the config poll
 // template (an A-Box fact, OQ7) is substituted with the handle id and joined
-// to the resolved video base.
+// to the resolved video base. The handle is interpolated verbatim as a path
+// segment — Veo's operation name (models/.../operations/...) carries slashes
+// that are part of the LRO poll path, so it is intentionally not escaped.
 func videoPollURL(pollEndpoint, base, id string) string {
 	return base + strings.Replace(pollEndpoint, "{id}", id, 1)
 }
@@ -409,6 +434,29 @@ func parseVideoPoll(vgCfg *providers.VideoGenDef, body []byte) (VideoResponse, b
 		default: // Queueing, Preparing, Processing (or any non-terminal status)
 			return VideoResponse{}, false, nil
 		}
+	case providers.VideoShapeVeo:
+		// Operation-based LRO: poll until done=true (the long-running-operation
+		// done flag, not a status string). A done op carrying an error object is
+		// a terminal failure; otherwise the response holds the finished video.
+		done, _ := raw["done"].(bool)
+		if !done {
+			return VideoResponse{}, false, nil
+		}
+		if errObj, ok := raw["error"].(map[string]any); ok {
+			msg, _ := errObj["message"].(string)
+			if msg == "" {
+				msg = "operation failed"
+			}
+			return VideoResponse{}, false, fmt.Errorf("video generation failed: %s", msg)
+		}
+		// A done op with neither error nor a usable uri must surface as an error,
+		// not a silent zero-byte success: download delivery would otherwise GET
+		// nothing and return a VideoData with empty Bytes and empty URL.
+		result := videoResultFromVeo(vgCfg, raw)
+		if len(result.Videos) == 0 || result.Videos[0].URL == "" {
+			return VideoResponse{}, false, fmt.Errorf("video generation: operation done but carried no video uri")
+		}
+		return result, true, nil
 	case providers.VideoShapeGrok:
 		status, _ := raw["status"].(string)
 		switch status {
@@ -544,6 +592,68 @@ func videoResultFromMinimaxFile(vgCfg *providers.VideoGenDef, raw map[string]any
 	}
 	url, _ := fileObj["download_url"].(string)
 	return VideoResponse{Videos: []VideoData{{MimeType: mime, URL: url}}}
+}
+
+// videoResultFromVeo extracts the finished video reference from a Veo LRO poll
+// response. Veo uses download delivery: the response carries a temporary
+// Files-API download URI at response.generateVideoResponse.generatedSamples[0]
+// .video.uri. parseVideoPoll places it in VideoData.URL; the Wait download
+// step (OutputDelivery=DeliveryDownload) then fetches the bytes into
+// VideoData.Bytes and clears URL.
+func videoResultFromVeo(vgCfg *providers.VideoGenDef, raw map[string]any) VideoResponse {
+	mime := videoFallbackMime(vgCfg)
+	response, _ := raw["response"].(map[string]any)
+	gvr, _ := response["generateVideoResponse"].(map[string]any)
+	samples, _ := gvr["generatedSamples"].([]any)
+	if len(samples) == 0 {
+		return VideoResponse{}
+	}
+	first, _ := samples[0].(map[string]any)
+	if first == nil {
+		return VideoResponse{}
+	}
+	video, _ := first["video"].(map[string]any)
+	uri, _ := video["uri"].(string)
+	return VideoResponse{Videos: []VideoData{{MimeType: mime, URL: uri}}}
+}
+
+// downloadVideoBytes fetches the finished video for download-delivery providers
+// (vgCfg.OutputDelivery == DeliveryDownload, e.g. Veo). The poll result placed
+// the temporary fetch URI in VideoData.URL; this GETs each one (carrying the
+// provider's query-param auth when applicable) and moves the payload into
+// VideoData.Bytes, clearing URL so the source-XOR contract holds (VID-004):
+// download delivery returns bytes, never a URL.
+func downloadVideoBytes(ctx context.Context, client *http.Client, p Provider, cfg providers.ProviderConfig, resp VideoResponse) (VideoResponse, error) {
+	headers := buildAuthHeaders(p, cfg)
+	for i := range resp.Videos {
+		if resp.Videos[i].URL == "" {
+			continue
+		}
+		fetchURL := appendVideoAuth(resp.Videos[i].URL, p, cfg)
+		data, err := doGet(ctx, client, fetchURL, headers)
+		if err != nil {
+			return VideoResponse{}, fmt.Errorf("video download: %w", err)
+		}
+		resp.Videos[i].Bytes = data
+		resp.Videos[i].URL = ""
+	}
+	return resp, nil
+}
+
+// appendVideoAuth appends the provider's query-param API key to a video URL
+// when the provider authenticates that way (Google ?key=); a no-op for
+// bearer-header providers (every other video provider). Picks ? or & based on
+// whether the URL already carries a query string (the Files-API download URI
+// arrives with ?alt=media).
+func appendVideoAuth(url string, p Provider, cfg providers.ProviderConfig) string {
+	if cfg.AuthScheme != providers.AuthQueryParamKey {
+		return url
+	}
+	sep := "?"
+	if strings.Contains(url, "?") {
+		sep = "&"
+	}
+	return url + sep + cfg.AuthQueryParam + "=" + p.APIKey
 }
 
 // videoFallbackMime returns the first model's output MIME, used when the
