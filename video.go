@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -29,6 +31,12 @@ type VideoRequest struct {
 	Model  string
 	Prompt string
 	Parts  []Part
+
+	// OutputURI is the caller-supplied destination S3 URI for output-uri
+	// delivery providers (Bedrock Nova Reel writes the mp4 to the caller's own
+	// S3 bucket). Required when the provider's config sets RequiresOutputURI;
+	// ignored otherwise. Set it on the builder via (*Video).OutputURI.
+	OutputURI string
 }
 
 // VideoData, VideoResponse, and VideoHandle are declared in go/structs.go
@@ -128,6 +136,12 @@ func submitVideo(ctx context.Context, p Provider, req VideoRequest, opts ...Vide
 	if findVideoModel(vgCfg, req.Model) == nil {
 		return VideoHandle{}, &ValidationError{Field: "model", Message: req.Model + " is not a known video-generation model for " + p.Name}
 	}
+	// VID-005: output-uri providers (Bedrock Nova Reel) write the video to the
+	// caller's own S3 bucket, so the submit MUST carry a destination URI. Reject
+	// pre-flight rather than letting the provider 400.
+	if vgCfg.RequiresOutputURI && req.OutputURI == "" {
+		return VideoHandle{}, &ValidationError{Field: "output_uri", Message: p.Name + " requires a caller output S3 URI; set OutputURI on the request"}
+	}
 
 	baseEvent := providers.Event{
 		Op:       providers.OpVideoGeneration,
@@ -145,7 +159,7 @@ func submitVideo(ctx context.Context, p Provider, req VideoRequest, opts ...Vide
 	}
 	headers := buildAuthHeaders(p, cfg)
 
-	requestID, err := dispatchVideoSubmit(ctx, client, p, cfg, vgCfg, req.Model, parts, headers)
+	requestID, err := dispatchVideoSubmit(ctx, client, p, cfg, vgCfg, req.Model, req.OutputURI, parts, headers)
 	postEv := baseEvent
 	postEv.Err = err
 	postEv.Duration = time.Since(start)
@@ -165,9 +179,11 @@ func submitVideo(ctx context.Context, p Provider, req VideoRequest, opts ...Vide
 // VideoGrok (xAI), VideoZhipu (CogVideoX), and VideoTogether share the simple
 // {model, prompt} submit body. VideoQwen (DashScope) diverges: it nests the
 // prompt under an `input` object ({model, input:{prompt}}) and requires the
-// X-DashScope-Async: enable header. The body and any per-shape headers are
-// selected by wire shape (never provider name); the poll handle id is always
-// read from the config-declared dotted path (vgCfg.SubmitHandleField).
+// X-DashScope-Async: enable header. VideoBedrock (Nova Reel) nests the prompt
+// under modelInput and carries the caller S3 URI under outputDataConfig, and is
+// signed with SigV4. The body and any per-shape headers are selected by wire
+// shape (never provider name); the poll handle id is always read from the
+// config-declared dotted path (vgCfg.SubmitHandleField).
 func dispatchVideoSubmit(
 	ctx context.Context,
 	client *http.Client,
@@ -175,6 +191,7 @@ func dispatchVideoSubmit(
 	cfg providers.ProviderConfig,
 	vgCfg *providers.VideoGenDef,
 	model string,
+	outputURI string,
 	parts []Part,
 	headers map[string]string,
 ) (string, error) {
@@ -199,6 +216,21 @@ func dispatchVideoSubmit(
 		body = map[string]any{
 			"instances": []map[string]any{{"prompt": joinPromptText(parts)}},
 		}
+	case providers.VideoShapeBedrock:
+		// Nova Reel carries the model in the BODY (modelId, unlike the Converse
+		// chat path) and writes the mp4 to the caller's S3 bucket. The optional
+		// videoGenerationConfig {durationSeconds, fps, dimension, seed} is
+		// omitted on the prompt-only hot path (provider defaults apply).
+		body = map[string]any{
+			"modelId": model,
+			"modelInput": map[string]any{
+				"taskType":          "TEXT_VIDEO",
+				"textToVideoParams": map[string]any{"text": joinPromptText(parts)},
+			},
+			"outputDataConfig": map[string]any{
+				"s3OutputDataConfig": map[string]any{"s3Uri": outputURI},
+			},
+		}
 	default:
 		body = map[string]any{
 			"model":  model,
@@ -215,7 +247,18 @@ func dispatchVideoSubmit(
 	// model in the body. Query-param auth (Google ?key=) is appended last.
 	submitEndpoint := strings.ReplaceAll(vgCfg.GenEndpoint, "{model}", model)
 	submitURL := appendVideoAuth(base+submitEndpoint, p, cfg)
-	respBody, err := doPost(ctx, client, submitURL, jsonBody, headers)
+
+	var respBody []byte
+	if cfg.AuthScheme == providers.AuthSigV4 {
+		// Bedrock signs every request (SigV4); the bearer/query-param header map
+		// does not apply. Region/secret/session come from the AWS env vars.
+		region := os.Getenv(cfg.RegionEnvVar)
+		secretKey := os.Getenv(cfg.SecretKeyEnvVar)
+		sessionToken := os.Getenv(cfg.SessionTokenEnvVar)
+		respBody, err = doSigV4Post(ctx, client, submitURL, jsonBody, p.APIKey, secretKey, sessionToken, region, cfg.ServiceName)
+	} else {
+		respBody, err = doPost(ctx, client, submitURL, jsonBody, headers)
+	}
 	if err != nil {
 		return "", err
 	}
@@ -258,7 +301,27 @@ func (h VideoHandle) Wait(ctx context.Context, opts ...VideoOption) (VideoRespon
 	}
 
 	deadline := time.Now().Add(videoPollTimeout)
-	pollURL := appendVideoAuth(videoPollURL(vgCfg.PollEndpoint, base, h.ID), p, cfg)
+
+	// Bedrock (SigV4) signs the poll GET and carries the handle ARN as a single
+	// percent-encoded path segment (its ':' and '/' must not split into extra
+	// segments). Every other provider uses the verbatim {id} substitution and
+	// the bearer/query-param auth path.
+	sigV4 := cfg.AuthScheme == providers.AuthSigV4
+	var pollURL, region, secretKey, sessionToken string
+	if sigV4 {
+		// url.PathEscape encodes the ARN's '/' to %2F (keeping it a single path
+		// segment) but leaves ':' literal — which matches Bedrock's SigV4
+		// canonicalization: the live-verified Converse chat path signs a model id
+		// carrying ':' literally and AWS accepts it, so ':' is not %3A-encoded for
+		// bedrock. The signer canonicalizes EscapedPath, so the signed path equals
+		// the wire path. (Poll signing itself is NOT live-anchored — no AWS key.)
+		pollURL = base + strings.Replace(vgCfg.PollEndpoint, "{id}", url.PathEscape(h.ID), 1)
+		region = os.Getenv(cfg.RegionEnvVar)
+		secretKey = os.Getenv(cfg.SecretKeyEnvVar)
+		sessionToken = os.Getenv(cfg.SessionTokenEnvVar)
+	} else {
+		pollURL = appendVideoAuth(videoPollURL(vgCfg.PollEndpoint, base, h.ID), p, cfg)
+	}
 
 	for {
 		select {
@@ -270,7 +333,13 @@ func (h VideoHandle) Wait(ctx context.Context, opts ...VideoOption) (VideoRespon
 			return VideoResponse{}, fmt.Errorf("video poll: timed out after %s waiting for %s", videoPollTimeout, h.ID)
 		}
 
-		respBody, err := doGet(ctx, client, pollURL, headers)
+		var respBody []byte
+		var err error
+		if sigV4 {
+			respBody, err = doSigV4Get(ctx, client, pollURL, p.APIKey, secretKey, sessionToken, region, cfg.ServiceName)
+		} else {
+			respBody, err = doGet(ctx, client, pollURL, headers)
+		}
 		if err != nil {
 			return VideoResponse{}, fmt.Errorf("video poll: %w", err)
 		}
@@ -329,10 +398,17 @@ func videoBaseURL(p Provider, cfg providers.ProviderConfig, vgCfg *providers.Vid
 	if p.BaseURL != "" {
 		return p.BaseURL
 	}
+	base := cfg.BaseURL
 	if vgCfg.VideoBaseURL != "" {
-		return vgCfg.VideoBaseURL
+		base = vgCfg.VideoBaseURL
 	}
-	return cfg.BaseURL
+	// SigV4 hosts carry a {region} placeholder (Bedrock:
+	// bedrock-runtime.{region}.amazonaws.com) resolved from the region env var;
+	// a no-op for every provider without the placeholder.
+	if cfg.RegionEnvVar != "" {
+		base = strings.ReplaceAll(base, "{region}", os.Getenv(cfg.RegionEnvVar))
+	}
+	return base
 }
 
 // videoPollURL builds the poll URL: the {id} placeholder in the config poll
@@ -457,6 +533,31 @@ func parseVideoPoll(vgCfg *providers.VideoGenDef, body []byte) (VideoResponse, b
 			return VideoResponse{}, false, fmt.Errorf("video generation: operation done but carried no video uri")
 		}
 		return result, true, nil
+	case providers.VideoShapeBedrock:
+		// Bedrock async-invoke status (GetAsyncInvoke): Completed terminal-success,
+		// Failed terminal-error (failureMessage), InProgress pending. On success
+		// the provider wrote the mp4 to the caller's S3 bucket and echoes the URI.
+		status, _ := raw["status"].(string)
+		switch status {
+		case "Completed":
+			// A Completed invocation that echoes no output s3 uri must surface as
+			// an error, not a silent empty success (mirrors the Veo done+no-uri
+			// guard): the caller would otherwise get a "successful" VideoResponse
+			// whose URL is empty and never find the mp4.
+			result := videoResultFromBedrock(vgCfg, raw)
+			if len(result.Videos) == 0 || result.Videos[0].URL == "" {
+				return VideoResponse{}, false, fmt.Errorf("video generation: completed but carried no output s3 uri")
+			}
+			return result, true, nil
+		case "Failed":
+			msg, _ := raw["failureMessage"].(string)
+			if msg == "" {
+				msg = "operation failed"
+			}
+			return VideoResponse{}, false, fmt.Errorf("video generation failed: %s", msg)
+		default: // InProgress (or any non-terminal status)
+			return VideoResponse{}, false, nil
+		}
 	case providers.VideoShapeGrok:
 		status, _ := raw["status"].(string)
 		switch status {
@@ -614,6 +715,21 @@ func videoResultFromVeo(vgCfg *providers.VideoGenDef, raw map[string]any) VideoR
 	}
 	video, _ := first["video"].(map[string]any)
 	uri, _ := video["uri"].(string)
+	return VideoResponse{Videos: []VideoData{{MimeType: mime, URL: uri}}}
+}
+
+// videoResultFromBedrock extracts the finished video reference from a Bedrock
+// Nova Reel poll response. Bedrock uses output-uri delivery: the provider wrote
+// the mp4 to the caller's own S3 bucket and the finished poll echoes the S3 URI
+// at outputDataConfig.s3OutputDataConfig.s3Uri. The SDK surfaces it as
+// VideoData.URL with Bytes empty — the Wait delivery step never downloads it
+// (only DeliveryDownload fetches), so the caller fetches from S3 with their own
+// tooling (VID-005; ADR-034 open question 4).
+func videoResultFromBedrock(vgCfg *providers.VideoGenDef, raw map[string]any) VideoResponse {
+	mime := videoFallbackMime(vgCfg)
+	odc, _ := raw["outputDataConfig"].(map[string]any)
+	s3, _ := odc["s3OutputDataConfig"].(map[string]any)
+	uri, _ := s3["s3Uri"].(string)
 	return VideoResponse{Videos: []VideoData{{MimeType: mime, URL: uri}}}
 }
 
