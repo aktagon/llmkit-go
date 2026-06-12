@@ -78,7 +78,12 @@ func sha256Hex(data []byte) string {
 }
 
 func canonicalURI(req *http.Request) string {
-	path := req.URL.Path
+	// Sign the escaped path (what goes on the wire), not the decoded Path, so a
+	// percent-encoded path segment — e.g. Bedrock's GetAsyncInvoke ARN, encoded
+	// as a single segment — canonicalizes to the same bytes the server receives.
+	// A no-op for the chat Converse path: its model id's ':' is not escaped in
+	// path mode, so EscapedPath equals Path there.
+	path := req.URL.EscapedPath()
 	if path == "" {
 		path = "/"
 	}
