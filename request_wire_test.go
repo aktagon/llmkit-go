@@ -97,6 +97,7 @@ func captureBody(t *testing.T, provider string, call func(c *Client)) ([]byte, h
 			"id":         "msgbatch_test",
 			"request_id": "vid_test",                                                      // VID-007: Grok video-submit handle id
 			"task_id":    "vid_test",                                                      // VideoMinimax: top-level task_id submit handle
+			"name":       "models/veo-test/operations/op_test",                            // VideoVeo: operation-name submit handle
 			"output":     map[string]any{"task_id": "vid_test", "task_status": "PENDING"}, // VideoQwen: output.task_id submit handle
 
 			"candidates": []map[string]any{{"content": map[string]any{"parts": []map[string]any{
@@ -705,4 +706,26 @@ func TestRequestWire_VideoMinimax(t *testing.T) {
 		}
 	})
 	assertRequestWireGolden(t, "video-minimax", body)
+}
+
+// TestRequestWire_VideoVeo witnesses the Google Veo video-submit body: the
+// nested {instances:[{prompt}]} shape — the first video-submit body with NO
+// model field, because Veo carries the model in the submit PATH
+// (/v1beta/models/{model}:predictLongRunning), not the body. The LRO lifecycle
+// (operation-name handle, done-flag poll, download delivery into VideoData.
+// Bytes) and the ?key= query-param auth are delivery-side, exercised by the
+// unit tests, not the request-wire suite.
+//
+// WIRE-005 provenance: live-anchored 2026-06-12 — the Veo round-trip on the
+// repro machine (GOOGLE_API_KEY) POSTed this body to
+// /v1beta/models/veo-3.1-generate-preview:predictLongRunning, received an
+// operation name, polled to done=true, and downloaded a real mp4.
+func TestRequestWire_VideoVeo(t *testing.T) {
+	body, _ := captureBody(t, providers.Google, func(c *Client) {
+		_, err := c.Video.Model(wireVideoGoogleModel).Submit(context.Background(), wireVideoGooglePrompt)
+		if err != nil {
+			t.Fatalf("video submit veo call: %v", err)
+		}
+	})
+	assertRequestWireGolden(t, "video-google", body)
 }

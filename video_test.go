@@ -496,6 +496,130 @@ func TestVideoWaitFailedMinimax(t *testing.T) {
 	}
 }
 
+const veoVideoModel = "veo-3.1-generate-preview"
+
+// veoVideoServer serves the Google Veo LRO flow: submit ->
+// {name:"models/.../operations/op-1"}; operation poll returns {done:false} for
+// the first pendingPolls calls, then a done op whose response carries the
+// Files-API video.uri (download delivery). The download hop GETs that uri and
+// returns raw mp4 bytes. Every hop must carry the ?key= query-param auth (Google
+// is the first video provider that is NOT bearer-header). The download uri is
+// served with a pre-existing ?alt=media query so the test also witnesses the
+// ?->& auth-append branch. When failOp is set the done op carries an error.
+func veoVideoServer(t *testing.T, pendingPolls int32, videoBytes []byte, failOp bool) *httptest.Server {
+	t.Helper()
+	var polls int32
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Query().Get("key"); got != "test-token" {
+			t.Errorf("expected ?key=test-token auth on %s %s, got %q", r.Method, r.URL.Path, got)
+		}
+		switch {
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/veo-3.1-generate-preview:predictLongRunning"):
+			var body map[string]any
+			json.NewDecoder(r.Body).Decode(&body)
+			if _, hasModel := body["model"]; hasModel {
+				t.Error("Veo submit body must NOT carry a model field (model is in the URL path)")
+			}
+			instances, ok := body["instances"].([]any)
+			if !ok || len(instances) != 1 {
+				t.Fatalf("expected instances[1] in submit body, got %v", body["instances"])
+			}
+			first, _ := instances[0].(map[string]any)
+			if first["prompt"] == "" || first["prompt"] == nil {
+				t.Error("expected non-empty instances[0].prompt in submit body")
+			}
+			json.NewEncoder(w).Encode(map[string]any{"name": "models/veo-3.1-generate-preview/operations/op-1"})
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/operations/op-1"):
+			if failOp {
+				json.NewEncoder(w).Encode(map[string]any{
+					"done":  true,
+					"error": map[string]any{"code": 3, "message": "prompt blocked by safety filter"},
+				})
+				return
+			}
+			if atomic.AddInt32(&polls, 1) <= pendingPolls {
+				json.NewEncoder(w).Encode(map[string]any{"done": false})
+				return
+			}
+			json.NewEncoder(w).Encode(map[string]any{
+				"done": true,
+				"response": map[string]any{"generateVideoResponse": map[string]any{
+					"generatedSamples": []any{map[string]any{
+						"video": map[string]any{"uri": srv.URL + "/v1beta/files/vid-file:download?alt=media"},
+					}},
+				}},
+			})
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/files/vid-file:download"):
+			if got := r.URL.Query().Get("alt"); got != "media" {
+				t.Errorf("expected the pre-existing alt=media to survive the auth append, got %q", got)
+			}
+			w.Header().Set("Content-Type", "video/mp4")
+			w.Write(videoBytes)
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			http.Error(w, "unexpected", http.StatusNotFound)
+		}
+	}))
+	return srv
+}
+
+func TestSubmitAndWaitVideoVeo(t *testing.T) {
+	fastVideoPoll(t)
+	wantBytes := []byte("\x00\x00\x00\x18ftypmp42 fake mp4 payload")
+	server := veoVideoServer(t, 2, wantBytes, false)
+	defer server.Close()
+
+	c := New(providers.Google, "test-token")
+	c.provider.baseURL = server.URL
+
+	h, err := c.Video.Model(veoVideoModel).Submit(context.Background(), "a drone shot over the alps at sunrise")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h.ID != "models/veo-3.1-generate-preview/operations/op-1" {
+		t.Fatalf("expected handle id from the operation name, got %q", h.ID)
+	}
+
+	resp, err := h.Wait(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Videos) != 1 {
+		t.Fatalf("expected 1 video, got %d", len(resp.Videos))
+	}
+	if got := string(resp.Videos[0].Bytes); got != string(wantBytes) {
+		t.Errorf("download delivery: expected fetched bytes, got %q", got)
+	}
+	if got := resp.Videos[0].URL; got != "" {
+		t.Errorf("download delivery must clear URL after fetching bytes (source-XOR), got %q", got)
+	}
+	if got := resp.Videos[0].MimeType; got != "video/mp4" {
+		t.Errorf("expected video/mp4, got %q", got)
+	}
+}
+
+func TestVideoWaitFailedVeo(t *testing.T) {
+	fastVideoPoll(t)
+	server := veoVideoServer(t, 0, nil, true)
+	defer server.Close()
+
+	c := New(providers.Google, "test-token")
+	c.provider.baseURL = server.URL
+
+	h, err := c.Video.Model(veoVideoModel).Submit(context.Background(), "blocked prompt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = h.Wait(context.Background())
+	if err == nil {
+		t.Fatal("expected error for failed (done+error) operation")
+	}
+	if !strings.Contains(err.Error(), "prompt blocked by safety filter") {
+		t.Errorf("expected operation error message, got %v", err)
+	}
+}
+
 func TestVideoRawCapturesPollBody(t *testing.T) {
 	fastVideoPoll(t)
 	done := map[string]any{"status": "done", "video": map[string]any{"url": "https://vidgen.x.ai/x.mp4"}}
