@@ -70,6 +70,19 @@ func TestCanonicalQueryString(t *testing.T) {
 	}
 }
 
+// TestCanonicalURIConversePathUnescaped pins the invariant the canonicalURI
+// EscapedPath() switch relies on: a Bedrock Converse path carrying a model id
+// with a ':' (the live-verified chat path) signs the ':' literally — EscapedPath
+// equals Path, so the switch does not regress chat signing.
+func TestCanonicalURIConversePathUnescaped(t *testing.T) {
+	req, _ := http.NewRequest("POST", "https://bedrock-runtime.us-east-1.amazonaws.com/model/anthropic.claude-sonnet-4-20250514-v1:0/converse", nil)
+	got := canonicalURI(req)
+	want := "/model/anthropic.claude-sonnet-4-20250514-v1:0/converse"
+	if got != want {
+		t.Errorf("canonicalURI Converse path: got %q, want %q (the ':' must stay literal so chat signing is unchanged)", got, want)
+	}
+}
+
 func TestCanonicalQueryStringEmpty(t *testing.T) {
 	req, _ := http.NewRequest("GET", "https://example.com/path", nil)
 	got := canonicalQueryString(req)
