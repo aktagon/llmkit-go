@@ -191,6 +191,14 @@ func dispatchVideoSubmit(
 		//
 		headers = cloneStringMap(headers)
 		headers["X-DashScope-Async"] = "enable"
+	case providers.VideoShapeVeo:
+		//
+		//
+		//
+		//
+		body = map[string]any{
+			"instances": []map[string]any{{"prompt": joinPromptText(parts)}},
+		}
 	default:
 		body = map[string]any{
 			"model":  model,
@@ -202,7 +210,12 @@ func dispatchVideoSubmit(
 		return "", fmt.Errorf("marshal video request: %w", err)
 	}
 
-	respBody, err := doPost(ctx, client, base+vgCfg.GenEndpoint, jsonBody, headers)
+	//
+	//
+	//
+	submitEndpoint := strings.ReplaceAll(vgCfg.GenEndpoint, "{model}", model)
+	submitURL := appendVideoAuth(base+submitEndpoint, p, cfg)
+	respBody, err := doPost(ctx, client, submitURL, jsonBody, headers)
 	if err != nil {
 		return "", err
 	}
@@ -245,7 +258,7 @@ func (h VideoHandle) Wait(ctx context.Context, opts ...VideoOption) (VideoRespon
 	}
 
 	deadline := time.Now().Add(videoPollTimeout)
-	pollURL := videoPollURL(vgCfg.PollEndpoint, base, h.ID)
+	pollURL := appendVideoAuth(videoPollURL(vgCfg.PollEndpoint, base, h.ID), p, cfg)
 
 	for {
 		select {
@@ -272,6 +285,16 @@ func (h VideoHandle) Wait(ctx context.Context, opts ...VideoOption) (VideoRespon
 			//
 			if vgCfg.FileEndpoint != "" {
 				resp, err = resolveVideoFile(ctx, client, base, vgCfg, respBody, headers)
+				if err != nil {
+					return VideoResponse{}, err
+				}
+			}
+			//
+			//
+			//
+			//
+			if vgCfg.OutputDelivery == providers.VideoDeliveryDownload {
+				resp, err = downloadVideoBytes(ctx, client, p, cfg, resp)
 				if err != nil {
 					return VideoResponse{}, err
 				}
@@ -312,6 +335,8 @@ func videoBaseURL(p Provider, cfg providers.ProviderConfig, vgCfg *providers.Vid
 	return cfg.BaseURL
 }
 
+//
+//
 //
 //
 //
@@ -409,6 +434,29 @@ func parseVideoPoll(vgCfg *providers.VideoGenDef, body []byte) (VideoResponse, b
 		default: // Queueing, Preparing, Processing (or any non-terminal status)
 			return VideoResponse{}, false, nil
 		}
+	case providers.VideoShapeVeo:
+		//
+		//
+		//
+		done, _ := raw["done"].(bool)
+		if !done {
+			return VideoResponse{}, false, nil
+		}
+		if errObj, ok := raw["error"].(map[string]any); ok {
+			msg, _ := errObj["message"].(string)
+			if msg == "" {
+				msg = "operation failed"
+			}
+			return VideoResponse{}, false, fmt.Errorf("video generation failed: %s", msg)
+		}
+		//
+		//
+		//
+		result := videoResultFromVeo(vgCfg, raw)
+		if len(result.Videos) == 0 || result.Videos[0].URL == "" {
+			return VideoResponse{}, false, fmt.Errorf("video generation: operation done but carried no video uri")
+		}
+		return result, true, nil
 	case providers.VideoShapeGrok:
 		status, _ := raw["status"].(string)
 		switch status {
@@ -544,6 +592,68 @@ func videoResultFromMinimaxFile(vgCfg *providers.VideoGenDef, raw map[string]any
 	}
 	url, _ := fileObj["download_url"].(string)
 	return VideoResponse{Videos: []VideoData{{MimeType: mime, URL: url}}}
+}
+
+//
+//
+//
+//
+//
+//
+func videoResultFromVeo(vgCfg *providers.VideoGenDef, raw map[string]any) VideoResponse {
+	mime := videoFallbackMime(vgCfg)
+	response, _ := raw["response"].(map[string]any)
+	gvr, _ := response["generateVideoResponse"].(map[string]any)
+	samples, _ := gvr["generatedSamples"].([]any)
+	if len(samples) == 0 {
+		return VideoResponse{}
+	}
+	first, _ := samples[0].(map[string]any)
+	if first == nil {
+		return VideoResponse{}
+	}
+	video, _ := first["video"].(map[string]any)
+	uri, _ := video["uri"].(string)
+	return VideoResponse{Videos: []VideoData{{MimeType: mime, URL: uri}}}
+}
+
+//
+//
+//
+//
+//
+//
+func downloadVideoBytes(ctx context.Context, client *http.Client, p Provider, cfg providers.ProviderConfig, resp VideoResponse) (VideoResponse, error) {
+	headers := buildAuthHeaders(p, cfg)
+	for i := range resp.Videos {
+		if resp.Videos[i].URL == "" {
+			continue
+		}
+		fetchURL := appendVideoAuth(resp.Videos[i].URL, p, cfg)
+		data, err := doGet(ctx, client, fetchURL, headers)
+		if err != nil {
+			return VideoResponse{}, fmt.Errorf("video download: %w", err)
+		}
+		resp.Videos[i].Bytes = data
+		resp.Videos[i].URL = ""
+	}
+	return resp, nil
+}
+
+//
+//
+//
+//
+//
+func appendVideoAuth(url string, p Provider, cfg providers.ProviderConfig) string {
+	if cfg.AuthScheme != providers.AuthQueryParamKey {
+		return url
+	}
+	sep := "?"
+	if strings.Contains(url, "?") {
+		sep = "&"
+	}
+	return url + sep + cfg.AuthQueryParam + "=" + p.APIKey
 }
 
 //
