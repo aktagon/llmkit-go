@@ -252,6 +252,42 @@ func doSigV4Post(ctx context.Context, client *http.Client, url string, body []by
 //
 //
 //
+func doSigV4Get(ctx context.Context, client *http.Client, url string,
+	accessKey, secretKey, sessionToken, region, service string) ([]byte, error) {
+
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	signSigV4(req, nil, accessKey, secretKey, sessionToken, region, service)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode >= 400 {
+		return data, &APIError{
+			StatusCode: resp.StatusCode,
+			Message:    string(data),
+			Retryable:  resp.StatusCode == 429 || resp.StatusCode >= 500,
+		}
+	}
+	return data, nil
+}
+
+//
+//
+//
+//
+//
 func doStreamPost(ctx context.Context, client *http.Client, url string, body []byte, headers map[string]string,
 	streamCfg *providers.StreamDef, finishReasonPath string, callback func(string)) (Usage, string, error) {
 

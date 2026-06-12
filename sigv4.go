@@ -78,7 +78,12 @@ func sha256Hex(data []byte) string {
 }
 
 func canonicalURI(req *http.Request) string {
-	path := req.URL.Path
+	//
+	//
+	//
+	//
+	//
+	path := req.URL.EscapedPath()
 	if path == "" {
 		path = "/"
 	}

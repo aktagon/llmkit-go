@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -29,6 +31,12 @@ type VideoRequest struct {
 	Model  string
 	Prompt string
 	Parts  []Part
+
+	//
+	//
+	//
+	//
+	OutputURI string
 }
 
 //
@@ -128,6 +136,12 @@ func submitVideo(ctx context.Context, p Provider, req VideoRequest, opts ...Vide
 	if findVideoModel(vgCfg, req.Model) == nil {
 		return VideoHandle{}, &ValidationError{Field: "model", Message: req.Model + " is not a known video-generation model for " + p.Name}
 	}
+	//
+	//
+	//
+	if vgCfg.RequiresOutputURI && req.OutputURI == "" {
+		return VideoHandle{}, &ValidationError{Field: "output_uri", Message: p.Name + " requires a caller output S3 URI; set OutputURI on the request"}
+	}
 
 	baseEvent := providers.Event{
 		Op:       providers.OpVideoGeneration,
@@ -145,7 +159,7 @@ func submitVideo(ctx context.Context, p Provider, req VideoRequest, opts ...Vide
 	}
 	headers := buildAuthHeaders(p, cfg)
 
-	requestID, err := dispatchVideoSubmit(ctx, client, p, cfg, vgCfg, req.Model, parts, headers)
+	requestID, err := dispatchVideoSubmit(ctx, client, p, cfg, vgCfg, req.Model, req.OutputURI, parts, headers)
 	postEv := baseEvent
 	postEv.Err = err
 	postEv.Duration = time.Since(start)
@@ -168,6 +182,8 @@ func submitVideo(ctx context.Context, p Provider, req VideoRequest, opts ...Vide
 //
 //
 //
+//
+//
 func dispatchVideoSubmit(
 	ctx context.Context,
 	client *http.Client,
@@ -175,6 +191,7 @@ func dispatchVideoSubmit(
 	cfg providers.ProviderConfig,
 	vgCfg *providers.VideoGenDef,
 	model string,
+	outputURI string,
 	parts []Part,
 	headers map[string]string,
 ) (string, error) {
@@ -199,6 +216,21 @@ func dispatchVideoSubmit(
 		body = map[string]any{
 			"instances": []map[string]any{{"prompt": joinPromptText(parts)}},
 		}
+	case providers.VideoShapeBedrock:
+		//
+		//
+		//
+		//
+		body = map[string]any{
+			"modelId": model,
+			"modelInput": map[string]any{
+				"taskType":          "TEXT_VIDEO",
+				"textToVideoParams": map[string]any{"text": joinPromptText(parts)},
+			},
+			"outputDataConfig": map[string]any{
+				"s3OutputDataConfig": map[string]any{"s3Uri": outputURI},
+			},
+		}
 	default:
 		body = map[string]any{
 			"model":  model,
@@ -215,7 +247,18 @@ func dispatchVideoSubmit(
 	//
 	submitEndpoint := strings.ReplaceAll(vgCfg.GenEndpoint, "{model}", model)
 	submitURL := appendVideoAuth(base+submitEndpoint, p, cfg)
-	respBody, err := doPost(ctx, client, submitURL, jsonBody, headers)
+
+	var respBody []byte
+	if cfg.AuthScheme == providers.AuthSigV4 {
+		//
+		//
+		region := os.Getenv(cfg.RegionEnvVar)
+		secretKey := os.Getenv(cfg.SecretKeyEnvVar)
+		sessionToken := os.Getenv(cfg.SessionTokenEnvVar)
+		respBody, err = doSigV4Post(ctx, client, submitURL, jsonBody, p.APIKey, secretKey, sessionToken, region, cfg.ServiceName)
+	} else {
+		respBody, err = doPost(ctx, client, submitURL, jsonBody, headers)
+	}
 	if err != nil {
 		return "", err
 	}
@@ -258,7 +301,27 @@ func (h VideoHandle) Wait(ctx context.Context, opts ...VideoOption) (VideoRespon
 	}
 
 	deadline := time.Now().Add(videoPollTimeout)
-	pollURL := appendVideoAuth(videoPollURL(vgCfg.PollEndpoint, base, h.ID), p, cfg)
+
+	//
+	//
+	//
+	//
+	sigV4 := cfg.AuthScheme == providers.AuthSigV4
+	var pollURL, region, secretKey, sessionToken string
+	if sigV4 {
+		//
+		//
+		//
+		//
+		//
+		//
+		pollURL = base + strings.Replace(vgCfg.PollEndpoint, "{id}", url.PathEscape(h.ID), 1)
+		region = os.Getenv(cfg.RegionEnvVar)
+		secretKey = os.Getenv(cfg.SecretKeyEnvVar)
+		sessionToken = os.Getenv(cfg.SessionTokenEnvVar)
+	} else {
+		pollURL = appendVideoAuth(videoPollURL(vgCfg.PollEndpoint, base, h.ID), p, cfg)
+	}
 
 	for {
 		select {
@@ -270,7 +333,13 @@ func (h VideoHandle) Wait(ctx context.Context, opts ...VideoOption) (VideoRespon
 			return VideoResponse{}, fmt.Errorf("video poll: timed out after %s waiting for %s", videoPollTimeout, h.ID)
 		}
 
-		respBody, err := doGet(ctx, client, pollURL, headers)
+		var respBody []byte
+		var err error
+		if sigV4 {
+			respBody, err = doSigV4Get(ctx, client, pollURL, p.APIKey, secretKey, sessionToken, region, cfg.ServiceName)
+		} else {
+			respBody, err = doGet(ctx, client, pollURL, headers)
+		}
 		if err != nil {
 			return VideoResponse{}, fmt.Errorf("video poll: %w", err)
 		}
@@ -329,10 +398,17 @@ func videoBaseURL(p Provider, cfg providers.ProviderConfig, vgCfg *providers.Vid
 	if p.BaseURL != "" {
 		return p.BaseURL
 	}
+	base := cfg.BaseURL
 	if vgCfg.VideoBaseURL != "" {
-		return vgCfg.VideoBaseURL
+		base = vgCfg.VideoBaseURL
 	}
-	return cfg.BaseURL
+	//
+	//
+	//
+	if cfg.RegionEnvVar != "" {
+		base = strings.ReplaceAll(base, "{region}", os.Getenv(cfg.RegionEnvVar))
+	}
+	return base
 }
 
 //
@@ -457,6 +533,31 @@ func parseVideoPoll(vgCfg *providers.VideoGenDef, body []byte) (VideoResponse, b
 			return VideoResponse{}, false, fmt.Errorf("video generation: operation done but carried no video uri")
 		}
 		return result, true, nil
+	case providers.VideoShapeBedrock:
+		//
+		//
+		//
+		status, _ := raw["status"].(string)
+		switch status {
+		case "Completed":
+			//
+			//
+			//
+			//
+			result := videoResultFromBedrock(vgCfg, raw)
+			if len(result.Videos) == 0 || result.Videos[0].URL == "" {
+				return VideoResponse{}, false, fmt.Errorf("video generation: completed but carried no output s3 uri")
+			}
+			return result, true, nil
+		case "Failed":
+			msg, _ := raw["failureMessage"].(string)
+			if msg == "" {
+				msg = "operation failed"
+			}
+			return VideoResponse{}, false, fmt.Errorf("video generation failed: %s", msg)
+		default: // InProgress (or any non-terminal status)
+			return VideoResponse{}, false, nil
+		}
 	case providers.VideoShapeGrok:
 		status, _ := raw["status"].(string)
 		switch status {
@@ -614,6 +715,21 @@ func videoResultFromVeo(vgCfg *providers.VideoGenDef, raw map[string]any) VideoR
 	}
 	video, _ := first["video"].(map[string]any)
 	uri, _ := video["uri"].(string)
+	return VideoResponse{Videos: []VideoData{{MimeType: mime, URL: uri}}}
+}
+
+//
+//
+//
+//
+//
+//
+//
+func videoResultFromBedrock(vgCfg *providers.VideoGenDef, raw map[string]any) VideoResponse {
+	mime := videoFallbackMime(vgCfg)
+	odc, _ := raw["outputDataConfig"].(map[string]any)
+	s3, _ := odc["s3OutputDataConfig"].(map[string]any)
+	uri, _ := s3["s3Uri"].(string)
 	return VideoResponse{Videos: []VideoData{{MimeType: mime, URL: uri}}}
 }
 
