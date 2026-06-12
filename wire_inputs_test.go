@@ -83,6 +83,8 @@ const (
 	wireStructuredOutputSchema                  = "{\"type\":\"object\",\"properties\":{\"color\":{\"type\":\"string\"}},\"additionalProperties\":false}"
 	wireStructuredOutputNestedPrompt            = "Name a coastal city in Finland where a harbor pilot might reside. Reply as structured data."
 	wireStructuredOutputNestedSchema            = "{\"type\":\"object\",\"properties\":{\"residence\":{\"type\":\"object\",\"properties\":{\"addresses\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"additionalProperties\":false}}},\"additionalProperties\":false}},\"additionalProperties\":false}"
+	wireVideoBedrockModel                       = "amazon.nova-reel-v1:0"
+	wireVideoBedrockPrompt                      = "A drone shot sweeping over snow-capped alpine peaks at sunrise"
 	wireVideoGoogleModel                        = "veo-3.1-generate-preview"
 	wireVideoGooglePrompt                       = "A drone shot sweeping over snow-capped alpine peaks at sunrise"
 	wireVideoGrokModel                          = "grok-imagine-video"

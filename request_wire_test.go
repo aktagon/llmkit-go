@@ -94,11 +94,12 @@ func captureBody(t *testing.T, provider string, call func(c *Client)) ([]byte, h
 		// OpenAI image-generation paths respectively — ADR-028 two-helper
 		// rule: extend the canned response, don't add capture helpers).
 		json.NewEncoder(w).Encode(map[string]any{
-			"id":         "msgbatch_test",
-			"request_id": "vid_test",                                                      // VID-007: Grok video-submit handle id
-			"task_id":    "vid_test",                                                      // VideoMinimax: top-level task_id submit handle
-			"name":       "models/veo-test/operations/op_test",                            // VideoVeo: operation-name submit handle
-			"output":     map[string]any{"task_id": "vid_test", "task_status": "PENDING"}, // VideoQwen: output.task_id submit handle
+			"id":            "msgbatch_test",
+			"request_id":    "vid_test",                                                      // VID-007: Grok video-submit handle id
+			"task_id":       "vid_test",                                                      // VideoMinimax: top-level task_id submit handle
+			"name":          "models/veo-test/operations/op_test",                            // VideoVeo: operation-name submit handle
+			"invocationArn": "arn:aws:bedrock:us-east-1:0:async-invoke/test",                 // VideoBedrock: invocationArn submit handle
+			"output":        map[string]any{"task_id": "vid_test", "task_status": "PENDING"}, // VideoQwen: output.task_id submit handle
 
 			"candidates": []map[string]any{{"content": map[string]any{"parts": []map[string]any{
 				{"text": `{"color":"blue"}`},
@@ -728,4 +729,28 @@ func TestRequestWire_VideoVeo(t *testing.T) {
 		}
 	})
 	assertRequestWireGolden(t, "video-google", body)
+}
+
+// wireVideoBedrockOutputURI is the caller S3 output URI baked into the
+// video-bedrock golden. It is bedrock-specific submit data, not a canonical
+// wire-input field, so it is a fixed driver constant shared verbatim by all
+// four SDK drivers — the cross-SDK comparator fails loudly if any driver
+// drifts from this literal.
+const wireVideoBedrockOutputURI = "s3://llmkit-wire-fixtures/out/"
+
+// TestRequestWire_VideoBedrock witnesses the Bedrock Nova Reel video-submit
+// body: the model in the body (modelId, unlike the Converse chat path), the
+// prompt nested under modelInput.textToVideoParams.text, and the caller S3 URI
+// under outputDataConfig.s3OutputDataConfig.s3Uri. The SigV4 signing, ARN-handle
+// poll, and output-uri delivery (VideoData.URL = the caller S3 URI) are
+// delivery-side, exercised by the unit tests, not the request-wire suite.
+// WIRE-005: NOT live-anchored (no AWS key).
+func TestRequestWire_VideoBedrock(t *testing.T) {
+	body, _ := captureBody(t, providers.Bedrock, func(c *Client) {
+		_, err := c.Video.Model(wireVideoBedrockModel).OutputURI(wireVideoBedrockOutputURI).Submit(context.Background(), wireVideoBedrockPrompt)
+		if err != nil {
+			t.Fatalf("video submit bedrock call: %v", err)
+		}
+	})
+	assertRequestWireGolden(t, "video-bedrock", body)
 }

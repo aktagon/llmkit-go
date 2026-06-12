@@ -620,6 +620,170 @@ func TestVideoWaitFailedVeo(t *testing.T) {
 	}
 }
 
+const novaReelModel = "amazon.nova-reel-v1:0"
+const novaReelARN = "arn:aws:bedrock:us-east-1:123456789012:async-invoke/abc123def456"
+const novaReelOutputURI = "s3://my-bucket/out/"
+
+// bedrockVideoServer serves the Nova Reel start-async-invoke + get-async-invoke
+// endpoints. Bedrock is the FIRST SigV4-signed video provider (every other is a
+// bearer header) and the FIRST output-uri delivery (the provider writes the mp4
+// to the caller's S3 bucket; the SDK never downloads). Submit returns the poll
+// handle as the top-level `invocationArn`; the poll returns status=InProgress
+// for the first pendingPolls calls, then the supplied done body. When failMsg is
+// non-empty the poll returns a Failed status carrying it.
+func bedrockVideoServer(t *testing.T, pendingPolls int32, doneBody map[string]any, failMsg string) *httptest.Server {
+	t.Helper()
+	var polls int32
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Authorization"); !strings.HasPrefix(got, "AWS4-HMAC-SHA256") {
+			t.Errorf("expected SigV4 auth on %s %s, got %q", r.Method, r.URL.Path, got)
+		}
+		switch {
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/async-invoke"):
+			var body map[string]any
+			json.NewDecoder(r.Body).Decode(&body)
+			if body["modelId"] != novaReelModel {
+				t.Errorf("expected modelId %q in body (Nova Reel carries the model in the body, not the URL), got %v", novaReelModel, body["modelId"])
+			}
+			modelInput, _ := body["modelInput"].(map[string]any)
+			if modelInput["taskType"] != "TEXT_VIDEO" {
+				t.Errorf("expected taskType TEXT_VIDEO, got %v", modelInput["taskType"])
+			}
+			ttv, _ := modelInput["textToVideoParams"].(map[string]any)
+			if ttv["text"] == "" || ttv["text"] == nil {
+				t.Error("expected non-empty modelInput.textToVideoParams.text in submit body")
+			}
+			odc, _ := body["outputDataConfig"].(map[string]any)
+			s3, _ := odc["s3OutputDataConfig"].(map[string]any)
+			if s3["s3Uri"] != novaReelOutputURI {
+				t.Errorf("expected caller output s3Uri %q, got %v", novaReelOutputURI, s3["s3Uri"])
+			}
+			json.NewEncoder(w).Encode(map[string]any{"invocationArn": novaReelARN})
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/async-invoke/"):
+			// The ARN is percent-encoded as one path segment on the wire; the
+			// server's decoded Path restores the ':' and '/'. Witness that the
+			// full ARN round-trips so the encoding is not lossy.
+			if !strings.Contains(r.URL.Path, novaReelARN) {
+				t.Errorf("expected the ARN to round-trip in the poll path, got %q", r.URL.Path)
+			}
+			if failMsg != "" {
+				json.NewEncoder(w).Encode(map[string]any{"status": "Failed", "failureMessage": failMsg})
+				return
+			}
+			if atomic.AddInt32(&polls, 1) <= pendingPolls {
+				json.NewEncoder(w).Encode(map[string]any{"status": "InProgress"})
+				return
+			}
+			json.NewEncoder(w).Encode(doneBody)
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			http.Error(w, "unexpected", http.StatusNotFound)
+		}
+	}))
+}
+
+func TestSubmitAndWaitVideoBedrock(t *testing.T) {
+	fastVideoPoll(t)
+	done := map[string]any{
+		"status": "Completed",
+		"outputDataConfig": map[string]any{
+			"s3OutputDataConfig": map[string]any{"s3Uri": novaReelOutputURI},
+		},
+	}
+	server := bedrockVideoServer(t, 2, done, "")
+	defer server.Close()
+
+	c := New(providers.Bedrock, "test-token")
+	c.provider.baseURL = server.URL
+
+	h, err := c.Video.Model(novaReelModel).OutputURI(novaReelOutputURI).Submit(context.Background(), "a drone shot over the alps, 6s")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h.ID != novaReelARN {
+		t.Fatalf("expected handle id from the invocationArn, got %q", h.ID)
+	}
+
+	resp, err := h.Wait(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Videos) != 1 {
+		t.Fatalf("expected 1 video, got %d", len(resp.Videos))
+	}
+	if got := resp.Videos[0].URL; got != novaReelOutputURI {
+		t.Errorf("output-uri delivery: expected the caller S3 URI in URL, got %q", got)
+	}
+	if len(resp.Videos[0].Bytes) != 0 {
+		t.Error("output-uri delivery must not download bytes (the provider wrote to the caller's bucket)")
+	}
+	if got := resp.Videos[0].MimeType; got != "video/mp4" {
+		t.Errorf("expected video/mp4, got %q", got)
+	}
+}
+
+func TestVideoBedrockRequiresOutputURI(t *testing.T) {
+	// VID-005: an output-uri provider must reject a submit that omits the caller
+	// S3 URI before any HTTP call. No server: validation fails pre-flight.
+	c := New(providers.Bedrock, "test-token")
+
+	_, err := c.Video.Model(novaReelModel).Submit(context.Background(), "a drone shot over the alps")
+	if err == nil {
+		t.Fatal("expected pre-flight rejection when output URI is omitted")
+	}
+	var ve *ValidationError
+	if !errors.As(err, &ve) {
+		t.Fatalf("expected *ValidationError, got %T: %v", err, err)
+	}
+	if ve.Field != "output_uri" {
+		t.Errorf("expected field output_uri, got %q", ve.Field)
+	}
+}
+
+func TestVideoWaitFailedBedrock(t *testing.T) {
+	fastVideoPoll(t)
+	server := bedrockVideoServer(t, 0, nil, "S3 bucket not writable by the service role")
+	defer server.Close()
+
+	c := New(providers.Bedrock, "test-token")
+	c.provider.baseURL = server.URL
+
+	h, err := c.Video.Model(novaReelModel).OutputURI(novaReelOutputURI).Submit(context.Background(), "a drone shot over the alps")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = h.Wait(context.Background())
+	if err == nil {
+		t.Fatal("expected error for Failed async invocation")
+	}
+	if !strings.Contains(err.Error(), "S3 bucket not writable by the service role") {
+		t.Errorf("expected the failureMessage in the error, got %v", err)
+	}
+}
+
+func TestVideoBedrockCompletedNoURI(t *testing.T) {
+	fastVideoPoll(t)
+	// A Completed invocation that echoes no output s3 uri must error, not return
+	// a silent empty success (mirrors the Veo done+no-uri guard).
+	server := bedrockVideoServer(t, 0, map[string]any{"status": "Completed"}, "")
+	defer server.Close()
+
+	c := New(providers.Bedrock, "test-token")
+	c.provider.baseURL = server.URL
+
+	h, err := c.Video.Model(novaReelModel).OutputURI(novaReelOutputURI).Submit(context.Background(), "a drone shot")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = h.Wait(context.Background())
+	if err == nil {
+		t.Fatal("expected error when a Completed invocation carried no output s3 uri")
+	}
+	if !strings.Contains(err.Error(), "no output s3 uri") {
+		t.Errorf("expected a no-uri error, got %v", err)
+	}
+}
+
 func TestVideoRawCapturesPollBody(t *testing.T) {
 	fastVideoPoll(t)
 	done := map[string]any{"status": "done", "video": map[string]any{"url": "https://vidgen.x.ai/x.mp4"}}
