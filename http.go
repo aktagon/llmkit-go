@@ -247,6 +247,42 @@ func doSigV4Post(ctx context.Context, client *http.Client, url string, body []by
 	return data, nil
 }
 
+// doSigV4Get sends a GET request signed with AWS SigV4. The body is empty, so
+// the payload hash is the SHA-256 of the empty string. Used by the Bedrock
+// video poll (GetAsyncInvoke), whose ARN is percent-encoded into the URL path
+// by the caller — signSigV4 signs the escaped path so the signature matches
+// the bytes on the wire.
+func doSigV4Get(ctx context.Context, client *http.Client, url string,
+	accessKey, secretKey, sessionToken, region, service string) ([]byte, error) {
+
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	signSigV4(req, nil, accessKey, secretKey, sessionToken, region, service)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode >= 400 {
+		return data, &APIError{
+			StatusCode: resp.StatusCode,
+			Message:    string(data),
+			Retryable:  resp.StatusCode == 429 || resp.StatusCode >= 500,
+		}
+	}
+	return data, nil
+}
+
 // doStreamPost sends a POST request and processes SSE events via callback.
 // Returns accumulated usage and the stream-time finish-reason after the
 // stream ends. finishReasonPath uses ADR-013 form: `event_name:json.path`

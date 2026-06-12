@@ -11,6 +11,7 @@ const (
 	VideoShapeQwen     = "VideoQwen"
 	VideoShapeMinimax  = "VideoMinimax"
 	VideoShapeVeo      = "VideoVeo"
+	VideoShapeBedrock  = "VideoBedrock"
 )
 
 // Video output-delivery modes. Drive whether the runtime downloads
@@ -51,6 +52,27 @@ type VideoGenDef struct {
 // if the provider does not support video generation.
 func VideoGenConfig(provider string) *VideoGenDef {
 	switch provider {
+	case Bedrock:
+		return &VideoGenDef{
+			WireShape:         "VideoBedrock",
+			OutputDelivery:    "DeliveryOutputURI",
+			VideoBaseURL:      "",
+			GenEndpoint:       "/async-invoke",
+			PollEndpoint:      "/async-invoke/{id}",
+			FileEndpoint:      "",
+			SubmitHandleField: "invocationArn",
+			RequiresOutputURI: true,
+			Models: []VideoModelDef{
+				{
+					ModelID:              "amazon.nova-reel-v1:0",
+					Label:                "Nova Reel",
+					SupportsImageToVideo: true,
+					MaxDurationSeconds:   6,
+					OutputMime:           "video/mp4",
+					Resolutions:          []string{"720p"},
+				},
+			},
+		}
 	case Google:
 		return &VideoGenDef{
 			WireShape:         "VideoVeo",

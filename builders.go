@@ -279,6 +279,7 @@ type Video struct {
 	client     *Client
 	middleware []MiddlewareFn
 	model      string
+	outputURI  string
 	raw        bool
 	parts      []Part
 }
@@ -288,8 +289,9 @@ func (b *Video) AddMiddleware(fns ...MiddlewareFn) *Video {
 	out.middleware = append(append([]MiddlewareFn{}, b.middleware...), fns...)
 	return &out
 }
-func (b *Video) Model(name string) *Video { out := *b; out.model = name; return &out }
-func (b *Video) Raw() *Video              { out := *b; out.raw = true; return &out }
+func (b *Video) Model(name string) *Video    { out := *b; out.model = name; return &out }
+func (b *Video) OutputURI(uri string) *Video { out := *b; out.outputURI = uri; return &out }
+func (b *Video) Raw() *Video                 { out := *b; out.raw = true; return &out }
 func (b *Video) Text(s string) *Video {
 	out := *b
 	out.parts = append(append([]Part{}, b.parts...), Part{Text: s})
