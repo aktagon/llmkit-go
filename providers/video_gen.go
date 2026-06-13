@@ -32,8 +32,9 @@ type VideoModelDef struct {
 	MaxDurationSeconds   int
 	OutputMime           string
 	Resolutions          []string
-	// MaxInputImages is advisory per-model metadata (BUG-011): the
-	// max seed/reference images, 0 when unknown. Not enforced.
+	// MaxInputImages is the image count llmkit serializes when the wire
+	// shape fixes it (e.g. Grok's single-seed slot); 0 = no llmkit limit,
+	// the provider decides volume (BUG-011).
 	MaxInputImages int
 }
 
