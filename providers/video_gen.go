@@ -67,7 +67,7 @@ func VideoGenConfig(provider string) *VideoGenDef {
 				{
 					ModelID:              "amazon.nova-reel-v1:0",
 					Label:                "Nova Reel",
-					SupportsImageToVideo: true,
+					SupportsImageToVideo: false,
 					MaxDurationSeconds:   6,
 					OutputMime:           "video/mp4",
 					Resolutions:          []string{"720p"},
@@ -88,7 +88,7 @@ func VideoGenConfig(provider string) *VideoGenDef {
 				{
 					ModelID:              "veo-3.1-generate-preview",
 					Label:                "Veo 3.1",
-					SupportsImageToVideo: true,
+					SupportsImageToVideo: false,
 					MaxDurationSeconds:   8,
 					OutputMime:           "video/mp4",
 					Resolutions:          []string{"1080p", "720p"},
@@ -130,7 +130,7 @@ func VideoGenConfig(provider string) *VideoGenDef {
 				{
 					ModelID:              "MiniMax-Hailuo-2.3",
 					Label:                "MiniMax Hailuo 2.3",
-					SupportsImageToVideo: true,
+					SupportsImageToVideo: false,
 					MaxDurationSeconds:   6,
 					OutputMime:           "video/mp4",
 					Resolutions:          []string{"1080p", "768p"},
@@ -151,7 +151,7 @@ func VideoGenConfig(provider string) *VideoGenDef {
 				{
 					ModelID:              "wan2.2-t2v-plus",
 					Label:                "Wan 2.2 T2V Plus",
-					SupportsImageToVideo: true,
+					SupportsImageToVideo: false,
 					MaxDurationSeconds:   5,
 					OutputMime:           "video/mp4",
 					Resolutions:          []string{"720p"},
@@ -172,7 +172,7 @@ func VideoGenConfig(provider string) *VideoGenDef {
 				{
 					ModelID:              "minimax/video-01-director",
 					Label:                "MiniMax Video 01 Director (Together)",
-					SupportsImageToVideo: true,
+					SupportsImageToVideo: false,
 					MaxDurationSeconds:   6,
 					OutputMime:           "video/mp4",
 					Resolutions:          []string{"720p"},
@@ -193,7 +193,7 @@ func VideoGenConfig(provider string) *VideoGenDef {
 				{
 					ModelID:              "veo-3.1-generate-preview",
 					Label:                "Veo 3.1",
-					SupportsImageToVideo: true,
+					SupportsImageToVideo: false,
 					MaxDurationSeconds:   8,
 					OutputMime:           "video/mp4",
 					Resolutions:          []string{"1080p", "720p"},
@@ -214,7 +214,7 @@ func VideoGenConfig(provider string) *VideoGenDef {
 				{
 					ModelID:              "cogvideox-3",
 					Label:                "CogVideoX-3",
-					SupportsImageToVideo: true,
+					SupportsImageToVideo: false,
 					MaxDurationSeconds:   10,
 					OutputMime:           "video/mp4",
 					Resolutions:          []string{"1080p", "4k", "720p"},

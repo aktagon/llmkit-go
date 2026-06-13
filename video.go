@@ -106,25 +106,6 @@ func submitVideo(ctx context.Context, p Provider, req VideoRequest, opts ...Vide
 	if err != nil {
 		return VideoHandle{}, err
 	}
-	for i, part := range parts {
-		switch {
-		case part.Lyrics != "":
-			return VideoHandle{}, &ValidationError{
-				Field:   fmt.Sprintf("parts[%d]", i),
-				Message: "video generation does not accept lyrics parts",
-			}
-		case part.Image != nil:
-			return VideoHandle{}, &ValidationError{
-				Field:   fmt.Sprintf("parts[%d]", i),
-				Message: "image-to-video is not yet wired (slice 1 is text-to-video)",
-			}
-		case part.Text == "":
-			return VideoHandle{}, &ValidationError{
-				Field:   fmt.Sprintf("parts[%d]", i),
-				Message: "must have Text set",
-			}
-		}
-	}
 
 	cfg, ok := providers.Providers()[p.Name]
 	if !ok {
@@ -134,8 +115,34 @@ func submitVideo(ctx context.Context, p Provider, req VideoRequest, opts ...Vide
 	if vgCfg == nil {
 		return VideoHandle{}, &ValidationError{Field: "provider", Message: p.Name + " does not support video generation"}
 	}
-	if findVideoModel(vgCfg, req.Model) == nil {
+	model := findVideoModel(vgCfg, req.Model)
+	if model == nil {
 		return VideoHandle{}, &ValidationError{Field: "model", Message: req.Model + " is not a known video-generation model for " + p.Name}
+	}
+
+	for i, part := range parts {
+		switch {
+		case part.Lyrics != "":
+			return VideoHandle{}, &ValidationError{
+				Field:   fmt.Sprintf("parts[%d]", i),
+				Message: "video generation does not accept lyrics parts",
+			}
+		case part.Image != nil:
+			// Image-to-video seed frame (BUG-010): accepted only by models whose
+			// VideoModelDef sets SupportsImageToVideo; text-to-video-only models
+			// reject it pre-flight rather than silently dropping it at wire time.
+			if !model.SupportsImageToVideo {
+				return VideoHandle{}, &ValidationError{
+					Field:   fmt.Sprintf("parts[%d]", i),
+					Message: req.Model + " is a text-to-video-only model and does not accept image parts",
+				}
+			}
+		case part.Text == "":
+			return VideoHandle{}, &ValidationError{
+				Field:   fmt.Sprintf("parts[%d]", i),
+				Message: "must have Text set",
+			}
+		}
 	}
 	// VID-005: output-uri providers (Bedrock Nova Reel) write the video to the
 	// caller's own S3 bucket, so the submit MUST carry a destination URI. Reject
@@ -237,6 +244,18 @@ func dispatchVideoSubmit(
 		body = map[string]any{
 			"model":  model,
 			"prompt": joinPromptText(parts),
+		}
+		// Image-to-video (BUG-010): when a seed frame is present (only reachable
+		// for grok-imagine-video, the lone SupportsImageToVideo model this slice),
+		// inline it as a data URL in xAI's image.url field — the same encoding the
+		// Grok image-edit path uses. Absent on the text-to-video hot path, so the
+		// existing video-grok golden is unchanged.
+		seed, err := videoSeedImageURL(parts)
+		if err != nil {
+			return "", err
+		}
+		if seed != "" {
+			body["image"] = map[string]any{"url": seed}
 		}
 	}
 	jsonBody, err := json.Marshal(body)
@@ -854,6 +873,35 @@ func appendVideoAuth(url string, p Provider, cfg providers.ProviderConfig) strin
 		sep = "&"
 	}
 	return url + sep + cfg.AuthQueryParam + "=" + p.APIKey
+}
+
+// videoSeedImageURL builds the image-to-video seed-frame data URL for wire
+// shapes that condition on a single reference frame (Grok Imagine, BUG-010).
+// The image Part's bytes are inlined as a data URL carried in xAI's image.url
+// field, mirroring the Grok image-edit encoding in image.go. Returns "" when no
+// image part is present (the text-to-video hot path). Errors on more than one
+// image part: Grok animates a single seed frame, so multi-image conditioning is
+// a separate slice — rejecting is honest where silently using the first would
+// reintroduce the silent-drop bug.
+func videoSeedImageURL(parts []Part) (string, error) {
+	var seed *MediaRef
+	for _, part := range parts {
+		if part.Image == nil {
+			continue
+		}
+		if seed != nil {
+			return "", &ValidationError{Field: "parts", Message: "image-to-video conditions on a single seed frame; pass one image part"}
+		}
+		seed = part.Image
+	}
+	if seed == nil {
+		return "", nil
+	}
+	mime := seed.MimeType
+	if mime == "" {
+		mime = "image/png"
+	}
+	return "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(seed.Bytes), nil
 }
 
 // videoFallbackMime returns the first model's output MIME, used when the

@@ -278,10 +278,10 @@ func (b *Music) Text(s string) *Music {
 type Video struct {
 	client     *Client
 	middleware []MiddlewareFn
+	parts      []Part
 	model      string
 	outputURI  string
 	raw        bool
-	parts      []Part
 }
 
 func (b *Video) AddMiddleware(fns ...MiddlewareFn) *Video {
@@ -289,6 +289,11 @@ func (b *Video) AddMiddleware(fns ...MiddlewareFn) *Video {
 	out.middleware = append(append([]MiddlewareFn{}, b.middleware...), fns...)
 	return &out
 }
+func (b *Video) Image(mime string, data []byte) *Video {
+	out := *b
+	out.parts = append(append([]Part{}, b.parts...), Part{Image: &MediaRef{MimeType: mime, Bytes: data}})
+	return &out
+}                                            // ordered
 func (b *Video) Model(name string) *Video    { out := *b; out.model = name; return &out }
 func (b *Video) OutputURI(uri string) *Video { out := *b; out.outputURI = uri; return &out }
 func (b *Video) Raw() *Video                 { out := *b; out.raw = true; return &out }
