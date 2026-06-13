@@ -106,25 +106,6 @@ func submitVideo(ctx context.Context, p Provider, req VideoRequest, opts ...Vide
 	if err != nil {
 		return VideoHandle{}, err
 	}
-	for i, part := range parts {
-		switch {
-		case part.Lyrics != "":
-			return VideoHandle{}, &ValidationError{
-				Field:   fmt.Sprintf("parts[%d]", i),
-				Message: "video generation does not accept lyrics parts",
-			}
-		case part.Image != nil:
-			return VideoHandle{}, &ValidationError{
-				Field:   fmt.Sprintf("parts[%d]", i),
-				Message: "image-to-video is not yet wired (slice 1 is text-to-video)",
-			}
-		case part.Text == "":
-			return VideoHandle{}, &ValidationError{
-				Field:   fmt.Sprintf("parts[%d]", i),
-				Message: "must have Text set",
-			}
-		}
-	}
 
 	cfg, ok := providers.Providers()[p.Name]
 	if !ok {
@@ -134,8 +115,34 @@ func submitVideo(ctx context.Context, p Provider, req VideoRequest, opts ...Vide
 	if vgCfg == nil {
 		return VideoHandle{}, &ValidationError{Field: "provider", Message: p.Name + " does not support video generation"}
 	}
-	if findVideoModel(vgCfg, req.Model) == nil {
+	model := findVideoModel(vgCfg, req.Model)
+	if model == nil {
 		return VideoHandle{}, &ValidationError{Field: "model", Message: req.Model + " is not a known video-generation model for " + p.Name}
+	}
+
+	for i, part := range parts {
+		switch {
+		case part.Lyrics != "":
+			return VideoHandle{}, &ValidationError{
+				Field:   fmt.Sprintf("parts[%d]", i),
+				Message: "video generation does not accept lyrics parts",
+			}
+		case part.Image != nil:
+			//
+			//
+			//
+			if !model.SupportsImageToVideo {
+				return VideoHandle{}, &ValidationError{
+					Field:   fmt.Sprintf("parts[%d]", i),
+					Message: req.Model + " is a text-to-video-only model and does not accept image parts",
+				}
+			}
+		case part.Text == "":
+			return VideoHandle{}, &ValidationError{
+				Field:   fmt.Sprintf("parts[%d]", i),
+				Message: "must have Text set",
+			}
+		}
 	}
 	//
 	//
@@ -237,6 +244,18 @@ func dispatchVideoSubmit(
 		body = map[string]any{
 			"model":  model,
 			"prompt": joinPromptText(parts),
+		}
+		//
+		//
+		//
+		//
+		//
+		seed, err := videoSeedImageURL(parts)
+		if err != nil {
+			return "", err
+		}
+		if seed != "" {
+			body["image"] = map[string]any{"url": seed}
 		}
 	}
 	jsonBody, err := json.Marshal(body)
@@ -854,6 +873,35 @@ func appendVideoAuth(url string, p Provider, cfg providers.ProviderConfig) strin
 		sep = "&"
 	}
 	return url + sep + cfg.AuthQueryParam + "=" + p.APIKey
+}
+
+//
+//
+//
+//
+//
+//
+//
+//
+func videoSeedImageURL(parts []Part) (string, error) {
+	var seed *MediaRef
+	for _, part := range parts {
+		if part.Image == nil {
+			continue
+		}
+		if seed != nil {
+			return "", &ValidationError{Field: "parts", Message: "image-to-video conditions on a single seed frame; pass one image part"}
+		}
+		seed = part.Image
+	}
+	if seed == nil {
+		return "", nil
+	}
+	mime := seed.MimeType
+	if mime == "" {
+		mime = "image/png"
+	}
+	return "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(seed.Bytes), nil
 }
 
 //
