@@ -229,6 +229,9 @@ type VideoHandle struct {
 
 	//
 	Raw bool
+
+	//
+	Model string
 }
 
 //

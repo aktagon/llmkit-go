@@ -2,6 +2,7 @@ package llmkit
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -167,7 +168,7 @@ func submitVideo(ctx context.Context, p Provider, req VideoRequest, opts ...Vide
 	if err != nil {
 		return VideoHandle{}, err
 	}
-	return VideoHandle{ID: requestID, Provider: p, Raw: o.raw}, nil
+	return VideoHandle{ID: requestID, Provider: p, Raw: o.raw, Model: req.Model}, nil
 }
 
 //
@@ -208,7 +209,8 @@ func dispatchVideoSubmit(
 		//
 		headers = cloneStringMap(headers)
 		headers["X-DashScope-Async"] = "enable"
-	case providers.VideoShapeVeo:
+	case providers.VideoShapeVeo, providers.VideoShapeVertexVeo:
+		//
 		//
 		//
 		//
@@ -306,9 +308,23 @@ func (h VideoHandle) Wait(ctx context.Context, opts ...VideoOption) (VideoRespon
 	//
 	//
 	//
+	//
+	//
+	//
+	//
+	//
+	//
+	//
+	//
+	//
+	//
+	//
 	sigV4 := cfg.AuthScheme == providers.AuthSigV4
+	vertexPoll := vgCfg.WireShape == providers.VideoShapeVertexVeo
 	var pollURL, region, secretKey, sessionToken string
-	if sigV4 {
+	var vertexPollBody []byte
+	switch {
+	case sigV4:
 		//
 		//
 		//
@@ -319,7 +335,14 @@ func (h VideoHandle) Wait(ctx context.Context, opts ...VideoOption) (VideoRespon
 		region = os.Getenv(cfg.RegionEnvVar)
 		secretKey = os.Getenv(cfg.SecretKeyEnvVar)
 		sessionToken = os.Getenv(cfg.SessionTokenEnvVar)
-	} else {
+	case vertexPoll:
+		pollURL = appendVideoAuth(base+strings.ReplaceAll(vgCfg.PollEndpoint, "{model}", h.Model), p, cfg)
+		body, marshalErr := json.Marshal(map[string]any{"operationName": h.ID})
+		if marshalErr != nil {
+			return VideoResponse{}, fmt.Errorf("marshal vertex poll body: %w", marshalErr)
+		}
+		vertexPollBody = body
+	default:
 		pollURL = appendVideoAuth(videoPollURL(vgCfg.PollEndpoint, base, h.ID), p, cfg)
 	}
 
@@ -335,9 +358,12 @@ func (h VideoHandle) Wait(ctx context.Context, opts ...VideoOption) (VideoRespon
 
 		var respBody []byte
 		var err error
-		if sigV4 {
+		switch {
+		case sigV4:
 			respBody, err = doSigV4Get(ctx, client, pollURL, p.APIKey, secretKey, sessionToken, region, cfg.ServiceName)
-		} else {
+		case vertexPoll:
+			respBody, err = doPost(ctx, client, pollURL, vertexPollBody, headers)
+		default:
 			respBody, err = doGet(ctx, client, pollURL, headers)
 		}
 		if err != nil {
@@ -533,6 +559,31 @@ func parseVideoPoll(vgCfg *providers.VideoGenDef, body []byte) (VideoResponse, b
 			return VideoResponse{}, false, fmt.Errorf("video generation: operation done but carried no video uri")
 		}
 		return result, true, nil
+	case providers.VideoShapeVertexVeo:
+		//
+		//
+		//
+		done, _ := raw["done"].(bool)
+		if !done {
+			return VideoResponse{}, false, nil
+		}
+		if errObj, ok := raw["error"].(map[string]any); ok {
+			msg, _ := errObj["message"].(string)
+			if msg == "" {
+				msg = "operation failed"
+			}
+			return VideoResponse{}, false, fmt.Errorf("video generation failed: %s", msg)
+		}
+		result, err := videoResultFromVertexVeo(vgCfg, raw)
+		if err != nil {
+			return VideoResponse{}, false, err
+		}
+		//
+		//
+		if len(result.Videos) == 0 || len(result.Videos[0].Bytes) == 0 {
+			return VideoResponse{}, false, fmt.Errorf("video generation: operation done but carried no video bytes")
+		}
+		return result, true, nil
 	case providers.VideoShapeBedrock:
 		//
 		//
@@ -716,6 +767,39 @@ func videoResultFromVeo(vgCfg *providers.VideoGenDef, raw map[string]any) VideoR
 	video, _ := first["video"].(map[string]any)
 	uri, _ := video["uri"].(string)
 	return VideoResponse{Videos: []VideoData{{MimeType: mime, URL: uri}}}
+}
+
+//
+//
+//
+//
+//
+//
+//
+//
+func videoResultFromVertexVeo(vgCfg *providers.VideoGenDef, raw map[string]any) (VideoResponse, error) {
+	mime := videoFallbackMime(vgCfg)
+	response, _ := raw["response"].(map[string]any)
+	videos, _ := response["videos"].([]any)
+	if len(videos) == 0 {
+		return VideoResponse{}, nil
+	}
+	first, _ := videos[0].(map[string]any)
+	if first == nil {
+		return VideoResponse{}, nil
+	}
+	if m, ok := first["mimeType"].(string); ok && m != "" {
+		mime = m
+	}
+	b64, _ := first["bytesBase64Encoded"].(string)
+	if b64 == "" {
+		return VideoResponse{}, nil
+	}
+	decoded, err := base64.StdEncoding.DecodeString(b64)
+	if err != nil {
+		return VideoResponse{}, fmt.Errorf("decode vertex video bytes: %w", err)
+	}
+	return VideoResponse{Videos: []VideoData{{MimeType: mime, Bytes: decoded}}}, nil
 }
 
 //
