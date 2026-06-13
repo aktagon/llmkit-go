@@ -1015,6 +1015,101 @@ func TestVideoRejectsLyricsPart(t *testing.T) {
 	}
 }
 
+// The fixed 1x1 PNG seed frame (single brick-red pixel), shared with the
+// image-edit wire fixture. base64 of the bytes the image-to-video path inlines.
+const grokSeedPNGBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGM4YWQEAALyAS2saifrAAAAAElFTkSuQmCC"
+
+// TestVideoGrokImageToVideoSubmitBody exercises the BUG-010 seed path end to
+// end through the builder: .Image(...) on Video appends an image Part, Submit
+// inlines it as image.url, and the round-trip reaches a done video.
+func TestVideoGrokImageToVideoSubmitBody(t *testing.T) {
+	fastVideoPoll(t)
+	png, err := base64.StdEncoding.DecodeString(grokSeedPNGBase64)
+	if err != nil {
+		t.Fatalf("decode seed PNG: %v", err)
+	}
+	var polls int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/v1/videos/generations"):
+			var body map[string]any
+			json.NewDecoder(r.Body).Decode(&body)
+			img, ok := body["image"].(map[string]any)
+			if !ok {
+				t.Fatalf("expected image object in i2v submit body, got %v", body["image"])
+			}
+			url, _ := img["url"].(string)
+			if want := "data:image/png;base64," + grokSeedPNGBase64; url != want {
+				t.Errorf("expected seed data URL %q, got %q", want, url)
+			}
+			json.NewEncoder(w).Encode(map[string]any{"request_id": "vid-i2v-1"})
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/v1/videos/vid-i2v-1"):
+			if atomic.AddInt32(&polls, 1) <= 1 {
+				json.NewEncoder(w).Encode(map[string]any{"status": "pending"})
+				return
+			}
+			json.NewEncoder(w).Encode(map[string]any{
+				"status": "done",
+				"video":  map[string]any{"url": "https://vidgen.x.ai/i2v/out.mp4", "duration": 6},
+			})
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			http.Error(w, "unexpected", http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	c := New(providers.Grok, "test-token")
+	c.provider.baseURL = server.URL
+
+	h, err := c.Video.Model(grokVideoModel).Image("image/png", png).
+		Submit(context.Background(), "animate the still: slow push-in")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := h.Wait(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Videos) != 1 || resp.Videos[0].URL != "https://vidgen.x.ai/i2v/out.mp4" {
+		t.Fatalf("expected one i2v video url, got %+v", resp.Videos)
+	}
+}
+
+// TestVideoRejectsImagePartOnTextOnlyModel pins the BUG-010 capability gate: a
+// model whose VideoModelDef does not set SupportsImageToVideo (every model but
+// grok-imagine-video this slice) rejects an image part pre-flight rather than
+// dropping it at wire time.
+func TestVideoRejectsImagePartOnTextOnlyModel(t *testing.T) {
+	png, err := base64.StdEncoding.DecodeString(grokSeedPNGBase64)
+	if err != nil {
+		t.Fatalf("decode seed PNG: %v", err)
+	}
+	c := New(providers.Zhipu, "test-token")
+	_, err = c.Video.Model(zhipuVideoModel).Image("image/png", png).
+		Submit(context.Background(), "animate this")
+	var ve *ValidationError
+	if !errors.As(err, &ve) || !strings.Contains(err.Error(), "text-to-video-only") {
+		t.Fatalf("expected text-to-video-only rejection, got %v", err)
+	}
+}
+
+// TestVideoRejectsMultipleSeedFrames pins the single-seed contract: Grok
+// Imagine animates one seed frame, so a second image part is a caller error.
+func TestVideoRejectsMultipleSeedFrames(t *testing.T) {
+	png, err := base64.StdEncoding.DecodeString(grokSeedPNGBase64)
+	if err != nil {
+		t.Fatalf("decode seed PNG: %v", err)
+	}
+	c := New(providers.Grok, "test-token")
+	_, err = c.Video.Model(grokVideoModel).
+		Image("image/png", png).Image("image/png", png).
+		Submit(context.Background(), "animate this")
+	if err == nil || !strings.Contains(err.Error(), "single seed frame") {
+		t.Fatalf("expected single seed frame rejection, got %v", err)
+	}
+}
+
 func TestVideoXOR(t *testing.T) {
 	c := New(providers.Grok, "test-token")
 	p := c.provider.toProvider(grokVideoModel)
