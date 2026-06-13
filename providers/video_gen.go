@@ -34,6 +34,7 @@ type VideoModelDef struct {
 	Resolutions          []string
 	//
 	//
+	//
 	MaxInputImages int
 }
 
