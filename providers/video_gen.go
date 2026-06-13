@@ -32,6 +32,9 @@ type VideoModelDef struct {
 	MaxDurationSeconds   int
 	OutputMime           string
 	Resolutions          []string
+	// MaxInputImages is advisory per-model metadata (BUG-011): the
+	// max seed/reference images, 0 when unknown. Not enforced.
+	MaxInputImages int
 }
 
 // VideoGenDef holds one provider's video-generation configuration.
@@ -71,6 +74,7 @@ func VideoGenConfig(provider string) *VideoGenDef {
 					MaxDurationSeconds:   6,
 					OutputMime:           "video/mp4",
 					Resolutions:          []string{"720p"},
+					MaxInputImages:       0,
 				},
 			},
 		}
@@ -92,6 +96,7 @@ func VideoGenConfig(provider string) *VideoGenDef {
 					MaxDurationSeconds:   8,
 					OutputMime:           "video/mp4",
 					Resolutions:          []string{"1080p", "720p"},
+					MaxInputImages:       0,
 				},
 			},
 		}
@@ -113,6 +118,7 @@ func VideoGenConfig(provider string) *VideoGenDef {
 					MaxDurationSeconds:   15,
 					OutputMime:           "video/mp4",
 					Resolutions:          []string{"480p", "720p"},
+					MaxInputImages:       1,
 				},
 			},
 		}
@@ -134,6 +140,7 @@ func VideoGenConfig(provider string) *VideoGenDef {
 					MaxDurationSeconds:   6,
 					OutputMime:           "video/mp4",
 					Resolutions:          []string{"1080p", "768p"},
+					MaxInputImages:       0,
 				},
 			},
 		}
@@ -155,6 +162,7 @@ func VideoGenConfig(provider string) *VideoGenDef {
 					MaxDurationSeconds:   5,
 					OutputMime:           "video/mp4",
 					Resolutions:          []string{"720p"},
+					MaxInputImages:       0,
 				},
 			},
 		}
@@ -176,6 +184,7 @@ func VideoGenConfig(provider string) *VideoGenDef {
 					MaxDurationSeconds:   6,
 					OutputMime:           "video/mp4",
 					Resolutions:          []string{"720p"},
+					MaxInputImages:       0,
 				},
 			},
 		}
@@ -197,6 +206,7 @@ func VideoGenConfig(provider string) *VideoGenDef {
 					MaxDurationSeconds:   8,
 					OutputMime:           "video/mp4",
 					Resolutions:          []string{"1080p", "720p"},
+					MaxInputImages:       0,
 				},
 			},
 		}
@@ -218,6 +228,7 @@ func VideoGenConfig(provider string) *VideoGenDef {
 					MaxDurationSeconds:   10,
 					OutputMime:           "video/mp4",
 					Resolutions:          []string{"1080p", "4k", "720p"},
+					MaxInputImages:       0,
 				},
 			},
 		}
