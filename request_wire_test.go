@@ -627,6 +627,26 @@ func TestRequestWire_VideoGrok(t *testing.T) {
 	assertRequestWireGolden(t, "video-grok", body)
 }
 
+// TestRequestWire_VideoGrokI2v witnesses the Grok image-to-video submit body
+// (BUG-010): the seed frame rides as image.url, a data URL inlining the
+// reference bytes — the same encoding Grok's image-EDIT path uses. The body is
+// {model, prompt, image:{url}}; the text-to-video golden (video-grok) has no
+// image field, so the two goldens together pin both submit shapes.
+func TestRequestWire_VideoGrokI2v(t *testing.T) {
+	png, err := base64.StdEncoding.DecodeString(wireVideoGrokI2vImageBase64)
+	if err != nil {
+		t.Fatalf("decode tiny PNG constant: %v", err)
+	}
+	body, _ := captureBody(t, providers.Grok, func(c *Client) {
+		_, err := c.Video.Model(wireVideoGrokI2vModel).Image(wireVideoGrokI2vImageMime, png).
+			Submit(context.Background(), wireVideoGrokI2vPrompt)
+		if err != nil {
+			t.Fatalf("video i2v submit grok call: %v", err)
+		}
+	})
+	assertRequestWireGolden(t, "video-grok-i2v", body)
+}
+
 // TestRequestWire_VideoZhipu witnesses the Zhipu CogVideoX video-submit body:
 // {model, prompt} POSTed to /v4/videos/generations — structurally identical to
 // the Grok submit body, which is the point of the shared {model, prompt} arm.
