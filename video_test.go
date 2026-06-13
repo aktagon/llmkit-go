@@ -2,6 +2,7 @@ package llmkit
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -617,6 +618,150 @@ func TestVideoWaitFailedVeo(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "prompt blocked by safety filter") {
 		t.Errorf("expected operation error message, got %v", err)
+	}
+}
+
+const vertexOperationName = "projects/test-project/locations/us-central1/operations/op-1"
+
+// vertexVideoServer serves the Vertex Veo predictLongRunning + fetchPredictOperation
+// endpoints. Vertex is the FIRST POST-poll provider (every other provider GETs
+// the poll): the operation is fetched with a POST to {model}:fetchPredictOperation
+// carrying {operationName}. Delivery is download with NO fetch hop — the bytes
+// arrive inline as base64 in the poll body (response.videos[0].bytesBase64Encoded).
+// The poll returns done=false for the first pendingPolls calls, then either the
+// finished video (videoBytes) or, when failOp is set, a done op carrying an error.
+func vertexVideoServer(t *testing.T, pendingPolls int32, videoBytes []byte, failOp bool, omitBytes bool) *httptest.Server {
+	t.Helper()
+	var polls int32
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
+			t.Errorf("expected bearer auth on %s %s, got %q", r.Method, r.URL.Path, got)
+		}
+		switch {
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/veo-3.1-generate-preview:predictLongRunning"):
+			var body map[string]any
+			json.NewDecoder(r.Body).Decode(&body)
+			if _, hasModel := body["model"]; hasModel {
+				t.Error("Vertex Veo submit body must NOT carry a model field (model is in the URL path)")
+			}
+			instances, ok := body["instances"].([]any)
+			if !ok || len(instances) != 1 {
+				t.Fatalf("expected instances[1] in submit body, got %v", body["instances"])
+			}
+			first, _ := instances[0].(map[string]any)
+			if first["prompt"] == "" || first["prompt"] == nil {
+				t.Error("expected non-empty instances[0].prompt in submit body")
+			}
+			json.NewEncoder(w).Encode(map[string]any{"name": vertexOperationName})
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/veo-3.1-generate-preview:fetchPredictOperation"):
+			var body map[string]any
+			json.NewDecoder(r.Body).Decode(&body)
+			if got, _ := body["operationName"].(string); got != vertexOperationName {
+				t.Errorf("expected poll body operationName=%q, got %q", vertexOperationName, got)
+			}
+			if failOp {
+				json.NewEncoder(w).Encode(map[string]any{
+					"done":  true,
+					"error": map[string]any{"code": 3, "message": "prompt blocked by safety filter"},
+				})
+				return
+			}
+			if atomic.AddInt32(&polls, 1) <= pendingPolls {
+				json.NewEncoder(w).Encode(map[string]any{"done": false})
+				return
+			}
+			video := map[string]any{"mimeType": "video/mp4"}
+			if !omitBytes {
+				video["bytesBase64Encoded"] = base64.StdEncoding.EncodeToString(videoBytes)
+			}
+			json.NewEncoder(w).Encode(map[string]any{
+				"done":     true,
+				"response": map[string]any{"videos": []any{video}},
+			})
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			http.Error(w, "unexpected", http.StatusNotFound)
+		}
+	}))
+}
+
+func TestSubmitAndWaitVideoVertexVeo(t *testing.T) {
+	fastVideoPoll(t)
+	wantBytes := []byte("\x00\x00\x00\x18ftypmp42 fake vertex mp4 payload")
+	server := vertexVideoServer(t, 2, wantBytes, false, false)
+	defer server.Close()
+
+	c := New(providers.Vertex, "test-token")
+	c.provider.baseURL = server.URL
+
+	h, err := c.Video.Model(veoVideoModel).Submit(context.Background(), "a drone shot over the alps at sunrise")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h.ID != vertexOperationName {
+		t.Fatalf("expected handle id from the operation name, got %q", h.ID)
+	}
+	if h.Model != veoVideoModel {
+		t.Fatalf("expected handle to carry the model for the fetchPredictOperation poll URL, got %q", h.Model)
+	}
+
+	resp, err := h.Wait(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Videos) != 1 {
+		t.Fatalf("expected 1 video, got %d", len(resp.Videos))
+	}
+	if got := string(resp.Videos[0].Bytes); got != string(wantBytes) {
+		t.Errorf("inline-base64 download delivery: expected decoded bytes, got %q", got)
+	}
+	if got := resp.Videos[0].URL; got != "" {
+		t.Errorf("download delivery must leave URL empty (source-XOR), got %q", got)
+	}
+	if got := resp.Videos[0].MimeType; got != "video/mp4" {
+		t.Errorf("expected video/mp4, got %q", got)
+	}
+}
+
+func TestVideoWaitFailedVertexVeo(t *testing.T) {
+	fastVideoPoll(t)
+	server := vertexVideoServer(t, 0, nil, true, false)
+	defer server.Close()
+
+	c := New(providers.Vertex, "test-token")
+	c.provider.baseURL = server.URL
+
+	h, err := c.Video.Model(veoVideoModel).Submit(context.Background(), "blocked prompt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = h.Wait(context.Background())
+	if err == nil {
+		t.Fatal("expected error for failed (done+error) operation")
+	}
+	if !strings.Contains(err.Error(), "prompt blocked by safety filter") {
+		t.Errorf("expected operation error message, got %v", err)
+	}
+}
+
+func TestVideoVertexVeoDoneNoBytes(t *testing.T) {
+	fastVideoPoll(t)
+	server := vertexVideoServer(t, 0, nil, false, true)
+	defer server.Close()
+
+	c := New(providers.Vertex, "test-token")
+	c.provider.baseURL = server.URL
+
+	h, err := c.Video.Model(veoVideoModel).Submit(context.Background(), "a quiet harbour at dawn")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = h.Wait(context.Background())
+	if err == nil {
+		t.Fatal("expected error for a done operation carrying no video bytes")
+	}
+	if !strings.Contains(err.Error(), "no video bytes") {
+		t.Errorf("expected done+no-bytes guard error, got %v", err)
 	}
 }
 

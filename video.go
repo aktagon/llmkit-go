@@ -2,6 +2,7 @@ package llmkit
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -167,7 +168,7 @@ func submitVideo(ctx context.Context, p Provider, req VideoRequest, opts ...Vide
 	if err != nil {
 		return VideoHandle{}, err
 	}
-	return VideoHandle{ID: requestID, Provider: p, Raw: o.raw}, nil
+	return VideoHandle{ID: requestID, Provider: p, Raw: o.raw, Model: req.Model}, nil
 }
 
 // dispatchVideoSubmit POSTs the submit body and returns the provider-assigned
@@ -208,11 +209,12 @@ func dispatchVideoSubmit(
 		// endpoint rejects the request. Set per-request only.
 		headers = cloneStringMap(headers)
 		headers["X-DashScope-Async"] = "enable"
-	case providers.VideoShapeVeo:
-		// Veo carries the model in the submit PATH (:predictLongRunning), not
-		// the body — so the body has no model field. The prompt nests under
-		// instances[]; the optional parameters object {aspectRatio, resolution}
-		// is omitted on the prompt-only hot path.
+	case providers.VideoShapeVeo, providers.VideoShapeVertexVeo:
+		// Veo (Gemini API) and Vertex Veo share the submit body: the model is in
+		// the PATH (:predictLongRunning), not the body, so the body has no model
+		// field. The prompt nests under instances[]; the optional parameters
+		// object ({aspectRatio, resolution} for Gemini; {sampleCount, storageUri}
+		// for Vertex) is omitted on the prompt-only hot path.
 		body = map[string]any{
 			"instances": []map[string]any{{"prompt": joinPromptText(parts)}},
 		}
@@ -302,13 +304,27 @@ func (h VideoHandle) Wait(ctx context.Context, opts ...VideoOption) (VideoRespon
 
 	deadline := time.Now().Add(videoPollTimeout)
 
-	// Bedrock (SigV4) signs the poll GET and carries the handle ARN as a single
-	// percent-encoded path segment (its ':' and '/' must not split into extra
-	// segments). Every other provider uses the verbatim {id} substitution and
-	// the bearer/query-param auth path.
+	// Poll dispatch has three arms, selected here once before the loop:
+	//   - sigV4 (Bedrock): signs the poll GET and carries the handle ARN as a
+	//     single percent-encoded path segment (its ':' and '/' must not split
+	//     into extra segments).
+	//   - vertexPoll (Vertex Veo): the ONLY POST-poll shape — fetches the
+	//     operation with a POST to {model}:fetchPredictOperation carrying
+	//     {operationName}. The model is templated from the handle; the operation
+	//     name goes in the body, not the URL.
+	//   - default: the verbatim {id} substitution and a GET on the bearer/
+	//     query-param auth path (every other provider).
+	//
+	// The arms are config-disjoint by design: sigV4 keys off AuthScheme and
+	// vertexPoll off WireShape, and no A-Box pairs SigV4 with VideoVertexVeo
+	// (Bedrock is SigV4+VideoBedrock; Vertex is bearer+VideoVertexVeo). sigV4 is
+	// matched first so a hypothetical both-true misconfig would poll as SigV4.
 	sigV4 := cfg.AuthScheme == providers.AuthSigV4
+	vertexPoll := vgCfg.WireShape == providers.VideoShapeVertexVeo
 	var pollURL, region, secretKey, sessionToken string
-	if sigV4 {
+	var vertexPollBody []byte
+	switch {
+	case sigV4:
 		// url.PathEscape encodes the ARN's '/' to %2F (keeping it a single path
 		// segment) but leaves ':' literal — which matches Bedrock's SigV4
 		// canonicalization: the live-verified Converse chat path signs a model id
@@ -319,7 +335,14 @@ func (h VideoHandle) Wait(ctx context.Context, opts ...VideoOption) (VideoRespon
 		region = os.Getenv(cfg.RegionEnvVar)
 		secretKey = os.Getenv(cfg.SecretKeyEnvVar)
 		sessionToken = os.Getenv(cfg.SessionTokenEnvVar)
-	} else {
+	case vertexPoll:
+		pollURL = appendVideoAuth(base+strings.ReplaceAll(vgCfg.PollEndpoint, "{model}", h.Model), p, cfg)
+		body, marshalErr := json.Marshal(map[string]any{"operationName": h.ID})
+		if marshalErr != nil {
+			return VideoResponse{}, fmt.Errorf("marshal vertex poll body: %w", marshalErr)
+		}
+		vertexPollBody = body
+	default:
 		pollURL = appendVideoAuth(videoPollURL(vgCfg.PollEndpoint, base, h.ID), p, cfg)
 	}
 
@@ -335,9 +358,12 @@ func (h VideoHandle) Wait(ctx context.Context, opts ...VideoOption) (VideoRespon
 
 		var respBody []byte
 		var err error
-		if sigV4 {
+		switch {
+		case sigV4:
 			respBody, err = doSigV4Get(ctx, client, pollURL, p.APIKey, secretKey, sessionToken, region, cfg.ServiceName)
-		} else {
+		case vertexPoll:
+			respBody, err = doPost(ctx, client, pollURL, vertexPollBody, headers)
+		default:
 			respBody, err = doGet(ctx, client, pollURL, headers)
 		}
 		if err != nil {
@@ -533,6 +559,31 @@ func parseVideoPoll(vgCfg *providers.VideoGenDef, body []byte) (VideoResponse, b
 			return VideoResponse{}, false, fmt.Errorf("video generation: operation done but carried no video uri")
 		}
 		return result, true, nil
+	case providers.VideoShapeVertexVeo:
+		// Vertex Veo operation poll (fetchPredictOperation): same done/error LRO
+		// shape as Gemini Veo, but the finished video arrives as inline base64 in
+		// the poll body (response.videos[0].bytesBase64Encoded), not a fetch URI.
+		done, _ := raw["done"].(bool)
+		if !done {
+			return VideoResponse{}, false, nil
+		}
+		if errObj, ok := raw["error"].(map[string]any); ok {
+			msg, _ := errObj["message"].(string)
+			if msg == "" {
+				msg = "operation failed"
+			}
+			return VideoResponse{}, false, fmt.Errorf("video generation failed: %s", msg)
+		}
+		result, err := videoResultFromVertexVeo(vgCfg, raw)
+		if err != nil {
+			return VideoResponse{}, false, err
+		}
+		// Mirror the Veo done+no-uri guard: a done op carrying no decodable bytes
+		// must surface as an error, not a silent zero-byte success.
+		if len(result.Videos) == 0 || len(result.Videos[0].Bytes) == 0 {
+			return VideoResponse{}, false, fmt.Errorf("video generation: operation done but carried no video bytes")
+		}
+		return result, true, nil
 	case providers.VideoShapeBedrock:
 		// Bedrock async-invoke status (GetAsyncInvoke): Completed terminal-success,
 		// Failed terminal-error (failureMessage), InProgress pending. On success
@@ -716,6 +767,39 @@ func videoResultFromVeo(vgCfg *providers.VideoGenDef, raw map[string]any) VideoR
 	video, _ := first["video"].(map[string]any)
 	uri, _ := video["uri"].(string)
 	return VideoResponse{Videos: []VideoData{{MimeType: mime, URL: uri}}}
+}
+
+// videoResultFromVertexVeo extracts the finished video from a Vertex Veo
+// fetchPredictOperation poll response. Unlike Gemini Veo (which returns a fetch
+// URI), Vertex Veo returns the bytes inline as base64 at
+// response.videos[0].bytesBase64Encoded with the mime at .mimeType. This is
+// download delivery with NO fetch hop: the bytes are decoded straight into
+// VideoData.Bytes here and VideoData.URL stays empty, so the Wait download step
+// (downloadVideoBytes) finds no URL and no-ops — the source-XOR contract holds
+// (VID-004: download delivery returns bytes, never a URL).
+func videoResultFromVertexVeo(vgCfg *providers.VideoGenDef, raw map[string]any) (VideoResponse, error) {
+	mime := videoFallbackMime(vgCfg)
+	response, _ := raw["response"].(map[string]any)
+	videos, _ := response["videos"].([]any)
+	if len(videos) == 0 {
+		return VideoResponse{}, nil
+	}
+	first, _ := videos[0].(map[string]any)
+	if first == nil {
+		return VideoResponse{}, nil
+	}
+	if m, ok := first["mimeType"].(string); ok && m != "" {
+		mime = m
+	}
+	b64, _ := first["bytesBase64Encoded"].(string)
+	if b64 == "" {
+		return VideoResponse{}, nil
+	}
+	decoded, err := base64.StdEncoding.DecodeString(b64)
+	if err != nil {
+		return VideoResponse{}, fmt.Errorf("decode vertex video bytes: %w", err)
+	}
+	return VideoResponse{Videos: []VideoData{{MimeType: mime, Bytes: decoded}}}, nil
 }
 
 // videoResultFromBedrock extracts the finished video reference from a Bedrock

@@ -95,6 +95,8 @@ const (
 	wireVideoQwenPrompt                         = "A drone shot sweeping over snow-capped alpine peaks at sunrise"
 	wireVideoTogetherModel                      = "minimax/video-01-director"
 	wireVideoTogetherPrompt                     = "A drone shot sweeping over snow-capped alpine peaks at sunrise"
+	wireVideoVertexModel                        = "veo-3.1-generate-preview"
+	wireVideoVertexPrompt                       = "A drone shot sweeping over snow-capped alpine peaks at sunrise"
 	wireVideoZhipuModel                         = "cogvideox-3"
 	wireVideoZhipuPrompt                        = "A drone shot sweeping over snow-capped alpine peaks at sunrise"
 )
