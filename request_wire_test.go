@@ -754,3 +754,21 @@ func TestRequestWire_VideoBedrock(t *testing.T) {
 	})
 	assertRequestWireGolden(t, "video-bedrock", body)
 }
+
+// TestRequestWire_VideoVertex witnesses the Vertex Veo video-submit body: the
+// nested {instances:[{prompt}]} shape — byte-identical to the Veo (Gemini API)
+// golden, because Vertex Veo carries the model in the submit PATH
+// (/{model}:predictLongRunning), not the body. The POST-poll lifecycle
+// (:fetchPredictOperation with {operationName}, inline-base64 download delivery
+// into VideoData.Bytes) and the caller-set base URL are delivery-side, exercised
+// by the unit tests, not the request-wire suite. WIRE-005: NOT live-anchored
+// (no GCP token).
+func TestRequestWire_VideoVertex(t *testing.T) {
+	body, _ := captureBody(t, providers.Vertex, func(c *Client) {
+		_, err := c.Video.Model(wireVideoVertexModel).Submit(context.Background(), wireVideoVertexPrompt)
+		if err != nil {
+			t.Fatalf("video submit vertex call: %v", err)
+		}
+	})
+	assertRequestWireGolden(t, "video-vertex", body)
+}
