@@ -20,9 +20,9 @@ type ImageModelDef struct {
 	Label        string
 	AspectRatios []string
 	ImageSizes   []string
-	// MaxInputImages is advisory per-model metadata (BUG-011): the
-	// max reference images, 0 when unknown. Not enforced — the
-	// provider is the source of truth on volume.
+	// MaxInputImages is the image count llmkit serializes when the wire
+	// shape fixes it (e.g. Grok's single-seed slot); 0 = no llmkit limit,
+	// the provider decides volume (BUG-011).
 	MaxInputImages int
 }
 
@@ -55,14 +55,14 @@ func ImageGenConfig(provider string) *ImageGenDef {
 					Label:          "Nano Banana Pro",
 					AspectRatios:   []string{"16:9", "1:1", "21:9", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16"},
 					ImageSizes:     []string{"1K", "2K", "4K"},
-					MaxInputImages: 11,
+					MaxInputImages: 0,
 				},
 				{
 					ModelID:        "gemini-3.1-flash-image-preview",
 					Label:          "Nano Banana 2",
 					AspectRatios:   []string{"16:9", "1:1", "1:4", "1:8", "21:9", "2:3", "3:2", "3:4", "4:1", "4:3", "4:5", "5:4", "8:1", "9:16"},
 					ImageSizes:     []string{"1K", "2K", "4K", "512"},
-					MaxInputImages: 14,
+					MaxInputImages: 0,
 				},
 			},
 		}
