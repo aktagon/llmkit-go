@@ -997,6 +997,42 @@ func TestVideoUnknownModel(t *testing.T) {
 	}
 }
 
+// TestMaxInputImagesAdvisory locks the BUG-011 queryable per-model cap. It is
+// advisory metadata (not enforced); the test asserts the value is reachable
+// through the exported config so consumers can pre-validate instead of
+// hardcoding limits. Image cap is per-MODEL (Nano Banana 2 vs Pro differ),
+// which the old provider-level ImageGenDef.MaxInputCount could not express.
+func TestMaxInputImagesAdvisory(t *testing.T) {
+	byModel := func(models []providers.VideoModelDef, id string) int {
+		for _, m := range models {
+			if m.ModelID == id {
+				return m.MaxInputImages
+			}
+		}
+		t.Fatalf("video model %q not found", id)
+		return 0
+	}
+	if got := byModel(providers.VideoGenConfig("grok").Models, "grok-imagine-video"); got != 1 {
+		t.Errorf("grok-imagine-video MaxInputImages = %d, want 1 (single seed)", got)
+	}
+
+	imgByModel := func(id string) int {
+		for _, m := range providers.ImageGenConfig("google").Models {
+			if m.ModelID == id {
+				return m.MaxInputImages
+			}
+		}
+		t.Fatalf("image model %q not found", id)
+		return 0
+	}
+	if got := imgByModel("gemini-3.1-flash-image-preview"); got != 14 {
+		t.Errorf("Nano Banana 2 MaxInputImages = %d, want 14", got)
+	}
+	if got := imgByModel("gemini-3-pro-image-preview"); got != 11 {
+		t.Errorf("Nano Banana Pro MaxInputImages = %d, want 11", got)
+	}
+}
+
 func TestVideoProviderUnsupported(t *testing.T) {
 	c := New(providers.Anthropic, "test-token")
 	_, err := c.Video.Model(grokVideoModel).Submit(context.Background(), "x")
