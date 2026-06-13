@@ -5,13 +5,14 @@ package providers
 // Video wire-shape discriminators. Each selects the submit-body build,
 // poll mechanism, and result-extraction transform.
 const (
-	VideoShapeGrok     = "VideoGrok"
-	VideoShapeZhipu    = "VideoZhipu"
-	VideoShapeTogether = "VideoTogether"
-	VideoShapeQwen     = "VideoQwen"
-	VideoShapeMinimax  = "VideoMinimax"
-	VideoShapeVeo      = "VideoVeo"
-	VideoShapeBedrock  = "VideoBedrock"
+	VideoShapeGrok      = "VideoGrok"
+	VideoShapeZhipu     = "VideoZhipu"
+	VideoShapeTogether  = "VideoTogether"
+	VideoShapeQwen      = "VideoQwen"
+	VideoShapeMinimax   = "VideoMinimax"
+	VideoShapeVeo       = "VideoVeo"
+	VideoShapeBedrock   = "VideoBedrock"
+	VideoShapeVertexVeo = "VideoVertexVeo"
 )
 
 // Video output-delivery modes. Drive whether the runtime downloads
@@ -175,6 +176,27 @@ func VideoGenConfig(provider string) *VideoGenDef {
 					MaxDurationSeconds:   6,
 					OutputMime:           "video/mp4",
 					Resolutions:          []string{"720p"},
+				},
+			},
+		}
+	case Vertex:
+		return &VideoGenDef{
+			WireShape:         "VideoVertexVeo",
+			OutputDelivery:    "DeliveryDownload",
+			VideoBaseURL:      "",
+			GenEndpoint:       "/{model}:predictLongRunning",
+			PollEndpoint:      "/{model}:fetchPredictOperation",
+			FileEndpoint:      "",
+			SubmitHandleField: "name",
+			RequiresOutputURI: false,
+			Models: []VideoModelDef{
+				{
+					ModelID:              "veo-3.1-generate-preview",
+					Label:                "Veo 3.1",
+					SupportsImageToVideo: true,
+					MaxDurationSeconds:   8,
+					OutputMime:           "video/mp4",
+					Resolutions:          []string{"1080p", "720p"},
 				},
 			},
 		}
