@@ -997,12 +997,13 @@ func TestVideoUnknownModel(t *testing.T) {
 	}
 }
 
-// TestMaxInputImagesAdvisory locks the BUG-011 queryable per-model cap. It is
-// advisory metadata (not enforced); the test asserts the value is reachable
-// through the exported config so consumers can pre-validate instead of
-// hardcoding limits. Image cap is per-MODEL (Nano Banana 2 vs Pro differ),
-// which the old provider-level ImageGenDef.MaxInputCount could not express.
-func TestMaxInputImagesAdvisory(t *testing.T) {
+// TestMaxInputImagesArity locks the BUG-011 contract: MaxInputImages is the
+// image count llmkit serializes when the wire shape fixes it (an llmkit-side
+// arity fact), queryable through the config. Grok image-to-video has a single
+// seed slot -> 1. Image-edit takes an array of references, so no image model
+// imposes an llmkit limit -> 0 (the provider decides volume; we do NOT assert
+// unverified provider policy maxima).
+func TestMaxInputImagesArity(t *testing.T) {
 	byModel := func(models []providers.VideoModelDef, id string) int {
 		for _, m := range models {
 			if m.ModelID == id {
@@ -1013,7 +1014,7 @@ func TestMaxInputImagesAdvisory(t *testing.T) {
 		return 0
 	}
 	if got := byModel(providers.VideoGenConfig("grok").Models, "grok-imagine-video"); got != 1 {
-		t.Errorf("grok-imagine-video MaxInputImages = %d, want 1 (single seed)", got)
+		t.Errorf("grok-imagine-video MaxInputImages = %d, want 1 (single seed slot)", got)
 	}
 
 	imgByModel := func(id string) int {
@@ -1025,11 +1026,10 @@ func TestMaxInputImagesAdvisory(t *testing.T) {
 		t.Fatalf("image model %q not found", id)
 		return 0
 	}
-	if got := imgByModel("gemini-3.1-flash-image-preview"); got != 14 {
-		t.Errorf("Nano Banana 2 MaxInputImages = %d, want 14", got)
-	}
-	if got := imgByModel("gemini-3-pro-image-preview"); got != 11 {
-		t.Errorf("Nano Banana Pro MaxInputImages = %d, want 11", got)
+	for _, id := range []string{"gemini-3.1-flash-image-preview", "gemini-3-pro-image-preview"} {
+		if got := imgByModel(id); got != 0 {
+			t.Errorf("%s MaxInputImages = %d, want 0 (no llmkit-imposed cap; provider decides)", id, got)
+		}
 	}
 }
 
