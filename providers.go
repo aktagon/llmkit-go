@@ -3,7 +3,7 @@ package llmkit
 import (
 	"sort"
 
-	"github.com/aktagon/llmkit-go/providers"
+	"github.com/aktagon/llmkit-go/internal/providerspec"
 )
 
 // runList returns the providers eligible for *Models.Live(ctx). Per
@@ -30,7 +30,7 @@ func (b *Providers) runList() []Provider {
 // of Client credentials. Sorted by provider name for deterministic
 // callers.
 func (b *Providers) runSupported() []Provider {
-	configs := providers.Providers()
+	configs := providerspec.Providers()
 	out := make([]Provider, 0, len(configs))
 	for name := range configs {
 		out = append(out, Provider{Name: name})
