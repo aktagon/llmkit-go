@@ -5,20 +5,21 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/aktagon/llmkit-go/internal/providerspec"
 	"github.com/aktagon/llmkit-go/providers"
 )
 
 // =============================================================================
-// Transform selection — derive which transform to use from ProviderConfig
+// Transform selection — derive which transform to use from ProviderSpec
 // =============================================================================
 
 // isBedrock detects Bedrock Converse API shape from config fields.
-func isBedrock(cfg providers.ProviderConfig) bool {
+func isBedrock(cfg providerspec.ProviderSpec) bool {
 	return cfg.WrapsOptionsIn == "inferenceConfig" && cfg.AuthScheme == providers.AuthSigV4
 }
 
 // selectMessageTransform picks the message builder based on config.
-func selectMessageTransform(cfg providers.ProviderConfig) messageTransformFunc {
+func selectMessageTransform(cfg providerspec.ProviderSpec) messageTransformFunc {
 	if isBedrock(cfg) {
 		return transformBedrockConverse
 	}
@@ -29,7 +30,7 @@ func selectMessageTransform(cfg providers.ProviderConfig) messageTransformFunc {
 }
 
 // selectToolDefTransform picks the tool definition builder.
-func selectToolDefTransform(cfg providers.ProviderConfig) toolDefTransformFunc {
+func selectToolDefTransform(cfg providerspec.ProviderSpec) toolDefTransformFunc {
 	if isBedrock(cfg) {
 		return transformBedrockToolDefs
 	}
@@ -53,7 +54,7 @@ func selectToolDefTransform(cfg providers.ProviderConfig) toolDefTransformFunc {
 }
 
 // selectToolCallTransform picks the tool call message builder.
-func selectToolCallTransform(cfg providers.ProviderConfig) toolCallTransformFunc {
+func selectToolCallTransform(cfg providerspec.ProviderSpec) toolCallTransformFunc {
 	if isBedrock(cfg) {
 		return transformBedrockToolCallMsg
 	}
@@ -68,7 +69,7 @@ func selectToolCallTransform(cfg providers.ProviderConfig) toolCallTransformFunc
 }
 
 // selectToolResultTransform picks the tool result message builder.
-func selectToolResultTransform(cfg providers.ProviderConfig) toolResultTransformFunc {
+func selectToolResultTransform(cfg providerspec.ProviderSpec) toolResultTransformFunc {
 	if isBedrock(cfg) {
 		return transformBedrockToolResultMsg
 	}
@@ -83,7 +84,7 @@ func selectToolResultTransform(cfg providers.ProviderConfig) toolResultTransform
 }
 
 // selectToolCallExtractor picks the tool call parser for responses.
-func selectToolCallExtractor(cfg providers.ProviderConfig) toolCallExtractFunc {
+func selectToolCallExtractor(cfg providerspec.ProviderSpec) toolCallExtractFunc {
 	if isBedrock(cfg) {
 		return extractBedrockToolCalls
 	}
@@ -167,9 +168,9 @@ func toInternal(messages []Message) ([]msg, error) {
 // Message transforms — build the messages/contents array in request body
 // =============================================================================
 
-type messageTransformFunc func(body map[string]any, msgs []msg, req Request, cfg providers.ProviderConfig)
+type messageTransformFunc func(body map[string]any, msgs []msg, req Request, cfg providerspec.ProviderSpec)
 
-func transformFlatContent(body map[string]any, msgs []msg, req Request, cfg providers.ProviderConfig) {
+func transformFlatContent(body map[string]any, msgs []msg, req Request, cfg providerspec.ProviderSpec) {
 	out := []map[string]any{}
 
 	if cfg.SystemPlacement == providers.PlacementMessageInArray && req.System != "" {
@@ -217,7 +218,7 @@ func transformFlatContent(body map[string]any, msgs []msg, req Request, cfg prov
 }
 
 // buildFlatContentParts builds a content array for OpenAI/Anthropic with files and images.
-func buildFlatContentParts(req Request, cfg providers.ProviderConfig) []map[string]any {
+func buildFlatContentParts(req Request, cfg providerspec.ProviderSpec) []map[string]any {
 	parts := []map[string]any{}
 
 	isAnthropic := cfg.SystemPlacement == providers.PlacementTopLevelField
@@ -274,7 +275,7 @@ func buildFlatContentParts(req Request, cfg providers.ProviderConfig) []map[stri
 	return parts
 }
 
-func transformGoogleParts(body map[string]any, msgs []msg, req Request, cfg providers.ProviderConfig) {
+func transformGoogleParts(body map[string]any, msgs []msg, req Request, cfg providerspec.ProviderSpec) {
 	contents := []map[string]any{}
 
 	if len(msgs) > 0 {
@@ -596,7 +597,7 @@ func extractAnthropicToolCalls(raw map[string]any, _ *providers.ToolCallDef) []t
 // Content wrapped in [{text: "..."}] arrays, tools in toolConfig.tools
 // =============================================================================
 
-func transformBedrockConverse(body map[string]any, msgs []msg, req Request, cfg providers.ProviderConfig) {
+func transformBedrockConverse(body map[string]any, msgs []msg, req Request, cfg providerspec.ProviderSpec) {
 	// System as array of text blocks (different from Anthropic's string)
 	if req.System != "" {
 		body["system"] = []map[string]any{{"text": req.System}}
