@@ -42,16 +42,16 @@ var models = map[string]string{
 }
 
 func main() {
-	cfgs := providers.Providers()
-	names := make([]string, 0, len(cfgs))
-	for n := range cfgs {
-		names = append(names, n)
+	infos := providers.List()
+	names := make([]string, 0, len(infos))
+	for _, info := range infos {
+		names = append(names, info.Name)
 	}
 	sort.Strings(names)
 
 	var pass, fail, skip int
 	for _, name := range names {
-		cfg := cfgs[name]
+		cfg := providers.Info(name)
 		if cfg.EnvVar == "" {
 			fmt.Printf("SKIP %-12s no single API-key env var (local or multi-credential)\n", name)
 			skip++
