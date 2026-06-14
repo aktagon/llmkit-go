@@ -211,13 +211,36 @@ func TestGenerateMusicTextChainAndRaw(t *testing.T) {
 	}
 }
 
-func TestGenerateMusicRejectsLyricsOnInstrumentalModel(t *testing.T) {
-	c := New(providers.Vertex, "t")
-	c.provider.baseURL = "http://unused"
-	_, err := c.Music.Model(lyria2Model).Lyrics("[verse] x").Generate(context.Background(), "ambient")
-	var ve *ValidationError
-	if !errors.As(err, &ve) {
-		t.Fatalf("expected ValidationError for lyrics on instrumental model, got %v", err)
+// ADR-037 (MUS-008): supportsLyrics is advisory, not a gate. Lyrics on the
+// instrumental-only Lyria 2 fold into the :predict prompt instead of being
+// rejected.
+func TestGenerateMusicFoldsLyricsIntoPromptOnInstrumentalModel(t *testing.T) {
+	encoded := base64.StdEncoding.EncodeToString(fakeWAV)
+	var gotBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		json.NewEncoder(w).Encode(map[string]any{
+			"predictions": []map[string]any{{"audioContent": encoded, "mimeType": "audio/wav"}},
+		})
+	}))
+	defer server.Close()
+
+	c := New(providers.Vertex, "test-token")
+	c.provider.baseURL = server.URL
+	resp, err := c.Music.Model(lyria2Model).Lyrics("[verse] neon lights").Generate(context.Background(), "ambient")
+	if err != nil {
+		t.Fatalf("expected lyrics to fold (not reject) on instrumental model, got %v", err)
+	}
+	instances, _ := gotBody["instances"].([]any)
+	if len(instances) != 1 {
+		t.Fatalf("expected 1 instance, got %d", len(instances))
+	}
+	inst, _ := instances[0].(map[string]any)
+	if inst["prompt"] != "ambient\n[verse] neon lights" {
+		t.Errorf("expected lyrics folded into prompt, got %v", inst["prompt"])
+	}
+	if len(resp.Audio) != 1 {
+		t.Errorf("expected audio returned, got %d items", len(resp.Audio))
 	}
 }
 
