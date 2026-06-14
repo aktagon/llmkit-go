@@ -76,14 +76,14 @@ func main() {
 }
 
 func getAPIKey(provider string) string {
-	cfg, ok := providers.Providers()[provider]
-	if !ok {
+	info := providers.Info(provider)
+	if info.Name == "" {
 		log.Fatalf("Unsupported provider: %s", provider)
 	}
 
-	key := os.Getenv(cfg.EnvVar)
+	key := os.Getenv(info.EnvVar)
 	if key == "" {
-		log.Fatalf("%s environment variable is required", cfg.EnvVar)
+		log.Fatalf("%s environment variable is required", info.EnvVar)
 	}
 	return key
 }

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/aktagon/llmkit-go/internal/providerspec"
 	"github.com/aktagon/llmkit-go/providers"
 )
 
@@ -34,7 +35,7 @@ func (b *Upload) Run(ctx context.Context) (File, error) {
 	if err := validateProvider(provider); err != nil {
 		return File{}, err
 	}
-	if _, ok := providers.Providers()[provider.Name]; !ok {
+	if _, ok := providerspec.Providers()[provider.Name]; !ok {
 		return File{}, &ValidationError{Field: "provider", Message: "unknown: " + provider.Name}
 	}
 	if providers.FileUploadConfig(provider.Name) == nil {

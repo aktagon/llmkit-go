@@ -7,6 +7,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/aktagon/llmkit-go/internal/providerspec"
 	"github.com/aktagon/llmkit-go/providers"
 )
 
@@ -64,7 +65,7 @@ func (a *legacyAgent) chat(ctx context.Context, msg string) (Response, error) {
 
 // runToolLoop sends requests and executes tools until no more tool calls or max iterations.
 func (a *legacyAgent) runToolLoop(ctx context.Context) (Response, error) {
-	cfg, ok := providers.Providers()[a.provider.Name]
+	cfg, ok := providerspec.Providers()[a.provider.Name]
 	if !ok {
 		return Response{}, &ValidationError{Field: "provider", Message: "unknown: " + a.provider.Name}
 	}
