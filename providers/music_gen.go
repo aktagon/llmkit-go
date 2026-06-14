@@ -18,6 +18,10 @@ type MusicModelDef struct {
 	SupportsLyrics     bool
 	MaxDurationSeconds int
 	OutputMime         string
+	// SampleRateHz + AvailableOutputFormats are ADR-037 advisory facts
+	// (queryable, never gated). SampleRateHz is 0 when unverified.
+	SampleRateHz           int
+	AvailableOutputFormats []string
 }
 
 // MusicGenDef holds one provider's music-generation configuration.
@@ -39,18 +43,22 @@ func MusicGenConfig(provider string) *MusicGenDef {
 			GenEndpoint: "",
 			Models: []MusicModelDef{
 				{
-					ModelID:            "lyria-3-clip-preview",
-					Label:              "Lyria 3 Clip",
-					SupportsLyrics:     true,
-					MaxDurationSeconds: 30,
-					OutputMime:         "audio/mpeg",
+					ModelID:                "lyria-3-clip-preview",
+					Label:                  "Lyria 3 Clip",
+					SupportsLyrics:         true,
+					MaxDurationSeconds:     30,
+					OutputMime:             "audio/mpeg",
+					SampleRateHz:           0,
+					AvailableOutputFormats: []string{"audio/mpeg"},
 				},
 				{
-					ModelID:            "lyria-3-pro-preview",
-					Label:              "Lyria 3 Pro",
-					SupportsLyrics:     true,
-					MaxDurationSeconds: 120,
-					OutputMime:         "audio/mpeg",
+					ModelID:                "lyria-3-pro-preview",
+					Label:                  "Lyria 3 Pro",
+					SupportsLyrics:         true,
+					MaxDurationSeconds:     120,
+					OutputMime:             "audio/mpeg",
+					SampleRateHz:           0,
+					AvailableOutputFormats: []string{"audio/mpeg"},
 				},
 			},
 		}
@@ -60,11 +68,13 @@ func MusicGenConfig(provider string) *MusicGenDef {
 			GenEndpoint: "https://api.minimax.io/v1/music_generation",
 			Models: []MusicModelDef{
 				{
-					ModelID:            "music-2.6",
-					Label:              "MiniMax Music 2.6",
-					SupportsLyrics:     true,
-					MaxDurationSeconds: 0,
-					OutputMime:         "audio/mpeg",
+					ModelID:                "music-2.6",
+					Label:                  "MiniMax Music 2.6",
+					SupportsLyrics:         true,
+					MaxDurationSeconds:     0,
+					OutputMime:             "audio/mpeg",
+					SampleRateHz:           44100,
+					AvailableOutputFormats: []string{"audio/mpeg", "audio/wav"},
 				},
 			},
 		}
@@ -74,11 +84,13 @@ func MusicGenConfig(provider string) *MusicGenDef {
 			GenEndpoint: "",
 			Models: []MusicModelDef{
 				{
-					ModelID:            "lyria-002",
-					Label:              "Lyria 2",
-					SupportsLyrics:     false,
-					MaxDurationSeconds: 30,
-					OutputMime:         "audio/wav",
+					ModelID:                "lyria-002",
+					Label:                  "Lyria 2",
+					SupportsLyrics:         false,
+					MaxDurationSeconds:     30,
+					OutputMime:             "audio/wav",
+					SampleRateHz:           48000,
+					AvailableOutputFormats: []string{"audio/wav"},
 				},
 			},
 		}
