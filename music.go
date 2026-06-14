@@ -26,7 +26,8 @@ import (
 //     never carries image parts; the runtime rejects them pre-flight.
 //
 // Pre-flight validation requires exactly one of Prompt or Parts to be
-// non-empty (XOR). Lyrics parts are rejected for instrumental-only models.
+// non-empty (XOR). Lyrics on an instrumental-only model are advisory, not
+// rejected (ADR-037 MUS-008): they fold into the prompt for the Predict shape.
 type MusicRequest struct {
 	Model  string
 	Prompt string
@@ -72,8 +73,9 @@ func resolveMusicOptions(opts []MusicOption) *musicOptions {
 
 // generateMusic produces audio from a text prompt, optionally conditioned on
 // lyrics. Input is either Prompt (sugar) or Parts (canonical sequence) —
-// exactly one must be set. Pre-flight validation rejects image parts, unknown
-// models, and lyrics on instrumental-only models before any HTTP call.
+// exactly one must be set. Pre-flight validation rejects image parts and
+// unknown models before any HTTP call; lyrics support is advisory (ADR-037),
+// not gated.
 //
 // Internal helper — the public surface is (*Music).Generate in music_builder.go.
 func generateMusic(ctx context.Context, p Provider, req MusicRequest, opts ...MusicOption) (MusicResponse, error) {
@@ -90,7 +92,6 @@ func generateMusic(ctx context.Context, p Provider, req MusicRequest, opts ...Mu
 	if err != nil {
 		return MusicResponse{}, err
 	}
-	hasLyrics := false
 	for i, part := range parts {
 		set := 0
 		if part.Text != "" {
@@ -98,7 +99,6 @@ func generateMusic(ctx context.Context, p Provider, req MusicRequest, opts ...Mu
 		}
 		if part.Lyrics != "" {
 			set++
-			hasLyrics = true
 		}
 		if part.Image != nil {
 			return MusicResponse{}, &ValidationError{
@@ -126,9 +126,9 @@ func generateMusic(ctx context.Context, p Provider, req MusicRequest, opts ...Mu
 	if model == nil {
 		return MusicResponse{}, &ValidationError{Field: "model", Message: req.Model + " is not a known music-generation model for " + p.Name}
 	}
-	if hasLyrics && !model.SupportsLyrics {
-		return MusicResponse{}, &ValidationError{Field: "parts", Message: req.Model + " is instrumental-only and does not accept lyrics"}
-	}
+	// ADR-037 (MUS-008): supportsLyrics is advisory metadata, not a gate.
+	// Lyrics on an instrumental-only model fold into the prompt (for the
+	// single-prompt Predict shape) and the model ignores or honors them.
 
 	baseEvent := providers.Event{
 		Op:       providers.OpMusicGeneration,
@@ -228,10 +228,18 @@ func postMusicJSON(ctx context.Context, client *http.Client, url string, body ma
 }
 
 // buildVertexMusicBody assembles the Vertex AI Lyria :predict request body.
-// Lyria 2 is instrumental-only, so only text prompt parts are sent. The
+// Lyria 2 has no lyrics wire-slot, so any lyrics parts fold into the prompt
+// text (ADR-037 MUS-008); the instrumental model ignores vocal content. The
 // instances/parameters envelope mirrors Vertex Imagen.
 func buildVertexMusicBody(parts []Part) map[string]any {
-	instance := map[string]any{"prompt": joinPromptText(parts)}
+	prompt := joinPromptText(parts)
+	if lyrics := joinLyricsText(parts); lyrics != "" {
+		if prompt != "" {
+			prompt += "\n"
+		}
+		prompt += lyrics
+	}
+	instance := map[string]any{"prompt": prompt}
 	return map[string]any{
 		"instances":  []map[string]any{instance},
 		"parameters": map[string]any{"sampleCount": 1},
