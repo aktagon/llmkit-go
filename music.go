@@ -27,6 +27,7 @@ import (
 //
 //
 //
+//
 type MusicRequest struct {
 	Model  string
 	Prompt string
@@ -76,6 +77,7 @@ func resolveMusicOptions(opts []MusicOption) *musicOptions {
 //
 //
 //
+//
 func generateMusic(ctx context.Context, p Provider, req MusicRequest, opts ...MusicOption) (MusicResponse, error) {
 	o := resolveMusicOptions(opts)
 
@@ -90,7 +92,6 @@ func generateMusic(ctx context.Context, p Provider, req MusicRequest, opts ...Mu
 	if err != nil {
 		return MusicResponse{}, err
 	}
-	hasLyrics := false
 	for i, part := range parts {
 		set := 0
 		if part.Text != "" {
@@ -98,7 +99,6 @@ func generateMusic(ctx context.Context, p Provider, req MusicRequest, opts ...Mu
 		}
 		if part.Lyrics != "" {
 			set++
-			hasLyrics = true
 		}
 		if part.Image != nil {
 			return MusicResponse{}, &ValidationError{
@@ -126,9 +126,9 @@ func generateMusic(ctx context.Context, p Provider, req MusicRequest, opts ...Mu
 	if model == nil {
 		return MusicResponse{}, &ValidationError{Field: "model", Message: req.Model + " is not a known music-generation model for " + p.Name}
 	}
-	if hasLyrics && !model.SupportsLyrics {
-		return MusicResponse{}, &ValidationError{Field: "parts", Message: req.Model + " is instrumental-only and does not accept lyrics"}
-	}
+	//
+	//
+	//
 
 	baseEvent := providers.Event{
 		Op:       providers.OpMusicGeneration,
@@ -230,8 +230,16 @@ func postMusicJSON(ctx context.Context, client *http.Client, url string, body ma
 //
 //
 //
+//
 func buildVertexMusicBody(parts []Part) map[string]any {
-	instance := map[string]any{"prompt": joinPromptText(parts)}
+	prompt := joinPromptText(parts)
+	if lyrics := joinLyricsText(parts); lyrics != "" {
+		if prompt != "" {
+			prompt += "\n"
+		}
+		prompt += lyrics
+	}
+	instance := map[string]any{"prompt": prompt}
 	return map[string]any{
 		"instances":  []map[string]any{instance},
 		"parameters": map[string]any{"sampleCount": 1},
