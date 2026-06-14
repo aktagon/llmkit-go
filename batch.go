@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/aktagon/llmkit-go/internal/providerspec"
 	"github.com/aktagon/llmkit-go/providers"
 )
 
@@ -33,7 +34,7 @@ func submitBatch(ctx context.Context, p Provider, reqs []Request, opts ...Option
 		return BatchHandle{}, err
 	}
 
-	cfg, ok := providers.Providers()[p.Name]
+	cfg, ok := providerspec.Providers()[p.Name]
 	if !ok {
 		return BatchHandle{}, &ValidationError{Field: "provider", Message: "unknown: " + p.Name}
 	}
@@ -133,7 +134,7 @@ func waitBatch(ctx context.Context, handle BatchHandle, opts ...Option) ([]Respo
 	o := resolveOptions(opts)
 	p := handle.Provider
 
-	cfg, ok := providers.Providers()[p.Name]
+	cfg, ok := providerspec.Providers()[p.Name]
 	if !ok {
 		return nil, &ValidationError{Field: "provider", Message: "unknown: " + p.Name}
 	}
@@ -185,7 +186,7 @@ func waitBatch(ctx context.Context, handle BatchHandle, opts ...Option) ([]Respo
 // When ItemBodyField is set (e.g., Anthropic: "params"), each item is wrapped
 // as {"custom_id": "req-N", <ItemBodyField>: body}. When empty, the item is
 // the body directly.
-func buildBatchBody(ctx context.Context, reqs []Request, o *options, p Provider, cfg providers.ProviderConfig, bc *providers.BatchDef) (map[string]any, error) {
+func buildBatchBody(ctx context.Context, reqs []Request, o *options, p Provider, cfg providerspec.ProviderSpec, bc *providers.BatchDef) (map[string]any, error) {
 	body := map[string]any{}
 	var items []map[string]any
 	for i, req := range reqs {
@@ -222,7 +223,7 @@ func buildBatchBody(ctx context.Context, reqs []Request, o *options, p Provider,
 
 // buildBatchJSONL serializes requests as JSONL for file-reference batch input.
 // Each line is: {"custom_id":"req-N","method":"POST","url":endpoint,"body":{...}}
-func buildBatchJSONL(ctx context.Context, reqs []Request, o *options, p Provider, cfg providers.ProviderConfig, bc *providers.BatchDef) ([]byte, error) {
+func buildBatchJSONL(ctx context.Context, reqs []Request, o *options, p Provider, cfg providerspec.ProviderSpec, bc *providers.BatchDef) ([]byte, error) {
 	var buf strings.Builder
 	for i, req := range reqs {
 		msgs, err := toInternal(req.Messages)
@@ -277,7 +278,7 @@ func uploadBatchFile(ctx context.Context, client *http.Client, base string, json
 // Supports two patterns:
 //   - Direct result endpoint (Anthropic): GET ResultEndpoint/{id}
 //   - File-based results (OpenAI): extract output_file_id from poll response, download file content
-func fetchBatchResults(ctx context.Context, o *options, handle BatchHandle, base string, bc *providers.BatchDef, cfg providers.ProviderConfig, headers map[string]string, raw bool) ([]Response, error) {
+func fetchBatchResults(ctx context.Context, o *options, handle BatchHandle, base string, bc *providers.BatchDef, cfg providerspec.ProviderSpec, headers map[string]string, raw bool) ([]Response, error) {
 	var respBody []byte
 	var err error
 
@@ -371,7 +372,7 @@ func navigateMapPath(data map[string]any, path string) map[string]any {
 }
 
 // buildAuthHeaders constructs authentication headers for a provider.
-func buildAuthHeaders(p Provider, cfg providers.ProviderConfig) map[string]string {
+func buildAuthHeaders(p Provider, cfg providerspec.ProviderSpec) map[string]string {
 	headers := map[string]string{}
 	switch cfg.AuthScheme {
 	case providers.AuthBearerToken:

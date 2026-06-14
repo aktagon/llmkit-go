@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/aktagon/llmkit-go/providers"
+	"github.com/aktagon/llmkit-go/internal/providerspec"
 )
 
 // APIError represents a provider API error.
@@ -44,7 +44,7 @@ func parseError(provider string, statusCode int, body []byte, headers http.Heade
 		RetryAfter: extractRetryAfter(headers),
 	}
 
-	cfg, ok := providers.Providers()[provider]
+	cfg, ok := providerspec.Providers()[provider]
 	if !ok {
 		apiErr.Message = string(body)
 		return apiErr
