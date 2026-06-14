@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/aktagon/llmkit-go/internal/providerspec"
 	"github.com/aktagon/llmkit-go/providers"
 )
 
@@ -137,7 +138,7 @@ func (b *ScopedModels) runList(ctx context.Context) ([]ModelInfo, error) {
 	if !ok {
 		return nil, ErrModelsNotSupported
 	}
-	pcfg, pok := providers.Providers()[b.target.Name]
+	pcfg, pok := providerspec.Providers()[b.target.Name]
 	if !pok {
 		return nil, ErrModelsNotSupported
 	}
@@ -176,7 +177,7 @@ func (b *ScopedModels) runGet(ctx context.Context, id string) (ModelInfo, error)
 	if cfg.ParserKind == "ParseVertexModels" || cfg.ParserKind == "ParseBedrockModels" {
 		return ModelInfo{}, ErrModelsNotSupported
 	}
-	pcfg, pok := providers.Providers()[b.target.Name]
+	pcfg, pok := providerspec.Providers()[b.target.Name]
 	if !pok {
 		return ModelInfo{}, ErrModelsNotSupported
 	}
@@ -213,7 +214,7 @@ func (b *ScopedModels) runGet(ctx context.Context, id string) (ModelInfo, error)
 //
 //
 //
-func paginate(ctx context.Context, httpClient *http.Client, p Provider, pcfg providers.ProviderConfig, cfg catalogueConfig, cursor string) ([]providers.ParsedModelRecord, error) {
+func paginate(ctx context.Context, httpClient *http.Client, p Provider, pcfg providerspec.ProviderSpec, cfg catalogueConfig, cursor string) ([]providers.ParsedModelRecord, error) {
 	var all []providers.ParsedModelRecord
 	headers := buildCatalogueHeaders(p, pcfg)
 	for {
@@ -313,7 +314,7 @@ func wrapInList(body []byte, envelopeField string) []byte {
 //
 //
 //
-func buildCatalogueURL(p Provider, pcfg providers.ProviderConfig, endpoint string) string {
+func buildCatalogueURL(p Provider, pcfg providerspec.ProviderSpec, endpoint string) string {
 	base := p.BaseURL
 	if base == "" {
 		base = pcfg.BaseURL
@@ -333,7 +334,7 @@ func buildCatalogueURL(p Provider, pcfg providers.ProviderConfig, endpoint strin
 //
 //
 //
-func buildCatalogueHeaders(p Provider, pcfg providers.ProviderConfig) map[string]string {
+func buildCatalogueHeaders(p Provider, pcfg providerspec.ProviderSpec) map[string]string {
 	headers := map[string]string{}
 	switch pcfg.AuthScheme {
 	case providers.AuthBearerToken:

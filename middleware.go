@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/aktagon/llmkit-go/internal/providerspec"
 	"github.com/aktagon/llmkit-go/providers"
 )
 
@@ -55,7 +56,7 @@ func firePost(ctx context.Context, mws []providers.MiddlewareFn, base providers.
 //
 //
 //
-func resolveModel(p Provider, cfg providers.ProviderConfig) (string, error) {
+func resolveModel(p Provider, cfg providerspec.ProviderSpec) (string, error) {
 	if p.Model != "" {
 		return p.Model, nil
 	}
