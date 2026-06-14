@@ -4,15 +4,15 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/aktagon/llmkit-go/providers"
+	"github.com/aktagon/llmkit-go/internal/providerspec"
 )
 
-func googleConfig() providers.ProviderConfig {
-	return providers.Providers()["google"]
+func googleConfig() providerspec.ProviderSpec {
+	return providerspec.Providers()["google"]
 }
 
-func bedrockConfig() providers.ProviderConfig {
-	return providers.Providers()["bedrock"]
+func bedrockConfig() providerspec.ProviderSpec {
+	return providerspec.Providers()["bedrock"]
 }
 
 // --- Google transforms ---
@@ -416,7 +416,7 @@ func TestSelectTransformsGoogle(t *testing.T) {
 }
 
 func TestSelectTransformsOpenAI(t *testing.T) {
-	cfg := providers.Providers()["openai"]
+	cfg := providerspec.Providers()["openai"]
 
 	msg := selectMessageTransform(cfg)
 	body := map[string]any{}

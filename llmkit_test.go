@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/aktagon/llmkit-go/internal/providerspec"
 	"github.com/aktagon/llmkit-go/providers"
 )
 
@@ -1022,7 +1023,7 @@ func TestBatch_PropagatesChainSamplingOptions(t *testing.T) {
 }
 
 func TestBuildBatchJSONL(t *testing.T) {
-	cfg := providers.Providers()[providers.OpenAI]
+	cfg := providerspec.Providers()[providers.OpenAI]
 	bc := providers.BatchConfig(providers.OpenAI)
 	p := Provider{Name: providers.OpenAI, APIKey: "test-key", Model: "gpt-4o"}
 

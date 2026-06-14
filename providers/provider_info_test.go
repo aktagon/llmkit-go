@@ -1,6 +1,10 @@
 package providers
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/aktagon/llmkit-go/internal/providerspec"
+)
 
 // ADR-038: providers.Info / providers.List are the narrow public per-provider
 // metadata namespace — the public replacement for reaching into the internal
@@ -25,7 +29,7 @@ func TestInfoAnthropic(t *testing.T) {
 // Info is total over the provider name constants: every registered provider
 // projects a non-empty slug + env var.
 func TestInfoIsTotal(t *testing.T) {
-	for name := range Providers() {
+	for name := range providerspec.Providers() {
 		info := Info(name)
 		if info.Name == "" {
 			t.Errorf("%s: Info projects an empty Name", name)
@@ -40,8 +44,8 @@ func TestInfoIsTotal(t *testing.T) {
 // dropped relative to the registry.
 func TestListIsTotalAndSorted(t *testing.T) {
 	all := List()
-	if len(all) != len(Providers()) {
-		t.Fatalf("List() len = %d, want %d", len(all), len(Providers()))
+	if len(all) != len(providerspec.Providers()) {
+		t.Fatalf("List() len = %d, want %d", len(all), len(providerspec.Providers()))
 	}
 	for i := 1; i < len(all); i++ {
 		if all[i-1].Name >= all[i].Name {

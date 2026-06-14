@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/aktagon/llmkit-go/internal/providerspec"
 	"github.com/aktagon/llmkit-go/providers"
 )
 
@@ -69,7 +70,7 @@ func promptStream(ctx context.Context, p Provider, req Request, callback StreamC
 		return Response{}, err
 	}
 
-	cfg, ok := providers.Providers()[p.Name]
+	cfg, ok := providerspec.Providers()[p.Name]
 	if !ok {
 		return Response{}, &ValidationError{Field: "provider", Message: "unknown: " + p.Name}
 	}
@@ -150,7 +151,7 @@ func promptStream(ctx context.Context, p Provider, req Request, callback StreamC
 }
 
 // buildStreamURL constructs the streaming endpoint URL.
-func buildStreamURL(p Provider, cfg providers.ProviderConfig, streamCfg *providers.StreamDef) string {
+func buildStreamURL(p Provider, cfg providerspec.ProviderSpec, streamCfg *providers.StreamDef) string {
 	base := p.BaseURL
 	if base == "" {
 		base = cfg.BaseURL
@@ -185,7 +186,7 @@ func uploadFile(ctx context.Context, p Provider, data []byte, name, mime string,
 		return File{}, err
 	}
 
-	cfg, ok := providers.Providers()[p.Name]
+	cfg, ok := providerspec.Providers()[p.Name]
 	if !ok {
 		return File{}, &ValidationError{Field: "provider", Message: "unknown: " + p.Name}
 	}
@@ -396,7 +397,7 @@ func containsValue(csv, value string) bool {
 }
 
 // buildURL constructs the full API URL for a provider.
-func buildURL(p Provider, cfg providers.ProviderConfig) string {
+func buildURL(p Provider, cfg providerspec.ProviderSpec) string {
 	base := p.BaseURL
 	if base == "" {
 		base = cfg.BaseURL
@@ -473,7 +474,7 @@ func resolveOptionKey(provider, model string, param providers.OptionKey, support
 // tools is the Agent's tool set; the Text/batch paths pass nil, so the
 // tool-def step is a no-op there and their wire body stays byte-identical
 // (ADR-026 PIPE-005).
-func buildRequest(p Provider, req Request, msgs []msg, o *options, cfg providers.ProviderConfig, tools []Tool) (map[string]any, map[string]string) {
+func buildRequest(p Provider, req Request, msgs []msg, o *options, cfg providerspec.ProviderSpec, tools []Tool) (map[string]any, map[string]string) {
 	body := map[string]any{}
 	headers := map[string]string{}
 
@@ -683,7 +684,7 @@ func mergeIntoParent(target map[string]any, path string, extras map[string]any) 
 }
 
 // addStructuredOutput adds schema-based output format to the request.
-func addStructuredOutput(body map[string]any, headers map[string]string, schema string, providerName string, cfg providers.ProviderConfig) {
+func addStructuredOutput(body map[string]any, headers map[string]string, schema string, providerName string, cfg providerspec.ProviderSpec) {
 	soDef := providers.StructuredOutput(providerName)
 	if soDef == nil {
 		return
@@ -855,7 +856,7 @@ func parseResponse(provider string, body []byte) (Response, error) {
 // missing value as "<nil>"; treating that as a finish signal would leak
 // a sentinel into user-facing messages.
 func extractFinishSignal(raw map[string]any, provider string) (reason, message string) {
-	cfg, ok := providers.Providers()[provider]
+	cfg, ok := providerspec.Providers()[provider]
 	if !ok {
 		return "", ""
 	}
@@ -907,7 +908,7 @@ func pathPresent(data map[string]any, path string) bool {
 // reports it separately (e.g., OpenAI o1/o3, Google Gemini 2.5+ thinking).
 // Returns zero when the provider does not expose a separate field.
 func extractReasoningUsage(raw map[string]any, provider string) int {
-	cfg, ok := providers.Providers()[provider]
+	cfg, ok := providerspec.Providers()[provider]
 	if !ok || cfg.ReasoningTokensPath == "" {
 		return 0
 	}
