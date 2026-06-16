@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aktagon/llmkit-go/internal/providerspec"
 	"github.com/aktagon/llmkit-go/providers"
 )
 
@@ -115,7 +114,7 @@ func generateMusic(ctx context.Context, p Provider, req MusicRequest, opts ...Mu
 		}
 	}
 
-	cfg, ok := providerspec.Providers()[p.Name]
+	cfg, ok := providerSpecs()[p.Name]
 	if !ok {
 		return MusicResponse{}, &ValidationError{Field: "provider", Message: "unknown: " + p.Name}
 	}
@@ -185,7 +184,7 @@ func dispatchMusicHTTP(
 	ctx context.Context,
 	client *http.Client,
 	p Provider,
-	cfg providerspec.ProviderSpec,
+	cfg providerSpec,
 	mgCfg *providers.MusicGenDef,
 	model string,
 	parts []Part,
@@ -310,7 +309,7 @@ func joinLyricsText(parts []Part) string {
 // buildMusicURL substitutes the per-call model into the provider's endpoint
 // template (Gemini reuses the main generateContent endpoint) and appends the
 // query auth key for query-param-key providers (Google).
-func buildMusicURL(p Provider, cfg providerspec.ProviderSpec, mgCfg *providers.MusicGenDef, model string) string {
+func buildMusicURL(p Provider, cfg providerSpec, mgCfg *providers.MusicGenDef, model string) string {
 	base := p.BaseURL
 	if base == "" {
 		base = cfg.BaseURL

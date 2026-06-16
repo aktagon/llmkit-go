@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aktagon/llmkit-go/internal/providerspec"
 	"github.com/aktagon/llmkit-go/providers"
 )
 
@@ -213,7 +212,7 @@ func generateImage(ctx context.Context, p Provider, req ImageRequest, opts ...Im
 		}
 	}
 
-	cfg, ok := providerspec.Providers()[p.Name]
+	cfg, ok := providerSpecs()[p.Name]
 	if !ok {
 		return ImageResponse{}, &ValidationError{Field: "provider", Message: "unknown: " + p.Name}
 	}
@@ -379,7 +378,7 @@ func dispatchImageHTTP(
 	ctx context.Context,
 	client *http.Client,
 	p Provider,
-	cfg providerspec.ProviderSpec,
+	cfg providerSpec,
 	imgCfg *providers.ImageGenDef,
 	model string,
 	parts []Part,
@@ -784,7 +783,7 @@ func buildImageBody(parts []Part, o *imageOptions) map[string]any {
 
 // buildImageURL substitutes the per-call image-gen model into the provider's
 // endpoint template (Google reuses the main generateContent endpoint).
-func buildImageURL(p Provider, cfg providerspec.ProviderSpec, model string) string {
+func buildImageURL(p Provider, cfg providerSpec, model string) string {
 	base := p.BaseURL
 	if base == "" {
 		base = cfg.BaseURL
@@ -798,7 +797,7 @@ func buildImageURL(p Provider, cfg providerspec.ProviderSpec, model string) stri
 	return base + endpoint
 }
 
-func imageAuthHeaders(p Provider, cfg providerspec.ProviderSpec) map[string]string {
+func imageAuthHeaders(p Provider, cfg providerSpec) map[string]string {
 	headers := map[string]string{}
 	switch cfg.AuthScheme {
 	case providers.AuthBearerToken:
@@ -822,7 +821,7 @@ func parseImageResponse(provider string, body []byte) (ImageResponse, error) {
 		return ImageResponse{}, fmt.Errorf("unmarshal image response: %w", err)
 	}
 
-	switch provider {
+	switch providers.ProviderName(provider) {
 	case providers.OpenAI:
 		return parseImageResponseDataArray(raw, "usage.input_tokens", "usage.output_tokens"), nil
 	case providers.Grok:
