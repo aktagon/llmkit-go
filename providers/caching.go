@@ -35,7 +35,7 @@ type CachingDef struct {
 
 // CachingConfig returns the caching config for a provider.
 func CachingConfig(provider string) *CachingDef {
-	switch provider {
+	switch ProviderName(provider) {
 	case Anthropic:
 		return &CachingDef{
 			Mode:            "ExplicitCaching",

@@ -52,7 +52,7 @@ func AllOptions() []OptionDef {
 // SupportedOptions returns the set of supported option keys for a provider,
 // with provider-specific JSON key overrides applied.
 func SupportedOptions(provider string) map[OptionKey]string {
-	switch provider {
+	switch ProviderName(provider) {
 	case AI21:
 		return map[OptionKey]string{
 			OptionMaxTokens:     "max_tokens",
@@ -326,7 +326,7 @@ func SupportedOptions(provider string) map[OptionKey]string {
 // OptionOverrides returns extended override details for provider options that have them.
 // Only options with allowedValues or extraFields are included.
 func OptionOverrides(provider string) map[OptionKey]OptionOverrideDef {
-	switch provider {
+	switch ProviderName(provider) {
 	case Anthropic:
 		return map[OptionKey]OptionOverrideDef{
 			OptionReasoningEffort: {
@@ -377,7 +377,7 @@ type ModelOptionOverrideDef struct {
 // ModelOptionOverrides returns per-model wire-key overrides for a provider,
 // in precedence order (exact ids first, then longest-prefix globs).
 func ModelOptionOverrides(provider string) []ModelOptionOverrideDef {
-	switch provider {
+	switch ProviderName(provider) {
 	case OpenAI:
 		return []ModelOptionOverrideDef{
 			{MatcherKind: "pattern", MatcherValue: "gpt-5*", Key: OptionMaxTokens, JSONKey: "max_completion_tokens"},

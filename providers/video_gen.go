@@ -56,7 +56,7 @@ type VideoGenDef struct {
 // VideoGenConfig returns the video-generation config for a provider, or nil
 // if the provider does not support video generation.
 func VideoGenConfig(provider string) *VideoGenDef {
-	switch provider {
+	switch ProviderName(provider) {
 	case Bedrock:
 		return &VideoGenDef{
 			WireShape:         "VideoBedrock",
