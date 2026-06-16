@@ -437,6 +437,36 @@ func TestRequestWire_OptionsAnthropicPlain(t *testing.T) {
 	assertRequestWireGolden(t, "options-anthropic-plain", body)
 }
 
+// TestRequestWire_AnthropicTextDocument asserts an uploaded file id referenced
+// via Text.File(id) emits a document block before the prompt text on the
+// single-turn user content array (BUG-014). NOT live-anchored — parity held by
+// the cross-SDK comparator + mock body, like the keyless providers.
+func TestRequestWire_AnthropicTextDocument(t *testing.T) {
+	body, _ := captureBody(t, providers.Anthropic, func(c *Client) {
+		_, err := c.Text.Model(wireAnthropicTextDocumentModel).
+			File(wireAnthropicTextDocumentFileId).
+			Prompt(context.Background(), wireAnthropicTextDocumentPrompt)
+		if err != nil {
+			t.Fatalf("anthropic text document call: %v", err)
+		}
+	})
+	assertRequestWireGolden(t, "anthropic-text-document", body)
+}
+
+// TestRequestWire_OpenAITextDocument is the OpenAI-style sibling — the file id
+// lands in a {"type":"file","file":{"file_id":…}} block (BUG-014).
+func TestRequestWire_OpenAITextDocument(t *testing.T) {
+	body, _ := captureBody(t, providers.OpenAI, func(c *Client) {
+		_, err := c.Text.Model(wireOpenaiTextDocumentModel).
+			File(wireOpenaiTextDocumentFileId).
+			Prompt(context.Background(), wireOpenaiTextDocumentPrompt)
+		if err != nil {
+			t.Fatalf("openai text document call: %v", err)
+		}
+	})
+	assertRequestWireGolden(t, "openai-text-document", body)
+}
+
 // TestRequestWire_OptionsAnthropicAdaptive witnesses the adaptive thinking
 // surface (ADR-029): ReasoningEffort resolves to the output_config.effort
 // dotted path AND root-merges {"thinking":{"type":"adaptive"}} via
