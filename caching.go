@@ -7,13 +7,12 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/aktagon/llmkit-go/internal/providerspec"
 	"github.com/aktagon/llmkit-go/providers"
 )
 
 // applyCaching mutates the request body to enable caching based on the provider's mode.
 // Dispatches on CachingDef.Mode — each branch follows the behavioral spec in rdfs:comment.
-func applyCaching(ctx context.Context, body map[string]any, p Provider, o *options, cfg providerspec.ProviderSpec) error {
+func applyCaching(ctx context.Context, body map[string]any, p Provider, o *options, cfg providerSpec) error {
 	cc := providers.CachingConfig(p.Name)
 	if cc == nil {
 		return &ValidationError{Field: "caching", Message: "not supported by " + p.Name}
@@ -40,7 +39,7 @@ func applyCaching(ctx context.Context, body map[string]any, p Provider, o *optio
 //  1. Find the last content block in the system message array.
 //  2. Add cache_control: {type: CachingDef.ControlType} to that block.
 //  3. If no system message, skip silently.
-func applyExplicitCaching(body map[string]any, cc *providers.CachingDef, cfg providerspec.ProviderSpec) error {
+func applyExplicitCaching(body map[string]any, cc *providers.CachingDef, cfg providerSpec) error {
 	switch cfg.SystemPlacement {
 	case providers.PlacementTopLevelField:
 		// Anthropic: system is a top-level string. Wrap it as content blocks with cache_control.
@@ -103,7 +102,7 @@ func applyExplicitCaching(body map[string]any, cc *providers.CachingDef, cfg pro
 //  2. Extract resource ID from response at Lifecycle.ResponseIdPath.
 //  3. Set body[Lifecycle.ReferenceField] = resource ID.
 //  4. Remove system prompt from main request body.
-func applyResourceCaching(ctx context.Context, body map[string]any, p Provider, o *options, cc *providers.CachingDef, cfg providerspec.ProviderSpec) error {
+func applyResourceCaching(ctx context.Context, body map[string]any, p Provider, o *options, cc *providers.CachingDef, cfg providerSpec) error {
 	lc := cc.Lifecycle
 	if lc == nil {
 		return fmt.Errorf("resource caching requires lifecycle config")

@@ -36,7 +36,7 @@ type MusicGenDef struct {
 // MusicGenConfig returns the music-generation config for a provider, or nil
 // if the provider does not support music generation.
 func MusicGenConfig(provider string) *MusicGenDef {
-	switch provider {
+	switch ProviderName(provider) {
 	case Google:
 		return &MusicGenDef{
 			WireShape:   "MusicGenerateContent",

@@ -4,210 +4,242 @@ package providers
 
 import "sort"
 
-// ProviderInfo is the narrow public per-provider catalogue: the metadata a
-// consumer may read (env var, default model, base URL). It is a projection of
-// the same provider facts that feed the internal provider spec, so the two
-// cannot drift.
+// ProviderInfo is WHAT a user wants to know about a provider (PUBLIC): the
+// narrow, stable catalogue (typed identity, env var, default model, base
+// URL). It is a projection of the same provider facts that feed the internal
+// providerSpec, so the two cannot drift.
 type ProviderInfo struct {
-	Name         string
+	ID           ProviderName // typed identity (ADR-040)
+	Slug         string       // the slug; equal to string(ID)
 	EnvVar       string
 	DefaultModel string
 	BaseURL      string
 }
 
-// Info returns the public metadata for a provider. It is total over the
-// provider name constants; an unknown name yields the zero ProviderInfo.
-func Info(provider string) ProviderInfo {
-	return providerInfoTable[provider]
+// Info returns the public metadata for a provider. Keyed by the typed
+// identity, it is honestly total — every ProviderName has metadata
+// (ADR-040 PSR-001).
+func Info(id ProviderName) ProviderInfo {
+	return providerInfoTable[id]
 }
 
-// List returns the public metadata for every provider, sorted by name.
+// List returns the public metadata for every provider, sorted by slug.
 func List() []ProviderInfo {
 	out := make([]ProviderInfo, 0, len(providerInfoTable))
 	for _, info := range providerInfoTable {
 		out = append(out, info)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	sort.Slice(out, func(i, j int) bool { return out[i].Slug < out[j].Slug })
 	return out
 }
 
-var providerInfoTable = map[string]ProviderInfo{
+var providerInfoTable = map[ProviderName]ProviderInfo{
 	AI21: {
-		Name:         "ai21",
+		ID:           AI21,
+		Slug:         "ai21",
 		EnvVar:       "AI21_API_KEY",
 		DefaultModel: "jamba-1.5-large",
 		BaseURL:      "https://api.ai21.com",
 	},
 	Anthropic: {
-		Name:         "anthropic",
+		ID:           Anthropic,
+		Slug:         "anthropic",
 		EnvVar:       "ANTHROPIC_API_KEY",
 		DefaultModel: "claude-sonnet-4-6",
 		BaseURL:      "https://api.anthropic.com",
 	},
 	Azure: {
-		Name:         "azure",
+		ID:           Azure,
+		Slug:         "azure",
 		EnvVar:       "AZURE_OPENAI_API_KEY",
 		DefaultModel: "gpt-4o",
 		BaseURL:      "https://REPLACE-WITH-YOUR-RESOURCE.openai.azure.com",
 	},
 	Bedrock: {
-		Name:         "bedrock",
+		ID:           Bedrock,
+		Slug:         "bedrock",
 		EnvVar:       "AWS_ACCESS_KEY_ID",
 		DefaultModel: "anthropic.claude-sonnet-4-20250514-v1:0",
 		BaseURL:      "https://bedrock-runtime.{region}.amazonaws.com",
 	},
 	Cerebras: {
-		Name:         "cerebras",
+		ID:           Cerebras,
+		Slug:         "cerebras",
 		EnvVar:       "CEREBRAS_API_KEY",
 		DefaultModel: "llama-3.3-70b",
 		BaseURL:      "https://api.cerebras.ai",
 	},
 	Cohere: {
-		Name:         "cohere",
+		ID:           Cohere,
+		Slug:         "cohere",
 		EnvVar:       "COHERE_API_KEY",
 		DefaultModel: "command-r-plus",
 		BaseURL:      "https://api.cohere.com/compatibility",
 	},
 	Deepseek: {
-		Name:         "deepseek",
+		ID:           Deepseek,
+		Slug:         "deepseek",
 		EnvVar:       "DEEPSEEK_API_KEY",
 		DefaultModel: "deepseek-chat",
 		BaseURL:      "https://api.deepseek.com",
 	},
 	Doubao: {
-		Name:         "doubao",
+		ID:           Doubao,
+		Slug:         "doubao",
 		EnvVar:       "ARK_API_KEY",
 		DefaultModel: "doubao-1.5-pro-32k-250115",
 		BaseURL:      "https://ark.cn-beijing.volces.com/api/v3",
 	},
 	Ernie: {
-		Name:         "ernie",
+		ID:           Ernie,
+		Slug:         "ernie",
 		EnvVar:       "QIANFAN_API_KEY",
 		DefaultModel: "ernie-4.0-8k",
 		BaseURL:      "https://qianfan.baidubce.com/v2",
 	},
 	Fireworks: {
-		Name:         "fireworks",
+		ID:           Fireworks,
+		Slug:         "fireworks",
 		EnvVar:       "FIREWORKS_API_KEY",
 		DefaultModel: "accounts/fireworks/models/llama-v3p3-70b-instruct",
 		BaseURL:      "https://api.fireworks.ai/inference",
 	},
 	Google: {
-		Name:         "google",
+		ID:           Google,
+		Slug:         "google",
 		EnvVar:       "GOOGLE_API_KEY",
 		DefaultModel: "gemini-2.5-flash",
 		BaseURL:      "https://generativelanguage.googleapis.com",
 	},
 	Grok: {
-		Name:         "grok",
+		ID:           Grok,
+		Slug:         "grok",
 		EnvVar:       "XAI_API_KEY",
 		DefaultModel: "grok-3-fast",
 		BaseURL:      "https://api.x.ai",
 	},
 	Groq: {
-		Name:         "groq",
+		ID:           Groq,
+		Slug:         "groq",
 		EnvVar:       "GROQ_API_KEY",
 		DefaultModel: "llama-3.3-70b-versatile",
 		BaseURL:      "https://api.groq.com/openai",
 	},
 	Jan: {
-		Name:         "jan",
+		ID:           Jan,
+		Slug:         "jan",
 		EnvVar:       "JAN_API_KEY",
 		DefaultModel: "",
 		BaseURL:      "http://localhost:1337",
 	},
 	Llamacpp: {
-		Name:         "llamacpp",
+		ID:           Llamacpp,
+		Slug:         "llamacpp",
 		EnvVar:       "LLAMACPP_API_KEY",
 		DefaultModel: "",
 		BaseURL:      "http://localhost:8080",
 	},
 	Lmstudio: {
-		Name:         "lmstudio",
+		ID:           Lmstudio,
+		Slug:         "lmstudio",
 		EnvVar:       "LM_STUDIO_API_KEY",
 		DefaultModel: "",
 		BaseURL:      "http://localhost:1234",
 	},
 	Minimax: {
-		Name:         "minimax",
+		ID:           Minimax,
+		Slug:         "minimax",
 		EnvVar:       "MINIMAX_API_KEY",
 		DefaultModel: "MiniMax-Text-01",
 		BaseURL:      "https://api.minimax.chat",
 	},
 	Mistral: {
-		Name:         "mistral",
+		ID:           Mistral,
+		Slug:         "mistral",
 		EnvVar:       "MISTRAL_API_KEY",
 		DefaultModel: "mistral-large-latest",
 		BaseURL:      "https://api.mistral.ai",
 	},
 	Moonshot: {
-		Name:         "moonshot",
+		ID:           Moonshot,
+		Slug:         "moonshot",
 		EnvVar:       "MOONSHOT_API_KEY",
 		DefaultModel: "moonshot-v1-8k",
 		BaseURL:      "https://api.moonshot.ai",
 	},
 	Ollama: {
-		Name:         "ollama",
+		ID:           Ollama,
+		Slug:         "ollama",
 		EnvVar:       "OLLAMA_API_KEY",
 		DefaultModel: "",
 		BaseURL:      "http://localhost:11434",
 	},
 	OpenAI: {
-		Name:         "openai",
+		ID:           OpenAI,
+		Slug:         "openai",
 		EnvVar:       "OPENAI_API_KEY",
 		DefaultModel: "gpt-4o-2024-08-06",
 		BaseURL:      "https://api.openai.com",
 	},
 	Openrouter: {
-		Name:         "openrouter",
+		ID:           Openrouter,
+		Slug:         "openrouter",
 		EnvVar:       "OPENROUTER_API_KEY",
 		DefaultModel: "openai/gpt-4o",
 		BaseURL:      "https://openrouter.ai/api",
 	},
 	Perplexity: {
-		Name:         "perplexity",
+		ID:           Perplexity,
+		Slug:         "perplexity",
 		EnvVar:       "PERPLEXITY_API_KEY",
 		DefaultModel: "sonar-pro",
 		BaseURL:      "https://api.perplexity.ai",
 	},
 	Qwen: {
-		Name:         "qwen",
+		ID:           Qwen,
+		Slug:         "qwen",
 		EnvVar:       "DASHSCOPE_API_KEY",
 		DefaultModel: "qwen-plus",
 		BaseURL:      "https://dashscope-intl.aliyuncs.com/compatible-mode",
 	},
 	Sambanova: {
-		Name:         "sambanova",
+		ID:           Sambanova,
+		Slug:         "sambanova",
 		EnvVar:       "SAMBANOVA_API_KEY",
 		DefaultModel: "Meta-Llama-3.3-70B-Instruct",
 		BaseURL:      "https://api.sambanova.ai",
 	},
 	Together: {
-		Name:         "together",
+		ID:           Together,
+		Slug:         "together",
 		EnvVar:       "TOGETHER_API_KEY",
 		DefaultModel: "meta-llama/Llama-3.3-70B-Instruct-Turbo",
 		BaseURL:      "https://api.together.xyz",
 	},
 	Vertex: {
-		Name:         "vertex",
+		ID:           Vertex,
+		Slug:         "vertex",
 		EnvVar:       "VERTEX_BEARER_TOKEN",
 		DefaultModel: "imagen-3.0-generate-002",
 		BaseURL:      "https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/models",
 	},
 	Vllm: {
-		Name:         "vllm",
+		ID:           Vllm,
+		Slug:         "vllm",
 		EnvVar:       "VLLM_API_KEY",
 		DefaultModel: "",
 		BaseURL:      "http://localhost:8000",
 	},
 	Yi: {
-		Name:         "yi",
+		ID:           Yi,
+		Slug:         "yi",
 		EnvVar:       "YI_API_KEY",
 		DefaultModel: "yi-large",
 		BaseURL:      "https://api.01.ai",
 	},
 	Zhipu: {
-		Name:         "zhipu",
+		ID:           Zhipu,
+		Slug:         "zhipu",
 		EnvVar:       "ZHIPU_API_KEY",
 		DefaultModel: "glm-4-plus",
 		BaseURL:      "https://open.bigmodel.cn/api/paas",

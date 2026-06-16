@@ -12,7 +12,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aktagon/llmkit-go/internal/providerspec"
 	"github.com/aktagon/llmkit-go/providers"
 )
 
@@ -108,7 +107,7 @@ func submitVideo(ctx context.Context, p Provider, req VideoRequest, opts ...Vide
 		return VideoHandle{}, err
 	}
 
-	cfg, ok := providerspec.Providers()[p.Name]
+	cfg, ok := providerSpecs()[p.Name]
 	if !ok {
 		return VideoHandle{}, &ValidationError{Field: "provider", Message: "unknown: " + p.Name}
 	}
@@ -197,7 +196,7 @@ func dispatchVideoSubmit(
 	ctx context.Context,
 	client *http.Client,
 	p Provider,
-	cfg providerspec.ProviderSpec,
+	cfg providerSpec,
 	vgCfg *providers.VideoGenDef,
 	model string,
 	outputURI string,
@@ -305,7 +304,7 @@ func (h VideoHandle) Wait(ctx context.Context, opts ...VideoOption) (VideoRespon
 	o := resolveVideoOptions(opts)
 	p := h.Provider
 
-	cfg, ok := providerspec.Providers()[p.Name]
+	cfg, ok := providerSpecs()[p.Name]
 	if !ok {
 		return VideoResponse{}, &ValidationError{Field: "provider", Message: "unknown: " + p.Name}
 	}
@@ -440,7 +439,7 @@ func cloneStringMap(m map[string]string) map[string]string {
 // differs from chat, else the chat base. Submit/poll endpoints are always
 // relative paths joined to this base — never absolute — so the host stays a
 // fact, overridable and mockable.
-func videoBaseURL(p Provider, cfg providerspec.ProviderSpec, vgCfg *providers.VideoGenDef) string {
+func videoBaseURL(p Provider, cfg providerSpec, vgCfg *providers.VideoGenDef) string {
 	if p.BaseURL != "" {
 		return p.BaseURL
 	}
@@ -843,7 +842,7 @@ func videoResultFromBedrock(vgCfg *providers.VideoGenDef, raw map[string]any) Vi
 // provider's query-param auth when applicable) and moves the payload into
 // VideoData.Bytes, clearing URL so the source-XOR contract holds (VID-004):
 // download delivery returns bytes, never a URL.
-func downloadVideoBytes(ctx context.Context, client *http.Client, p Provider, cfg providerspec.ProviderSpec, resp VideoResponse) (VideoResponse, error) {
+func downloadVideoBytes(ctx context.Context, client *http.Client, p Provider, cfg providerSpec, resp VideoResponse) (VideoResponse, error) {
 	headers := buildAuthHeaders(p, cfg)
 	for i := range resp.Videos {
 		if resp.Videos[i].URL == "" {
@@ -865,7 +864,7 @@ func downloadVideoBytes(ctx context.Context, client *http.Client, p Provider, cf
 // bearer-header providers (every other video provider). Picks ? or & based on
 // whether the URL already carries a query string (the Files-API download URI
 // arrives with ?alt=media).
-func appendVideoAuth(url string, p Provider, cfg providerspec.ProviderSpec) string {
+func appendVideoAuth(url string, p Provider, cfg providerSpec) string {
 	if cfg.AuthScheme != providers.AuthQueryParamKey {
 		return url
 	}
