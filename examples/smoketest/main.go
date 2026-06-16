@@ -25,7 +25,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"sort"
 	"time"
 
 	llmkit "github.com/aktagon/llmkit-go"
@@ -42,16 +41,10 @@ var models = map[string]string{
 }
 
 func main() {
-	infos := providers.List()
-	names := make([]string, 0, len(infos))
-	for _, info := range infos {
-		names = append(names, info.Name)
-	}
-	sort.Strings(names)
-
+	// providers.List() is already sorted by slug.
 	var pass, fail, skip int
-	for _, name := range names {
-		cfg := providers.Info(name)
+	for _, cfg := range providers.List() {
+		name := cfg.Slug
 		if cfg.EnvVar == "" {
 			fmt.Printf("SKIP %-12s no single API-key env var (local or multi-credential)\n", name)
 			skip++
@@ -64,9 +57,9 @@ func main() {
 			continue
 		}
 
-		listStatus := listModels(name, key)
+		listStatus := listModels(cfg.ID, key)
 
-		if err := smoke(name, key); err != nil {
+		if err := smoke(cfg.ID, key); err != nil {
 			fmt.Printf("FAIL %-12s list=%-7s chat: %v\n", name, listStatus, truncate(err))
 			fail++
 			continue
@@ -80,11 +73,11 @@ func main() {
 	}
 }
 
-func smoke(name, key string) error {
+func smoke(id providers.ProviderName, key string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	text := llmkit.New(name, key).Text.MaxTokens(10)
-	if model, ok := models[name]; ok {
+	text := llmkit.New(id, key).Text.MaxTokens(10)
+	if model, ok := models[string(id)]; ok {
 		text = text.Model(model)
 	}
 	_, err := text.Prompt(ctx, "ok")
@@ -95,11 +88,11 @@ func smoke(name, key string) error {
 // status: OK (live list returned), N/A (provider has no models
 // endpoint), PENDING (endpoint declared but Phase 3 HTTP path not yet
 // wired), or FAIL (real error).
-func listModels(name, key string) string {
+func listModels(id providers.ProviderName, key string) string {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	list, err := llmkit.New(name, key).Models.
-		Provider(llmkit.Provider{Name: name, APIKey: key}).
+	list, err := llmkit.New(id, key).Models.
+		Provider(llmkit.Provider{Name: string(id), APIKey: key}).
 		List(ctx)
 	switch {
 	case err == nil && len(list) == 0:

@@ -41,7 +41,7 @@ type ImageGenDef struct {
 // ImageGenConfig returns the image-generation config for a provider, or nil
 // if the provider does not support image generation.
 func ImageGenConfig(provider string) *ImageGenDef {
-	switch provider {
+	switch ProviderName(provider) {
 	case Google:
 		return &ImageGenDef{
 			InputMode:     "InlineParts",

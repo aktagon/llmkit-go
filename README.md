@@ -380,7 +380,7 @@ chat := c.Models.WithCapability(llmkit.CapChatCompletion).List()
 
 // 2. Providers namespace.
 c.Providers.List()       // configured (credentials + /v1/models endpoint)
-c.Providers.Supported()  // every provider the SDK was built with
+providers.List()         // every provider the SDK ships with (static, keyless)
 
 // 3. Live + scoped HTTP.
 live, err := c.Models.Live(ctx)                                   // LiveResult -- fan-out
