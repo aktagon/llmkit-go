@@ -35,7 +35,7 @@ type CachingDef struct {
 
 //
 func CachingConfig(provider string) *CachingDef {
-	switch provider {
+	switch ProviderName(provider) {
 	case Anthropic:
 		return &CachingDef{
 			Mode:            "ExplicitCaching",

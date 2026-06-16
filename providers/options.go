@@ -52,7 +52,7 @@ func AllOptions() []OptionDef {
 //
 //
 func SupportedOptions(provider string) map[OptionKey]string {
-	switch provider {
+	switch ProviderName(provider) {
 	case AI21:
 		return map[OptionKey]string{
 			OptionMaxTokens:     "max_tokens",
@@ -326,7 +326,7 @@ func SupportedOptions(provider string) map[OptionKey]string {
 //
 //
 func OptionOverrides(provider string) map[OptionKey]OptionOverrideDef {
-	switch provider {
+	switch ProviderName(provider) {
 	case Anthropic:
 		return map[OptionKey]OptionOverrideDef{
 			OptionReasoningEffort: {
@@ -377,7 +377,7 @@ type ModelOptionOverrideDef struct {
 //
 //
 func ModelOptionOverrides(provider string) []ModelOptionOverrideDef {
-	switch provider {
+	switch ProviderName(provider) {
 	case OpenAI:
 		return []ModelOptionOverrideDef{
 			{MatcherKind: "pattern", MatcherValue: "gpt-5*", Key: OptionMaxTokens, JSONKey: "max_completion_tokens"},

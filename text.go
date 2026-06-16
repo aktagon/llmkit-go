@@ -8,7 +8,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/aktagon/llmkit-go/internal/providerspec"
 	"github.com/aktagon/llmkit-go/providers"
 )
 
@@ -35,7 +34,7 @@ func (b *Text) Prompt(ctx context.Context, finalText string) (Response, error) {
 		return Response{}, err
 	}
 
-	cfg, ok := providerspec.Providers()[p.Name]
+	cfg, ok := providerSpecs()[p.Name]
 	if !ok {
 		return Response{}, &ValidationError{Field: "provider", Message: "unknown: " + p.Name}
 	}

@@ -7,13 +7,12 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/aktagon/llmkit-go/internal/providerspec"
 	"github.com/aktagon/llmkit-go/providers"
 )
 
 //
 //
-func applyCaching(ctx context.Context, body map[string]any, p Provider, o *options, cfg providerspec.ProviderSpec) error {
+func applyCaching(ctx context.Context, body map[string]any, p Provider, o *options, cfg providerSpec) error {
 	cc := providers.CachingConfig(p.Name)
 	if cc == nil {
 		return &ValidationError{Field: "caching", Message: "not supported by " + p.Name}
@@ -40,7 +39,7 @@ func applyCaching(ctx context.Context, body map[string]any, p Provider, o *optio
 //
 //
 //
-func applyExplicitCaching(body map[string]any, cc *providers.CachingDef, cfg providerspec.ProviderSpec) error {
+func applyExplicitCaching(body map[string]any, cc *providers.CachingDef, cfg providerSpec) error {
 	switch cfg.SystemPlacement {
 	case providers.PlacementTopLevelField:
 		//
@@ -103,7 +102,7 @@ func applyExplicitCaching(body map[string]any, cc *providers.CachingDef, cfg pro
 //
 //
 //
-func applyResourceCaching(ctx context.Context, body map[string]any, p Provider, o *options, cc *providers.CachingDef, cfg providerspec.ProviderSpec) error {
+func applyResourceCaching(ctx context.Context, body map[string]any, p Provider, o *options, cc *providers.CachingDef, cfg providerSpec) error {
 	lc := cc.Lifecycle
 	if lc == nil {
 		return fmt.Errorf("resource caching requires lifecycle config")

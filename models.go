@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aktagon/llmkit-go/internal/providerspec"
 	"github.com/aktagon/llmkit-go/providers"
 )
 
@@ -91,7 +90,7 @@ func lookupCompiledModel(id string) (ModelInfo, bool) {
 //
 //
 func (b *Models) runLive(ctx context.Context) (LiveResult, error) {
-	configured := b.client.Providers.List()
+	configured := b.client.Providers.eligible()
 	var (
 		all  []ModelInfo
 		errs = map[string]ProviderError{}
@@ -138,7 +137,7 @@ func (b *ScopedModels) runList(ctx context.Context) ([]ModelInfo, error) {
 	if !ok {
 		return nil, ErrModelsNotSupported
 	}
-	pcfg, pok := providerspec.Providers()[b.target.Name]
+	pcfg, pok := providerSpecs()[b.target.Name]
 	if !pok {
 		return nil, ErrModelsNotSupported
 	}
@@ -177,7 +176,7 @@ func (b *ScopedModels) runGet(ctx context.Context, id string) (ModelInfo, error)
 	if cfg.ParserKind == "ParseVertexModels" || cfg.ParserKind == "ParseBedrockModels" {
 		return ModelInfo{}, ErrModelsNotSupported
 	}
-	pcfg, pok := providerspec.Providers()[b.target.Name]
+	pcfg, pok := providerSpecs()[b.target.Name]
 	if !pok {
 		return ModelInfo{}, ErrModelsNotSupported
 	}
@@ -214,7 +213,7 @@ func (b *ScopedModels) runGet(ctx context.Context, id string) (ModelInfo, error)
 //
 //
 //
-func paginate(ctx context.Context, httpClient *http.Client, p Provider, pcfg providerspec.ProviderSpec, cfg catalogueConfig, cursor string) ([]providers.ParsedModelRecord, error) {
+func paginate(ctx context.Context, httpClient *http.Client, p Provider, pcfg providerSpec, cfg catalogueConfig, cursor string) ([]providers.ParsedModelRecord, error) {
 	var all []providers.ParsedModelRecord
 	headers := buildCatalogueHeaders(p, pcfg)
 	for {
@@ -314,7 +313,7 @@ func wrapInList(body []byte, envelopeField string) []byte {
 //
 //
 //
-func buildCatalogueURL(p Provider, pcfg providerspec.ProviderSpec, endpoint string) string {
+func buildCatalogueURL(p Provider, pcfg providerSpec, endpoint string) string {
 	base := p.BaseURL
 	if base == "" {
 		base = pcfg.BaseURL
@@ -334,7 +333,7 @@ func buildCatalogueURL(p Provider, pcfg providerspec.ProviderSpec, endpoint stri
 //
 //
 //
-func buildCatalogueHeaders(p Provider, pcfg providerspec.ProviderSpec) map[string]string {
+func buildCatalogueHeaders(p Provider, pcfg providerSpec) map[string]string {
 	headers := map[string]string{}
 	switch pcfg.AuthScheme {
 	case providers.AuthBearerToken:

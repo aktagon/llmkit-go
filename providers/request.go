@@ -30,7 +30,7 @@ type StructuredOutputDef struct {
 
 //
 func StructuredOutput(provider string) *StructuredOutputDef {
-	switch provider {
+	switch ProviderName(provider) {
 	case Anthropic:
 		return &StructuredOutputDef{
 			FormatField:           "output_format",
@@ -106,7 +106,7 @@ type ToolCallDef struct {
 
 //
 func ToolCallConfig(provider string) *ToolCallDef {
-	switch provider {
+	switch ProviderName(provider) {
 	case AI21:
 		return &ToolCallDef{
 			ArgsFormat:      "json_string",
@@ -320,7 +320,7 @@ type FileUploadDef struct {
 
 //
 func FileUploadConfig(provider string) *FileUploadDef {
-	switch provider {
+	switch ProviderName(provider) {
 	case Anthropic:
 		return &FileUploadDef{
 			Endpoint:         "/v1/files",

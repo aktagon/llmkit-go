@@ -1,9 +1,7 @@
 package llmkit
 
 import (
-	"sort"
-
-	"github.com/aktagon/llmkit-go/internal/providerspec"
+	"github.com/aktagon/llmkit-go/providers"
 )
 
 //
@@ -15,7 +13,7 @@ import (
 //
 //
 //
-func (b *Providers) runList() []Provider {
+func (b *Providers) eligible() []Provider {
 	if b == nil || b.client == nil {
 		return nil
 	}
@@ -29,12 +27,13 @@ func (b *Providers) runList() []Provider {
 //
 //
 //
-func (b *Providers) runSupported() []Provider {
-	configs := providerspec.Providers()
-	out := make([]Provider, 0, len(configs))
-	for name := range configs {
-		out = append(out, Provider{Name: name})
+func (b *Providers) runList() []providers.ProviderInfo {
+	eligible := b.eligible()
+	out := make([]providers.ProviderInfo, 0, len(eligible))
+	for _, p := range eligible {
+		if id, ok := providers.Parse(p.Name); ok {
+			out = append(out, providers.Info(id))
+		}
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out
 }

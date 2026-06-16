@@ -41,7 +41,7 @@ type ImageGenDef struct {
 //
 //
 func ImageGenConfig(provider string) *ImageGenDef {
-	switch provider {
+	switch ProviderName(provider) {
 	case Google:
 		return &ImageGenDef{
 			InputMode:     "InlineParts",

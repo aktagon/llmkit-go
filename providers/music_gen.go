@@ -36,7 +36,7 @@ type MusicGenDef struct {
 //
 //
 func MusicGenConfig(provider string) *MusicGenDef {
-	switch provider {
+	switch ProviderName(provider) {
 	case Google:
 		return &MusicGenDef{
 			WireShape:   "MusicGenerateContent",

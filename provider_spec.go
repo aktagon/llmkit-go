@@ -1,9 +1,11 @@
 // Code generated — DO NOT EDIT.
 
-package providerspec
+package llmkit
 
 //
-type ProviderSpec struct {
+//
+//
+type providerSpec struct {
 	Name                    string
 	BaseURL                 string
 	Endpoint                string
@@ -39,8 +41,8 @@ type ProviderSpec struct {
 }
 
 //
-func Providers() map[string]ProviderSpec {
-	return map[string]ProviderSpec{
+func providerSpecs() map[string]providerSpec {
+	return map[string]providerSpec{
 		"ai21": {
 			Name:                "ai21",
 			BaseURL:             "https://api.ai21.com",

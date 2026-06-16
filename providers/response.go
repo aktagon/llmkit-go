@@ -4,7 +4,7 @@ package providers
 
 //
 func ResponseTextPath(provider string) string {
-	switch provider {
+	switch ProviderName(provider) {
 	case AI21:
 		return "choices[0].message.content"
 	case Anthropic:
@@ -72,7 +72,7 @@ func ResponseTextPath(provider string) string {
 
 //
 func UsagePaths(provider string) (inputPath, outputPath string) {
-	switch provider {
+	switch ProviderName(provider) {
 	case AI21:
 		return "usage.prompt_tokens", "usage.completion_tokens"
 	case Anthropic:
@@ -141,7 +141,7 @@ func UsagePaths(provider string) (inputPath, outputPath string) {
 //
 //
 func UsageCostPath(provider string) string {
-	switch provider {
+	switch ProviderName(provider) {
 	case Grok:
 		return "usage.cost_in_usd_ticks"
 	case Openrouter:
@@ -154,7 +154,7 @@ func UsageCostPath(provider string) string {
 //
 //
 func UsageCostScale(provider string) float64 {
-	switch provider {
+	switch ProviderName(provider) {
 	case Grok:
 		return 1e-10
 	default:

@@ -56,7 +56,7 @@ type VideoGenDef struct {
 //
 //
 func VideoGenConfig(provider string) *VideoGenDef {
-	switch provider {
+	switch ProviderName(provider) {
 	case Bedrock:
 		return &VideoGenDef{
 			WireShape:         "VideoBedrock",

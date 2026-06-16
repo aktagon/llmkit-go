@@ -6,7 +6,11 @@
 
 package llmkit
 
-import "context"
+import (
+	"context"
+
+	"github.com/aktagon/llmkit-go/providers"
+)
 
 //
 //
@@ -84,16 +88,13 @@ func (b *ScopedModels) Get(ctx context.Context, id string) (ModelInfo, error) {
 //
 //
 //
+//
 type Providers struct {
 	client *Client
 }
 
 //
-func (b *Providers) List() []Provider {
-	return b.runList()
-}
-
 //
-func (b *Providers) Supported() []Provider {
-	return b.runSupported()
+func (b *Providers) List() []providers.ProviderInfo {
+	return b.runList()
 }
