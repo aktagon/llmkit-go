@@ -7,6 +7,9 @@ package llmkit
 // conformance drivers; codegen/lint_wire_witness.py derives witness
 // coverage from the same facts.
 const (
+	wireAnthropicTextDocumentModel              = "claude-opus-4-8"
+	wireAnthropicTextDocumentPrompt             = "Summarize the attached document in three sentences."
+	wireAnthropicTextDocumentFileId             = "file_011CMZq8h5VnVe8jL3qK7p2R"
 	wireCachingPrompt                           = "hi"
 	wireCachingSystem                           = "a long stable system prefix"
 	wireImageEditGoogleFlashModel               = "gemini-3.1-flash-image-preview"
@@ -28,6 +31,9 @@ const (
 	wireImageGenOpenaiImageSize                 = "1024x1024"
 	wireImageGenOpenaiOutputFormat              = "png"
 	wireImageGenOpenaiQuality                   = "low"
+	wireOpenaiTextDocumentModel                 = "gpt-4o"
+	wireOpenaiTextDocumentPrompt                = "Summarize the attached document in three sentences."
+	wireOpenaiTextDocumentFileId                = "file-9aXr2bQ7m1Tn"
 	wireOptionsAnthropicModel                   = "claude-sonnet-4-6"
 	wireOptionsAnthropicPrompt                  = "Explain in one sentence why the sky appears blue at noon, then write END_OF_ANSWER."
 	wireOptionsAnthropicMaxTokens               = 2048
