@@ -21,6 +21,7 @@ import (
 	"os"
 
 	llmkit "github.com/aktagon/llmkit-go"
+	"github.com/aktagon/llmkit-go/providers"
 )
 
 func main() {
@@ -44,10 +45,10 @@ func main() {
 	// 2. Providers namespace.
 	names := make([]string, 0, len(c.Providers.List()))
 	for _, p := range c.Providers.List() {
-		names = append(names, p.Name)
+		names = append(names, p.Slug)
 	}
 	fmt.Println("configured:", names)
-	fmt.Println("supported >= 1:", len(c.Providers.Supported()) > 0)
+	fmt.Println("supported >= 1:", len(providers.List()) > 0)
 
 	// 3. Live + scoped HTTP.
 	p := llmkit.Provider{Name: "anthropic", APIKey: key}

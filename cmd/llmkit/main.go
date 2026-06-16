@@ -50,9 +50,13 @@ func main() {
 		log.Fatal("Both system prompt and user prompt are required")
 	}
 
-	apiKey := getAPIKey(provider)
+	id, ok := providers.Parse(provider)
+	if !ok {
+		log.Fatalf("Unsupported provider: %s", provider)
+	}
+	apiKey := getAPIKey(id)
 
-	c := llmkit.New(provider, apiKey)
+	c := llmkit.New(id, apiKey)
 	t := c.Text.System(systemPrompt).Model(model)
 	if jsonSchema != "" {
 		t = t.Schema(jsonSchema)
@@ -75,11 +79,8 @@ func main() {
 	}
 }
 
-func getAPIKey(provider string) string {
-	info := providers.Info(provider)
-	if info.Name == "" {
-		log.Fatalf("Unsupported provider: %s", provider)
-	}
+func getAPIKey(id providers.ProviderName) string {
+	info := providers.Info(id)
 
 	key := os.Getenv(info.EnvVar)
 	if key == "" {
