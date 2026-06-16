@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"testing"
+
+	"github.com/aktagon/llmkit-go/providers"
 )
 
 func TestModels_List_ReturnsCompiledInCatalogue(t *testing.T) {
@@ -76,8 +78,8 @@ func TestProviders_List_SingleProviderClient(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("Providers.List = %d, want 1", len(got))
 	}
-	if got[0].Name != "anthropic" {
-		t.Errorf("Providers.List[0] = %q, want anthropic", got[0].Name)
+	if got[0].Slug != "anthropic" {
+		t.Errorf("Providers.List[0] = %q, want anthropic", got[0].Slug)
 	}
 
 	// Cohere does NOT have llm:hasModelsEndpoint -> empty.
@@ -87,11 +89,12 @@ func TestProviders_List_SingleProviderClient(t *testing.T) {
 	}
 }
 
-func TestProviders_Supported_ReturnsAllSDKProviders(t *testing.T) {
-	c := Anthropic("test-key")
-	supported := c.Providers.Supported()
+func TestProviders_StaticRosterReturnsAllSDKProviders(t *testing.T) {
+	// ADR-040 PSR-005: the static roster of every supported provider is the
+	// package-level providers.List(), independent of Client credentials.
+	supported := providers.List()
 	if len(supported) < 10 {
-		t.Errorf("Providers.Supported = %d, expected >=10 (full SDK roster)", len(supported))
+		t.Errorf("providers.List = %d, expected >=10 (full SDK roster)", len(supported))
 	}
 }
 

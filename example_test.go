@@ -338,10 +338,10 @@ func ExampleClient_catalogue() {
 	// Providers namespace.
 	names := make([]string, 0, len(c.Providers.List()))
 	for _, p := range c.Providers.List() {
-		names = append(names, p.Name)
+		names = append(names, p.Slug)
 	}
 	fmt.Println("configured:", names)
-	fmt.Println("supported >= 1:", len(c.Providers.Supported()) > 0)
+	fmt.Println("supported >= 1:", len(providers.List()) > 0)
 
 	// Live + scoped HTTP.
 	p := Provider{Name: "anthropic", APIKey: "sk-test"}

@@ -4,8 +4,6 @@ import (
 	"context"
 	"strings"
 	"testing"
-
-	"github.com/aktagon/llmkit-go/internal/providerspec"
 )
 
 // ADR-031 honest no-default contract: local daemons declare no registry
@@ -30,7 +28,7 @@ func TestNoDefaultContractLocalDaemons(t *testing.T) {
 	// Registry facts behind the contract: the five locals declare no
 	// default; every cloud provider declares one.
 	locals := map[string]bool{"ollama": true, "vllm": true, "llamacpp": true, "lmstudio": true, "jan": true}
-	for name, cfg := range providerspec.Providers() {
+	for name, cfg := range providerSpecs() {
 		if locals[name] && cfg.DefaultModel != "" {
 			t.Errorf("%s: local daemon declares default %q, want none", name, cfg.DefaultModel)
 		}

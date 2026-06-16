@@ -128,7 +128,7 @@ func TestGenerateMusicMinimaxHex(t *testing.T) {
 
 	p := providers.Vertex // placeholder; overwritten below
 	_ = p
-	prov := Provider{Name: providers.Minimax, APIKey: "k"}
+	prov := Provider{Name: string(providers.Minimax), APIKey: "k"}
 	client := &http.Client{Transport: rewriteTransport{target}}
 	resp, err := generateMusic(
 		context.Background(), prov,
@@ -162,7 +162,7 @@ func TestGenerateMusicWithLyricsBuildsLyricsField(t *testing.T) {
 	defer server.Close()
 	target, _ := url.Parse(server.URL)
 
-	prov := Provider{Name: providers.Minimax, APIKey: "k"}
+	prov := Provider{Name: string(providers.Minimax), APIKey: "k"}
 	client := &http.Client{Transport: rewriteTransport{target}}
 	_, err := generateMusic(
 		context.Background(), prov,
@@ -245,7 +245,7 @@ func TestGenerateMusicFoldsLyricsIntoPromptOnInstrumentalModel(t *testing.T) {
 }
 
 func TestGenerateMusicRejectsImagePart(t *testing.T) {
-	prov := Provider{Name: providers.Vertex, APIKey: "t", BaseURL: "http://unused"}
+	prov := Provider{Name: string(providers.Vertex), APIKey: "t", BaseURL: "http://unused"}
 	_, err := generateMusic(
 		context.Background(), prov,
 		MusicRequest{Model: lyria2Model, Parts: []Part{{Image: &MediaRef{MimeType: "image/png", Bytes: fakeWAV}}}},

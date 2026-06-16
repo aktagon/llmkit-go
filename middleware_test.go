@@ -39,7 +39,7 @@ func TestMiddlewarePrePostFire(t *testing.T) {
 			if e.Duration <= 0 {
 				t.Error("post-phase Duration must be > 0")
 			}
-			if e.Provider != providers.OpenAI {
+			if e.Provider != string(providers.OpenAI) {
 				t.Errorf("expected provider %q, got %q", providers.OpenAI, e.Provider)
 			}
 			if e.Op != providers.OpLLMRequest {
@@ -205,7 +205,7 @@ func TestMiddlewareCarriesModelAndProvider(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if seenProvider != providers.OpenAI {
+	if seenProvider != string(providers.OpenAI) {
 		t.Errorf("expected provider %q, got %q", providers.OpenAI, seenProvider)
 	}
 	if seenModel != "gpt-4o-mini" {

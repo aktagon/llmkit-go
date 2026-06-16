@@ -81,7 +81,7 @@ func assertRequestWireGolden(t *testing.T, fixture string, body []byte) {
 // pointed at it, and returns the exact request body bytes plus the request
 // headers the provider received (headers feed the in-driver asserts for
 // load-bearing headers, e.g. Anthropic's structured-output beta header).
-func captureBody(t *testing.T, provider string, call func(c *Client)) ([]byte, http.Header) {
+func captureBody(t *testing.T, provider providers.ProviderName, call func(c *Client)) ([]byte, http.Header) {
 	t.Helper()
 	var captured []byte
 	var capturedHeaders http.Header
