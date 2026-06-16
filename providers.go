@@ -1,13 +1,11 @@
 package llmkit
 
 import (
-	"sort"
-
-	"github.com/aktagon/llmkit-go/internal/providerspec"
+	"github.com/aktagon/llmkit-go/providers"
 )
 
-// runList returns the providers eligible for *Models.Live(ctx). Per
-// ADR-019 the eligibility test is:
+// eligible returns the providers eligible for *Models.Live(ctx), carrying
+// this Client's credentials. Per ADR-019 the eligibility test is:
 //
 //	credentials configured on this Client AND
 //	llm:hasModelsEndpoint declared in the ontology.
@@ -15,7 +13,7 @@ import (
 // A Go Client carries credentials for one provider, so the result is
 // either a single-element slice (when its provider has a catalogue
 // endpoint) or empty.
-func (b *Providers) runList() []Provider {
+func (b *Providers) eligible() []Provider {
 	if b == nil || b.client == nil {
 		return nil
 	}
@@ -26,15 +24,16 @@ func (b *Providers) runList() []Provider {
 	return []Provider{p}
 }
 
-// runSupported returns every provider the SDK ships with — independent
-// of Client credentials. Sorted by provider name for deterministic
-// callers.
-func (b *Providers) runSupported() []Provider {
-	configs := providerspec.Providers()
-	out := make([]Provider, 0, len(configs))
-	for name := range configs {
-		out = append(out, Provider{Name: name})
+// runList maps the eligible providers to their secret-free public
+// metadata via providers.Info (ADR-040 PSR-005). The static roster of
+// every supported provider is the package-level providers.List().
+func (b *Providers) runList() []providers.ProviderInfo {
+	eligible := b.eligible()
+	out := make([]providers.ProviderInfo, 0, len(eligible))
+	for _, p := range eligible {
+		if id, ok := providers.Parse(p.Name); ok {
+			out = append(out, providers.Info(id))
+		}
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out
 }

@@ -8,7 +8,6 @@ package llmkit
 import (
 	"testing"
 
-	"github.com/aktagon/llmkit-go/internal/providerspec"
 	"github.com/aktagon/llmkit-go/providers"
 )
 
@@ -33,8 +32,8 @@ func TestSupports_UngatedCapabilitiesTrue(t *testing.T) {
 func TestSupports_MatchesStrictGateLookups(t *testing.T) {
 	// CAP-002: same predicate as the validation paths, never a parallel
 	// table. Exhaustive over the registry so drift is structurally caught.
-	for name := range providerspec.Providers() {
-		c := New(name, "k")
+	for name := range providerSpecs() {
+		c := New(providers.ProviderName(name), "k")
 		checks := []struct {
 			cap  Capability
 			want bool

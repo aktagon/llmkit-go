@@ -1134,7 +1134,7 @@ func TestGenerateImageOpenAIMaskRejectedWithoutImageParts(t *testing.T) {
 // Mask on Google + Grok is rejected (not supported on the wire at all).
 func TestGenerateImageMaskRejectedOnGoogleAndGrok(t *testing.T) {
 	for _, p := range []struct {
-		provider string
+		provider providers.ProviderName
 		model    string
 	}{
 		{providers.Google, flashModel},

@@ -23,7 +23,7 @@ type BatchDef struct {
 
 // BatchConfig returns the batch config for a provider.
 func BatchConfig(provider string) *BatchDef {
-	switch provider {
+	switch ProviderName(provider) {
 	case Anthropic:
 		return &BatchDef{
 			InputMode:        "InlineRequests",

@@ -3,8 +3,6 @@ package llmkit
 import (
 	"encoding/json"
 	"testing"
-
-	"github.com/aktagon/llmkit-go/internal/providerspec"
 )
 
 // Regression net for ADR-026 (unified request builder, Go slice).
@@ -32,7 +30,7 @@ func TestBuildRequestWireBodySnapshots(t *testing.T) {
 
 	for name, want := range cases {
 		t.Run(name, func(t *testing.T) {
-			cfg := providerspec.Providers()[name]
+			cfg := providerSpecs()[name]
 			msgs, err := toInternal(req.Messages)
 			if err != nil {
 				t.Fatalf("toInternal: %v", err)
@@ -63,7 +61,7 @@ func TestGoogleToolResultResolvesFunctionName(t *testing.T) {
 		}},
 		{Role: "tool", ToolResult: &ToolResult{ToolUseID: "call_abc123", Content: "sunny, 21C"}},
 	}}
-	cfg := providerspec.Providers()["google"]
+	cfg := providerSpecs()["google"]
 
 	msgs, err := toInternal(req.Messages)
 	if err != nil {

@@ -3,16 +3,14 @@ package llmkit
 import (
 	"encoding/json"
 	"testing"
-
-	"github.com/aktagon/llmkit-go/internal/providerspec"
 )
 
-func googleConfig() providerspec.ProviderSpec {
-	return providerspec.Providers()["google"]
+func googleConfig() providerSpec {
+	return providerSpecs()["google"]
 }
 
-func bedrockConfig() providerspec.ProviderSpec {
-	return providerspec.Providers()["bedrock"]
+func bedrockConfig() providerSpec {
+	return providerSpecs()["bedrock"]
 }
 
 // --- Google transforms ---
@@ -416,7 +414,7 @@ func TestSelectTransformsGoogle(t *testing.T) {
 }
 
 func TestSelectTransformsOpenAI(t *testing.T) {
-	cfg := providerspec.Providers()["openai"]
+	cfg := providerSpecs()["openai"]
 
 	msg := selectMessageTransform(cfg)
 	body := map[string]any{}

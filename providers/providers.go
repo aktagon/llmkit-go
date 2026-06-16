@@ -2,36 +2,111 @@
 
 package providers
 
+// ProviderName is the typed provider identity (ADR-040). Client
+// constructors take it; an untrusted slug crosses into it exactly once
+// via Parse. The string value of each constant is its slug.
+type ProviderName string
+
 // Provider name constants.
 const (
-	AI21       = "ai21"
-	Anthropic  = "anthropic"
-	Azure      = "azure"
-	Bedrock    = "bedrock"
-	Cerebras   = "cerebras"
-	Cohere     = "cohere"
-	Deepseek   = "deepseek"
-	Doubao     = "doubao"
-	Ernie      = "ernie"
-	Fireworks  = "fireworks"
-	Google     = "google"
-	Grok       = "grok"
-	Groq       = "groq"
-	Jan        = "jan"
-	Llamacpp   = "llamacpp"
-	Lmstudio   = "lmstudio"
-	Minimax    = "minimax"
-	Mistral    = "mistral"
-	Moonshot   = "moonshot"
-	Ollama     = "ollama"
-	OpenAI     = "openai"
-	Openrouter = "openrouter"
-	Perplexity = "perplexity"
-	Qwen       = "qwen"
-	Sambanova  = "sambanova"
-	Together   = "together"
-	Vertex     = "vertex"
-	Vllm       = "vllm"
-	Yi         = "yi"
-	Zhipu      = "zhipu"
+	AI21       ProviderName = "ai21"
+	Anthropic  ProviderName = "anthropic"
+	Azure      ProviderName = "azure"
+	Bedrock    ProviderName = "bedrock"
+	Cerebras   ProviderName = "cerebras"
+	Cohere     ProviderName = "cohere"
+	Deepseek   ProviderName = "deepseek"
+	Doubao     ProviderName = "doubao"
+	Ernie      ProviderName = "ernie"
+	Fireworks  ProviderName = "fireworks"
+	Google     ProviderName = "google"
+	Grok       ProviderName = "grok"
+	Groq       ProviderName = "groq"
+	Jan        ProviderName = "jan"
+	Llamacpp   ProviderName = "llamacpp"
+	Lmstudio   ProviderName = "lmstudio"
+	Minimax    ProviderName = "minimax"
+	Mistral    ProviderName = "mistral"
+	Moonshot   ProviderName = "moonshot"
+	Ollama     ProviderName = "ollama"
+	OpenAI     ProviderName = "openai"
+	Openrouter ProviderName = "openrouter"
+	Perplexity ProviderName = "perplexity"
+	Qwen       ProviderName = "qwen"
+	Sambanova  ProviderName = "sambanova"
+	Together   ProviderName = "together"
+	Vertex     ProviderName = "vertex"
+	Vllm       ProviderName = "vllm"
+	Yi         ProviderName = "yi"
+	Zhipu      ProviderName = "zhipu"
 )
+
+// Parse converts a provider slug to its typed ProviderName. The bool is
+// false when slug names no known provider — the single fallible
+// slug -> ProviderName boundary (ADR-040 PSR-003).
+func Parse(slug string) (ProviderName, bool) {
+	switch slug {
+	case "ai21":
+		return AI21, true
+	case "anthropic":
+		return Anthropic, true
+	case "azure":
+		return Azure, true
+	case "bedrock":
+		return Bedrock, true
+	case "cerebras":
+		return Cerebras, true
+	case "cohere":
+		return Cohere, true
+	case "deepseek":
+		return Deepseek, true
+	case "doubao":
+		return Doubao, true
+	case "ernie":
+		return Ernie, true
+	case "fireworks":
+		return Fireworks, true
+	case "google":
+		return Google, true
+	case "grok":
+		return Grok, true
+	case "groq":
+		return Groq, true
+	case "jan":
+		return Jan, true
+	case "llamacpp":
+		return Llamacpp, true
+	case "lmstudio":
+		return Lmstudio, true
+	case "minimax":
+		return Minimax, true
+	case "mistral":
+		return Mistral, true
+	case "moonshot":
+		return Moonshot, true
+	case "ollama":
+		return Ollama, true
+	case "openai":
+		return OpenAI, true
+	case "openrouter":
+		return Openrouter, true
+	case "perplexity":
+		return Perplexity, true
+	case "qwen":
+		return Qwen, true
+	case "sambanova":
+		return Sambanova, true
+	case "together":
+		return Together, true
+	case "vertex":
+		return Vertex, true
+	case "vllm":
+		return Vllm, true
+	case "yi":
+		return Yi, true
+	case "zhipu":
+		return Zhipu, true
+	default:
+		return "", false
+	}
+}

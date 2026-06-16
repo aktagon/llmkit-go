@@ -5,6 +5,10 @@
 // was deleted (ADR-010).
 package llmkit
 
+import (
+	"github.com/aktagon/llmkit-go/providers"
+)
+
 // providerConfig holds per-provider auth + endpoint details.
 // baseURL is an internal override mainly used by tests pointing
 // at httptest.Server URLs; per-provider constructors leave it
@@ -37,8 +41,8 @@ type Client struct {
 	Providers *Providers
 }
 
-func newClient(name, apiKey string) *Client {
-	c := &Client{provider: providerConfig{name: name, apiKey: apiKey}}
+func newClient(p providers.ProviderName, apiKey string) *Client {
+	c := &Client{provider: providerConfig{name: string(p), apiKey: apiKey}}
 	c.Text = &Text{client: c}
 	c.Image = &Image{client: c}
 	c.Music = &Music{client: c}
@@ -50,41 +54,42 @@ func newClient(name, apiKey string) *Client {
 	return c
 }
 
-// New constructs a Client for the named provider. Per-provider
-// helpers below are ergonomic shortcuts.
-func New(name, apiKey string) *Client { return newClient(name, apiKey) }
+// New constructs a Client for the given provider (ADR-040: the typed
+// providers.ProviderName identity). Per-provider helpers below are
+// ergonomic shortcuts; a slug from config crosses in via providers.Parse.
+func New(p providers.ProviderName, apiKey string) *Client { return newClient(p, apiKey) }
 
 // === Per-provider constructors ===
-func Ai21(apiKey string) *Client       { return newClient("ai21", apiKey) }
-func Anthropic(apiKey string) *Client  { return newClient("anthropic", apiKey) }
-func Azure(apiKey string) *Client      { return newClient("azure", apiKey) }
-func Bedrock(apiKey string) *Client    { return newClient("bedrock", apiKey) }
-func Cerebras(apiKey string) *Client   { return newClient("cerebras", apiKey) }
-func Cohere(apiKey string) *Client     { return newClient("cohere", apiKey) }
-func Deepseek(apiKey string) *Client   { return newClient("deepseek", apiKey) }
-func Doubao(apiKey string) *Client     { return newClient("doubao", apiKey) }
-func Ernie(apiKey string) *Client      { return newClient("ernie", apiKey) }
-func Fireworks(apiKey string) *Client  { return newClient("fireworks", apiKey) }
-func Google(apiKey string) *Client     { return newClient("google", apiKey) }
-func Grok(apiKey string) *Client       { return newClient("grok", apiKey) }
-func Groq(apiKey string) *Client       { return newClient("groq", apiKey) }
-func Jan(apiKey string) *Client        { return newClient("jan", apiKey) }
-func Llamacpp(apiKey string) *Client   { return newClient("llamacpp", apiKey) }
-func Lmstudio(apiKey string) *Client   { return newClient("lmstudio", apiKey) }
-func Minimax(apiKey string) *Client    { return newClient("minimax", apiKey) }
-func Mistral(apiKey string) *Client    { return newClient("mistral", apiKey) }
-func Moonshot(apiKey string) *Client   { return newClient("moonshot", apiKey) }
-func Ollama(apiKey string) *Client     { return newClient("ollama", apiKey) }
-func Openai(apiKey string) *Client     { return newClient("openai", apiKey) }
-func Openrouter(apiKey string) *Client { return newClient("openrouter", apiKey) }
-func Perplexity(apiKey string) *Client { return newClient("perplexity", apiKey) }
-func Qwen(apiKey string) *Client       { return newClient("qwen", apiKey) }
-func Sambanova(apiKey string) *Client  { return newClient("sambanova", apiKey) }
-func Together(apiKey string) *Client   { return newClient("together", apiKey) }
-func Vertex(apiKey string) *Client     { return newClient("vertex", apiKey) }
-func Vllm(apiKey string) *Client       { return newClient("vllm", apiKey) }
-func Yi(apiKey string) *Client         { return newClient("yi", apiKey) }
-func Zhipu(apiKey string) *Client      { return newClient("zhipu", apiKey) }
+func Ai21(apiKey string) *Client       { return newClient(providers.AI21, apiKey) }
+func Anthropic(apiKey string) *Client  { return newClient(providers.Anthropic, apiKey) }
+func Azure(apiKey string) *Client      { return newClient(providers.Azure, apiKey) }
+func Bedrock(apiKey string) *Client    { return newClient(providers.Bedrock, apiKey) }
+func Cerebras(apiKey string) *Client   { return newClient(providers.Cerebras, apiKey) }
+func Cohere(apiKey string) *Client     { return newClient(providers.Cohere, apiKey) }
+func Deepseek(apiKey string) *Client   { return newClient(providers.Deepseek, apiKey) }
+func Doubao(apiKey string) *Client     { return newClient(providers.Doubao, apiKey) }
+func Ernie(apiKey string) *Client      { return newClient(providers.Ernie, apiKey) }
+func Fireworks(apiKey string) *Client  { return newClient(providers.Fireworks, apiKey) }
+func Google(apiKey string) *Client     { return newClient(providers.Google, apiKey) }
+func Grok(apiKey string) *Client       { return newClient(providers.Grok, apiKey) }
+func Groq(apiKey string) *Client       { return newClient(providers.Groq, apiKey) }
+func Jan(apiKey string) *Client        { return newClient(providers.Jan, apiKey) }
+func Llamacpp(apiKey string) *Client   { return newClient(providers.Llamacpp, apiKey) }
+func Lmstudio(apiKey string) *Client   { return newClient(providers.Lmstudio, apiKey) }
+func Minimax(apiKey string) *Client    { return newClient(providers.Minimax, apiKey) }
+func Mistral(apiKey string) *Client    { return newClient(providers.Mistral, apiKey) }
+func Moonshot(apiKey string) *Client   { return newClient(providers.Moonshot, apiKey) }
+func Ollama(apiKey string) *Client     { return newClient(providers.Ollama, apiKey) }
+func Openai(apiKey string) *Client     { return newClient(providers.OpenAI, apiKey) }
+func Openrouter(apiKey string) *Client { return newClient(providers.Openrouter, apiKey) }
+func Perplexity(apiKey string) *Client { return newClient(providers.Perplexity, apiKey) }
+func Qwen(apiKey string) *Client       { return newClient(providers.Qwen, apiKey) }
+func Sambanova(apiKey string) *Client  { return newClient(providers.Sambanova, apiKey) }
+func Together(apiKey string) *Client   { return newClient(providers.Together, apiKey) }
+func Vertex(apiKey string) *Client     { return newClient(providers.Vertex, apiKey) }
+func Vllm(apiKey string) *Client       { return newClient(providers.Vllm, apiKey) }
+func Yi(apiKey string) *Client         { return newClient(providers.Yi, apiKey) }
+func Zhipu(apiKey string) *Client      { return newClient(providers.Zhipu, apiKey) }
 
 // === *Text — ChatCompletion builder ===
 
