@@ -109,4 +109,9 @@ const (
 	wireVideoVertexPrompt                       = "A drone shot sweeping over snow-capped alpine peaks at sunrise"
 	wireVideoZhipuModel                         = "cogvideox-3"
 	wireVideoZhipuPrompt                        = "A drone shot sweeping over snow-capped alpine peaks at sunrise"
+	wireWorkersaiModel                          = "@cf/meta/llama-3.1-8b-instruct"
+	wireWorkersaiPrompt                         = "List three primary colors as a comma-separated list."
+	wireWorkersaiMaxTokens                      = 512
+	wireWorkersaiTemperature                    = 0.7
+	wireWorkersaiTopP                           = 0.9
 )

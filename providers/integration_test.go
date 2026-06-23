@@ -955,6 +955,48 @@ func TestIntegrationVertex(t *testing.T) {
 	}
 }
 
+func TestIntegrationWorkersai(t *testing.T) {
+	key := os.Getenv("CLOUDFLARE_API_TOKEN")
+	if key == "" {
+		t.Skip("CLOUDFLARE_API_TOKEN not set")
+	}
+	c := llmkit.New(providers.Workersai, key)
+	resp, err := c.Text.System("Reply with only the word pong").Prompt(context.Background(), "ping")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Text == "" {
+		t.Error("empty response text")
+	}
+	if resp.Tokens.Input == 0 {
+		t.Error("no input tokens reported")
+	}
+}
+
+func TestIntegrationWorkersaiStream(t *testing.T) {
+	key := os.Getenv("CLOUDFLARE_API_TOKEN")
+	if key == "" {
+		t.Skip("CLOUDFLARE_API_TOKEN not set")
+	}
+	var chunks int
+	var text string
+	c := llmkit.New(providers.Workersai, key)
+	stream := c.Text.System("Reply with only the word pong").Stream(context.Background(), "ping")
+	for chunk, err := range stream.Chunks() {
+		if err != nil {
+			t.Fatal(err)
+		}
+		chunks++
+		text += chunk
+	}
+	if text == "" {
+		t.Error("empty response text")
+	}
+	if chunks == 0 {
+		t.Error("no chunks received")
+	}
+}
+
 func TestIntegrationYi(t *testing.T) {
 	key := os.Getenv("YI_API_KEY")
 	if key == "" {

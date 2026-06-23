@@ -467,6 +467,22 @@ func TestRequestWire_OpenAITextDocument(t *testing.T) {
 	assertRequestWireGolden(t, "openai-text-document", body)
 }
 
+// TestRequestWire_WorkersAI witnesses Cloudflare Workers AI's OpenAI-compatible
+// chat body (prompt 043). Same OpenAI transform as Cerebras/Grok — no
+// provider-specific code — so the bytes are the standard chat-completions shape
+// with the conservative declared option surface (max_tokens/temperature/top_p).
+func TestRequestWire_WorkersAI(t *testing.T) {
+	body, _ := captureBody(t, providers.Workersai, func(c *Client) {
+		_, err := c.Text.Model(wireWorkersaiModel).
+			MaxTokens(wireWorkersaiMaxTokens).Temperature(wireWorkersaiTemperature).TopP(wireWorkersaiTopP).
+			Prompt(context.Background(), wireWorkersaiPrompt)
+		if err != nil {
+			t.Fatalf("workersai call: %v", err)
+		}
+	})
+	assertRequestWireGolden(t, "workersai", body)
+}
+
 // TestRequestWire_OptionsAnthropicAdaptive witnesses the adaptive thinking
 // surface (ADR-029): ReasoningEffort resolves to the output_config.effort
 // dotted path AND root-merges {"thinking":{"type":"adaptive"}} via
