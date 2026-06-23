@@ -304,6 +304,12 @@ func SupportedOptions(provider string) map[OptionKey]string {
 			OptionTopK:             "top_k",
 			OptionTopP:             "top_p",
 		}
+	case Workersai:
+		return map[OptionKey]string{
+			OptionMaxTokens:   "max_tokens",
+			OptionTemperature: "temperature",
+			OptionTopP:        "top_p",
+		}
 	case Yi:
 		return map[OptionKey]string{
 			OptionMaxTokens:     "max_tokens",

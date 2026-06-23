@@ -88,6 +88,7 @@ func Sambanova(apiKey string) *Client  { return newClient(providers.Sambanova, a
 func Together(apiKey string) *Client   { return newClient(providers.Together, apiKey) }
 func Vertex(apiKey string) *Client     { return newClient(providers.Vertex, apiKey) }
 func Vllm(apiKey string) *Client       { return newClient(providers.Vllm, apiKey) }
+func Workersai(apiKey string) *Client  { return newClient(providers.Workersai, apiKey) }
 func Yi(apiKey string) *Client         { return newClient(providers.Yi, apiKey) }
 func Zhipu(apiKey string) *Client      { return newClient(providers.Zhipu, apiKey) }
 
