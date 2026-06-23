@@ -72,6 +72,54 @@ func TestPromptOpenAI(t *testing.T) {
 	}
 }
 
+// TestPromptWorkersAI verifies the response envelope for Cloudflare Workers AI
+// (prompt 043). The /ai/v1/ OpenAI-compat shim returns the standard OpenAI
+// chat shape, so the config-driven parser (hasResponseTextPath +
+// hasUsageMapping + OpenAI finish-reason path) reads text, usage, and
+// finish_reason with zero provider-specific code.
+func TestPromptWorkersAI(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var req map[string]any
+		json.Unmarshal(body, &req)
+		if req["model"] != "@cf/meta/llama-3.1-8b-instruct" {
+			t.Errorf("expected default model, got %v", req["model"])
+		}
+		if r.Header.Get("Authorization") != "Bearer cf-token" {
+			t.Errorf("expected Bearer auth, got %v", r.Header.Get("Authorization"))
+		}
+		json.NewEncoder(w).Encode(map[string]any{
+			"choices": []map[string]any{
+				{"message": map[string]any{"content": "Red, green, blue"}, "finish_reason": "stop"},
+			},
+			"usage": map[string]any{
+				"prompt_tokens":     12,
+				"completion_tokens": 4,
+			},
+		})
+	}))
+	defer server.Close()
+
+	c := New(providers.Workersai, "cf-token")
+	c.provider.baseURL = server.URL
+	resp, err := c.Text.Prompt(context.Background(), "List three primary colors as a comma-separated list.")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Text != "Red, green, blue" {
+		t.Errorf("expected text 'Red, green, blue', got %q", resp.Text)
+	}
+	if resp.Usage.Input != 12 {
+		t.Errorf("expected 12 input tokens, got %d", resp.Usage.Input)
+	}
+	if resp.Usage.Output != 4 {
+		t.Errorf("expected 4 output tokens, got %d", resp.Usage.Output)
+	}
+	if resp.FinishReason != "stop" {
+		t.Errorf("expected FinishReason=stop, got %q", resp.FinishReason)
+	}
+}
+
 func TestPromptAnthropic(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)

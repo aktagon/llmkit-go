@@ -230,6 +230,13 @@ var providerInfoTable = map[ProviderName]ProviderInfo{
 		DefaultModel: "",
 		BaseURL:      "http://localhost:8000",
 	},
+	Workersai: {
+		ID:           Workersai,
+		Slug:         "workersai",
+		EnvVar:       "CLOUDFLARE_API_TOKEN",
+		DefaultModel: "@cf/meta/llama-3.1-8b-instruct",
+		BaseURL:      "https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1",
+	},
 	Yi: {
 		ID:           Yi,
 		Slug:         "yi",

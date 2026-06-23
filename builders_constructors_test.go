@@ -41,6 +41,7 @@ func TestEveryProviderFactory_Constructs(t *testing.T) {
 		{"together", Together},
 		{"vertex", Vertex},
 		{"vllm", Vllm},
+		{"workersai", Workersai},
 		{"yi", Yi},
 		{"zhipu", Zhipu},
 	}

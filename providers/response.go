@@ -61,6 +61,8 @@ func ResponseTextPath(provider string) string {
 		return ""
 	case Vllm:
 		return "choices[0].message.content"
+	case Workersai:
+		return "choices[0].message.content"
 	case Yi:
 		return "choices[0].message.content"
 	case Zhipu:
@@ -128,6 +130,8 @@ func UsagePaths(provider string) (inputPath, outputPath string) {
 	case Vertex:
 		return "", ""
 	case Vllm:
+		return "usage.prompt_tokens", "usage.completion_tokens"
+	case Workersai:
 		return "usage.prompt_tokens", "usage.completion_tokens"
 	case Yi:
 		return "usage.prompt_tokens", "usage.completion_tokens"
