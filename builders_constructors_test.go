@@ -36,6 +36,7 @@ func TestEveryProviderFactory_Constructs(t *testing.T) {
 		{"openai", Openai},
 		{"openrouter", Openrouter},
 		{"perplexity", Perplexity},
+		{"pixverse", Pixverse},
 		{"qwen", Qwen},
 		{"recraft", Recraft},
 		{"sambanova", Sambanova},

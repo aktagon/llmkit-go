@@ -305,6 +305,121 @@ func TestVideoViduRejectsImagePart(t *testing.T) {
 	}
 }
 
+const pixverseVideoModel = "v4.5"
+
+// pixverseVideoServer serves the PixVerse submit + poll endpoints. Submit POST
+// /openapi/v2/video/text/generate returns the poll handle as the integer
+// Resp.video_id; the poll GET /openapi/v2/video/result/{id} returns numeric
+// status 5 (generating) for the first pendingPolls calls, then the supplied
+// done body. PixVerse auth uses the API-KEY header and a per-request UUID
+// Ai-trace-id header on BOTH submit and poll — both asserted in-driver.
+func pixverseVideoServer(t *testing.T, pendingPolls int32, doneBody map[string]any) *httptest.Server {
+	t.Helper()
+	var polls int32
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("API-KEY"); got != "test-token" {
+			t.Errorf("expected API-KEY header, got %q", got)
+		}
+		if got := r.Header.Get("Ai-trace-id"); got == "" {
+			t.Error("expected non-empty Ai-trace-id header")
+		}
+		switch {
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/openapi/v2/video/text/generate"):
+			var body map[string]any
+			json.NewDecoder(r.Body).Decode(&body)
+			if body["model"] != pixverseVideoModel {
+				t.Errorf("expected model %q, got %v", pixverseVideoModel, body["model"])
+			}
+			if body["prompt"] == "" {
+				t.Error("expected non-empty prompt in submit body")
+			}
+			for _, req := range []string{"duration", "quality", "aspect_ratio"} {
+				if _, ok := body[req]; !ok {
+					t.Errorf("expected required field %q in submit body", req)
+				}
+			}
+			json.NewEncoder(w).Encode(map[string]any{"ErrCode": 0, "ErrMsg": "success", "Resp": map[string]any{"video_id": 318633193768896}})
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/openapi/v2/video/result/318633193768896"):
+			if atomic.AddInt32(&polls, 1) <= pendingPolls {
+				json.NewEncoder(w).Encode(map[string]any{"ErrCode": 0, "Resp": map[string]any{"status": 5}})
+				return
+			}
+			json.NewEncoder(w).Encode(doneBody)
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			http.Error(w, "unexpected", http.StatusNotFound)
+		}
+	}))
+}
+
+func TestSubmitAndWaitVideoPixVerse(t *testing.T) {
+	fastVideoPoll(t)
+	done := map[string]any{
+		"ErrCode": 0,
+		"ErrMsg":  "success",
+		"Resp":    map[string]any{"id": 318633193768896, "status": 1, "url": "https://media.pixverse.ai/abc/v.mp4"},
+	}
+	server := pixverseVideoServer(t, 2, done)
+	defer server.Close()
+
+	c := New(providers.Pixverse, "test-token")
+	c.provider.baseURL = server.URL
+
+	h, err := c.Video.Model(pixverseVideoModel).Submit(context.Background(), "a drone shot over the alps")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h.ID != "318633193768896" {
+		t.Fatalf("expected handle id from Resp.video_id (numeric -> string), got %q", h.ID)
+	}
+
+	resp, err := h.Wait(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Videos) != 1 {
+		t.Fatalf("expected 1 video, got %d", len(resp.Videos))
+	}
+	if got := resp.Videos[0].URL; got != "https://media.pixverse.ai/abc/v.mp4" {
+		t.Errorf("expected Resp.url, got %q", got)
+	}
+	if got := resp.Videos[0].MimeType; got != "video/mp4" {
+		t.Errorf("expected video/mp4, got %q", got)
+	}
+	if len(resp.Videos[0].Bytes) != 0 {
+		t.Error("url delivery must not download bytes")
+	}
+}
+
+func TestVideoWaitFailedPixVerse(t *testing.T) {
+	fastVideoPoll(t)
+	done := map[string]any{"ErrCode": 0, "Resp": map[string]any{"status": 8}}
+	server := pixverseVideoServer(t, 0, done)
+	defer server.Close()
+
+	c := New(providers.Pixverse, "test-token")
+	c.provider.baseURL = server.URL
+
+	h, err := c.Video.Model(pixverseVideoModel).Submit(context.Background(), "blocked prompt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = h.Wait(context.Background()); err == nil {
+		t.Fatal("expected error for failed job (status 8)")
+	}
+}
+
+// TestVideoPixVerseRejectsImagePart asserts the text-to-video-only gate:
+// PixVerse models set supportsImageToVideo false (the img2video endpoint is not
+// wired this slice), so an image part is rejected pre-flight.
+func TestVideoPixVerseRejectsImagePart(t *testing.T) {
+	c := New(providers.Pixverse, "test-token")
+	_, err := c.Video.Model(pixverseVideoModel).Image("image/png", []byte{0x89, 0x50}).Submit(context.Background(), "animate this")
+	if err == nil {
+		t.Fatal("expected pre-flight rejection of image part for text-to-video-only model")
+	}
+}
+
 const togetherVideoModel = "minimax/video-01-director"
 
 // togetherVideoServer serves the Together submit + poll endpoints. Submit

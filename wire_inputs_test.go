@@ -105,6 +105,8 @@ const (
 	wireVideoGrokI2vImageBase64                 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGM4YWQEAALyAS2saifrAAAAAElFTkSuQmCC"
 	wireVideoMinimaxModel                       = "MiniMax-Hailuo-2.3"
 	wireVideoMinimaxPrompt                      = "A drone shot sweeping over snow-capped alpine peaks at sunrise"
+	wireVideoPixverseModel                      = "v4.5"
+	wireVideoPixversePrompt                     = "A drone shot sweeping over snow-capped alpine peaks at sunrise"
 	wireVideoQwenModel                          = "wan2.2-t2v-plus"
 	wireVideoQwenPrompt                         = "A drone shot sweeping over snow-capped alpine peaks at sunrise"
 	wireVideoTogetherModel                      = "minimax/video-01-director"

@@ -100,6 +100,7 @@ func captureBody(t *testing.T, provider providers.ProviderName, call func(c *Cli
 			"name":          "models/veo-test/operations/op_test",                            // VideoVeo: operation-name submit handle
 			"invocationArn": "arn:aws:bedrock:us-east-1:0:async-invoke/test",                 // VideoBedrock: invocationArn submit handle
 			"output":        map[string]any{"task_id": "vid_test", "task_status": "PENDING"}, // VideoQwen: output.task_id submit handle
+			"Resp":          map[string]any{"video_id": 318633193768896},                     // VideoPixVerse: Resp.video_id (numeric) submit handle
 
 			"candidates": []map[string]any{{"content": map[string]any{"parts": []map[string]any{
 				{"text": `{"color":"blue"}`},
@@ -754,6 +755,28 @@ func TestRequestWire_VideoVidu(t *testing.T) {
 		}
 	})
 	assertRequestWireGolden(t, "video-vidu", body)
+}
+
+// TestRequestWire_VideoPixVerse witnesses the PixVerse video-submit body:
+// {model, prompt, duration, quality, aspect_ratio} POSTed to
+// /openapi/v2/video/text/generate. Unlike the shared {model, prompt} arm,
+// PixVerse REQUIRES all five fields, so the runtime sends reference-anchored
+// defaults for duration/quality/aspect_ratio. The per-request Ai-trace-id
+// header and the lifecycle divergence (Resp.video_id handle, numeric status,
+// Resp.url) are exercised by the unit tests, not the request-wire suite (which
+// asserts the body only).
+//
+// WIRE-005 provenance: NOT live-anchored (no PIXVERSE_API_KEY). The body is the
+// documented PixVerse text-to-video submit, reference-anchored to the platform
+// docs (docs.platform.pixverse.ai).
+func TestRequestWire_VideoPixVerse(t *testing.T) {
+	body, _ := captureBody(t, providers.Pixverse, func(c *Client) {
+		_, err := c.Video.Model(wireVideoPixverseModel).Submit(context.Background(), wireVideoPixversePrompt)
+		if err != nil {
+			t.Fatalf("video submit pixverse call: %v", err)
+		}
+	})
+	assertRequestWireGolden(t, "video-pixverse", body)
 }
 
 // TestRequestWire_VideoTogether witnesses the Together video-submit body:
