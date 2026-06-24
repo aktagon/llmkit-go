@@ -4,12 +4,13 @@ package providers
 
 // Image input/output mode discriminators.
 const (
-	ImageInputInlineParts    = "InlineParts"
-	ImageInputMultipartForm  = "MultipartForm"
-	ImageInputJSONInlineRefs = "JSONInlineRefs"
-	ImageInputJSONPredict    = "JSONPredict"
-	ImageOutputBase64Inline  = "Base64Inline"
-	ImageOutputURLOrBase64   = "URLOrBase64"
+	ImageInputInlineParts     = "InlineParts"
+	ImageInputMultipartForm   = "MultipartForm"
+	ImageInputJSONInlineRefs  = "JSONInlineRefs"
+	ImageInputJSONPredict     = "JSONPredict"
+	ImageInputJSONGenerations = "JSONGenerations"
+	ImageOutputBase64Inline   = "Base64Inline"
+	ImageOutputURLOrBase64    = "URLOrBase64"
 )
 
 // ImageModelDef describes one image-generation model and its whitelisted
@@ -30,7 +31,7 @@ type ImageModelDef struct {
 // GenEndpoint and EditEndpoint are forward-compat overrides; empty means
 // reuse the provider's main endpoint template (Google).
 type ImageGenDef struct {
-	InputMode     string // ImageInputInlineParts | ImageInputMultipartForm | ImageInputJSONInlineRefs | ImageInputJSONPredict
+	InputMode     string // ImageInputInlineParts | ImageInputMultipartForm | ImageInputJSONInlineRefs | ImageInputJSONPredict | ImageInputJSONGenerations
 	OutputMode    string // ImageOutputBase64Inline | ImageOutputURLOrBase64
 	MaxInputCount int    // max reference images per request
 	GenEndpoint   string // override; empty = use provider main endpoint
@@ -115,6 +116,30 @@ func ImageGenConfig(provider string) *ImageGenDef {
 				{
 					ModelID:        "gpt-image-2",
 					Label:          "GPT Image 2",
+					AspectRatios:   []string{},
+					ImageSizes:     []string{},
+					MaxInputImages: 0,
+				},
+			},
+		}
+	case Recraft:
+		return &ImageGenDef{
+			InputMode:     "JSONGenerations",
+			OutputMode:    "Base64Inline",
+			MaxInputCount: 0,
+			GenEndpoint:   "/v1/images/generations",
+			EditEndpoint:  "",
+			Models: []ImageModelDef{
+				{
+					ModelID:        "recraftv3",
+					Label:          "Recraft V3",
+					AspectRatios:   []string{},
+					ImageSizes:     []string{},
+					MaxInputImages: 0,
+				},
+				{
+					ModelID:        "recraftv3_vector",
+					Label:          "Recraft V3 (vector / SVG)",
 					AspectRatios:   []string{},
 					ImageSizes:     []string{},
 					MaxInputImages: 0,

@@ -318,6 +318,34 @@ func generateImage(ctx context.Context, p Provider, req ImageRequest, opts ...Im
 			return ImageResponse{}, &ValidationError{Field: "safety_settings", Message: "not supported by " + p.Name + "; use SafetyFilter for Vertex Imagen"}
 		}
 		// safetyFilter is valid for Vertex Imagen; wired in buildVertexBody
+	case providers.ImageInputJSONGenerations: // Recraft
+		// Recraft's flat generations body carries only size (-> `size`) and
+		// count (-> `n`); aspect_ratio is not a Recraft wire field (it sizes
+		// by an explicit WxH `size`), and the gpt-image / safety knobs are
+		// OpenAI / Google / Vertex only. Image parts are rejected upstream by
+		// the MaxInputCount==0 gate (text-to-image only). Style and other
+		// provider-specific knobs ride ExtraFields.
+		if o.aspectRatio != "" {
+			return ImageResponse{}, &ValidationError{Field: "aspect_ratio", Message: "not supported by " + p.Name + "; use ImageSize (Recraft sizes by WxH)"}
+		}
+		if o.quality != "" {
+			return ImageResponse{}, &ValidationError{Field: "quality", Message: "not supported by " + p.Name}
+		}
+		if o.outputFormat != "" {
+			return ImageResponse{}, &ValidationError{Field: "output_format", Message: "not supported by " + p.Name}
+		}
+		if o.background != "" {
+			return ImageResponse{}, &ValidationError{Field: "background", Message: "not supported by " + p.Name}
+		}
+		if o.mask != nil {
+			return ImageResponse{}, &ValidationError{Field: "mask", Message: "not supported by " + p.Name}
+		}
+		if o.safetyFilter != "" {
+			return ImageResponse{}, &ValidationError{Field: "safety_filter", Message: "not supported by " + p.Name}
+		}
+		if len(o.safetySettings) > 0 {
+			return ImageResponse{}, &ValidationError{Field: "safety_settings", Message: "not supported by " + p.Name}
+		}
 	}
 
 	baseEvent := providers.Event{
@@ -374,6 +402,9 @@ func generateImage(ctx context.Context, p Provider, req ImageRequest, opts ...Im
 //     or `images: [...]` (multi); response_format=b64_json forced.
 //   - JSONInlineRefs + no image parts (xAI Grok generations): JSON POST to
 //     imgCfg.GenEndpoint; same body shape minus image refs.
+//   - JSONGenerations (Recraft): flat JSON POST to imgCfg.GenEndpoint;
+//     {model, prompt, response_format:"b64_json", size, n}. Text-to-image
+//     only (image parts are rejected upstream by MaxInputCount==0).
 func dispatchImageHTTP(
 	ctx context.Context,
 	client *http.Client,
@@ -422,6 +453,15 @@ func dispatchImageHTTP(
 		}
 		endpoint := strings.ReplaceAll(cfg.Endpoint, "{model}", model)
 		return doPost(ctx, client, base+endpoint, jsonBody, headers)
+	}
+
+	if imgCfg.InputMode == providers.ImageInputJSONGenerations {
+		body := buildRecraftGenBody(parts, model, o)
+		jsonBody, err := json.Marshal(body)
+		if err != nil {
+			return nil, fmt.Errorf("marshal image request: %w", err)
+		}
+		return doPost(ctx, client, base+imgCfg.GenEndpoint, jsonBody, headers)
 	}
 
 	if imgCfg.InputMode == providers.ImageInputMultipartForm {
@@ -668,6 +708,31 @@ func buildVertexBody(parts []Part, o *imageOptions) map[string]any {
 	}
 }
 
+// buildRecraftGenBody assembles the JSON body for Recraft's text-to-image
+// /v1/images/generations endpoint. Image-size maps to `size`; count maps to
+// `n`. response_format is forced to b64_json because Recraft defaults to URL
+// delivery — forcing it keeps the response shape uniform (data[].b64_json).
+// Vector/SVG output is selected by a vector model id (recraftv3_vector), not
+// a body flag, so the body shape is identical for raster and vector. Style
+// and other Recraft-specific knobs ride extraFields.
+func buildRecraftGenBody(parts []Part, model string, o *imageOptions) map[string]any {
+	body := map[string]any{
+		"model":           model,
+		"prompt":          joinTextParts(parts),
+		"response_format": "b64_json",
+	}
+	if o.imageSize != "" {
+		body["size"] = o.imageSize
+	}
+	if o.count != nil {
+		body["n"] = *o.count
+	}
+	for k, v := range o.extraFields {
+		body[k] = v
+	}
+	return body
+}
+
 func joinTextParts(parts []Part) string {
 	var texts []string
 	for _, part := range parts {
@@ -676,6 +741,15 @@ func joinTextParts(parts []Part) string {
 		}
 	}
 	return strings.Join(texts, "\n")
+}
+
+// looksLikeSVG reports whether the decoded image bytes are an SVG document.
+// SVG is XML text starting with an optional BOM/whitespace, then either an
+// XML prolog (<?xml) or the root <svg element. Used to label vector-model
+// output (Recraft) correctly when the provider does not echo a mime type.
+func looksLikeSVG(data []byte) bool {
+	s := strings.TrimSpace(string(data))
+	return strings.HasPrefix(s, "<?xml") || strings.HasPrefix(s, "<svg")
 }
 
 func extFromMime(mime string) string {
@@ -830,6 +904,13 @@ func parseImageResponse(provider string, body []byte) (ImageResponse, error) {
 		// values). The cost field is reachable via extra-data parsing if
 		// callers need it (future enhancement).
 		return parseImageResponseDataArray(raw, "", ""), nil
+	case providers.Recraft:
+		// Recraft returns the same data[].b64_json shape as OpenAI/xAI (the
+		// SDK forces response_format=b64_json). Recraft's generations
+		// response carries no usage object, so token paths are empty (zero
+		// tokens — honest, no fabricated values). SVG bytes (vector models)
+		// are sniffed to image/svg+xml inside parseImageResponseDataArray.
+		return parseImageResponseDataArray(raw, "", ""), nil
 	case providers.Vertex:
 		return parseVertexImageResponse(raw), nil
 	}
@@ -875,6 +956,14 @@ func parseImageResponseDataArray(raw map[string]any, inputPath, outputPath strin
 				mime = echoed
 			}
 			if decoded, err := base64.StdEncoding.DecodeString(b64); err == nil {
+				// Vector providers (Recraft recraftv3_vector) return SVG bytes
+				// in the same b64_json slot without echoing a mime_type. Sniff
+				// the leading bytes so SVG is labeled image/svg+xml rather than
+				// the image/png default. Raster bytes (PNG/JPEG/WebP) never
+				// start with '<', so the sniff is a no-op for them.
+				if mime == "image/png" && looksLikeSVG(decoded) {
+					mime = "image/svg+xml"
+				}
 				images = append(images, ImageData{MimeType: mime, Bytes: decoded})
 			}
 		}

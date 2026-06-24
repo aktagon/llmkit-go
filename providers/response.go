@@ -53,6 +53,8 @@ func ResponseTextPath(provider string) string {
 		return "choices[0].message.content"
 	case Qwen:
 		return "choices[0].message.content"
+	case Recraft:
+		return ""
 	case Sambanova:
 		return "choices[0].message.content"
 	case Together:
@@ -123,6 +125,8 @@ func UsagePaths(provider string) (inputPath, outputPath string) {
 		return "usage.prompt_tokens", "usage.completion_tokens"
 	case Qwen:
 		return "usage.prompt_tokens", "usage.completion_tokens"
+	case Recraft:
+		return "", ""
 	case Sambanova:
 		return "usage.prompt_tokens", "usage.completion_tokens"
 	case Together:
