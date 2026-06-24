@@ -629,6 +629,27 @@ func TestRequestWire_ImageGenOpenAI(t *testing.T) {
 	assertRequestWireGolden(t, "image-gen-openai", body)
 }
 
+// TestRequestWire_ImageGenRecraft witnesses the Recraft generations JSON body
+// (JSONGenerations shape): {model, prompt, size, n} plus the forced
+// response_format=b64_json (Recraft defaults to URL delivery; the SDK forces
+// b64_json so the response is uniform with the other image providers).
+//
+// Reference-anchored (prompt 043 wave 2): the body shape is taken from the
+// Recraft API reference (POST external.api.recraft.ai/v1/images/generations,
+// {prompt, model, style, size, n, response_format}); NOT live-anchored (no
+// RECRAFT_API_TOKEN on the build machine). recraftv3 is the raster model;
+// recraftv3_vector (same body shape) yields SVG.
+func TestRequestWire_ImageGenRecraft(t *testing.T) {
+	body, _ := captureBody(t, providers.Recraft, func(c *Client) {
+		_, err := c.Image.Model(wireImageGenRecraftModel).ImageSize(wireImageGenRecraftImageSize).Count(wireImageGenRecraftCount).
+			Generate(context.Background(), wireImageGenRecraftPrompt)
+		if err != nil {
+			t.Fatalf("image gen recraft call: %v", err)
+		}
+	})
+	assertRequestWireGolden(t, "image-gen-recraft", body)
+}
+
 // TestRequestWire_ImageEditGoogleFlash witnesses inline-image encoding on the
 // edit pass: the fixed wireImageEditGoogleFlashImageBase64 reference image becomes an inlineData
 // part, ordered before the trailing text part (caller-order preservation).

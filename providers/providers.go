@@ -33,6 +33,7 @@ const (
 	Openrouter ProviderName = "openrouter"
 	Perplexity ProviderName = "perplexity"
 	Qwen       ProviderName = "qwen"
+	Recraft    ProviderName = "recraft"
 	Sambanova  ProviderName = "sambanova"
 	Together   ProviderName = "together"
 	Vertex     ProviderName = "vertex"
@@ -95,6 +96,8 @@ func Parse(slug string) (ProviderName, bool) {
 		return Perplexity, true
 	case "qwen":
 		return Qwen, true
+	case "recraft":
+		return Recraft, true
 	case "sambanova":
 		return Sambanova, true
 	case "together":

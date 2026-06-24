@@ -202,6 +202,13 @@ var providerInfoTable = map[ProviderName]ProviderInfo{
 		DefaultModel: "qwen-plus",
 		BaseURL:      "https://dashscope-intl.aliyuncs.com/compatible-mode",
 	},
+	Recraft: {
+		ID:           Recraft,
+		Slug:         "recraft",
+		EnvVar:       "RECRAFT_API_TOKEN",
+		DefaultModel: "recraftv3",
+		BaseURL:      "https://external.api.recraft.ai",
+	},
 	Sambanova: {
 		ID:           Sambanova,
 		Slug:         "sambanova",
