@@ -184,6 +184,18 @@ type Response struct {
 }
 
 //
+type SpeechResponse struct {
+	//
+	Audio AudioData
+
+	//
+	Usage Usage
+
+	//
+	FinishReason string
+}
+
+//
 type ToolCall struct {
 	//
 	ID string
