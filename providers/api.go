@@ -71,6 +71,7 @@ func APIOptions() []APIOptionDef {
 		{GoFunc: "WithThinkingBudget", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithTopK", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithTopP", SubOptions: []APISubOptionDef{}},
+		{GoFunc: "WithVoice", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithWithCapability", SubOptions: []APISubOptionDef{}},
 	}
 }
@@ -81,6 +82,7 @@ func APIEntryPoints() []APIEntryPointDef {
 		{GoFunc: "Agent", GoParamType: "Provider", Comment: "Constructs a stateful Agent that drives a multi-turn tool-calling loop. Per-language naming: Go NewAgent, TS class Agent, Python class Agent, Rust struct Agent."},
 		{GoFunc: "GenerateImage", GoParamType: "ImageRequest", Comment: "Synchronous text-to-image and image-to-image. Input is ImageRequest{ Model, Prompt, Parts []Part } where Parts is a positionally-ordered sequence of llm:Part (text or image MediaRef). Prompt is a sugar field for the text-only case (XOR with Parts; runtime synthesises []Part{Text(Prompt)} when only Prompt is set). Returns ImageResponse{ Images []ImageData, Text string, Usage }."},
 		{GoFunc: "GenerateMusic", GoParamType: "MusicRequest", Comment: "Synchronous text-to-music. Input is MusicRequest{ Model, Prompt, Parts []Part } where Parts is a positionally-ordered sequence of llm:Part (text prompt or Lyrics). Prompt is a sugar field for the prompt-only case (XOR with Parts; runtime synthesises []Part{Text(Prompt)} when only Prompt is set). Returns MusicResponse{ Audio []AudioData, Text string, Usage }."},
+		{GoFunc: "GenerateSpeech", GoParamType: "SpeechRequest", Comment: "Synchronous text-to-speech. Input is SpeechRequest{ Model, Voice, Text } — Text is the single utterance to speak (single-turn; no Message/Role wrapper, ADR-049 SPK-003), Voice is the request-data selector (ADR-021) validated pre-flight against the provider's availableVoice catalogue. Returns SpeechResponse{ Audio AudioData, Usage }."},
 		{GoFunc: "Prompt", GoParamType: "Request", Comment: "One-shot synchronous request. Returns Response with text + Usage tokens."},
 		{GoFunc: "PromptBatch", GoParamType: "[]Request", Comment: "Blocks until all responses ready. Handles async polling internally."},
 		{GoFunc: "PromptStream", GoParamType: "Request", Comment: "Streaming variant. Calls a per-chunk callback as deltas arrive; returns the accumulated Response on stream close."},
@@ -97,6 +99,7 @@ func APIEntryPoints() []APIEntryPointDef {
 func CacheResponseFields() []APIResponseFieldDef {
 	return []APIResponseFieldDef{
 		{GoFieldName: "Audio", GoFieldType: "[]AudioData", SourcePath: "audioPath"},
+		{GoFieldName: "Audio", GoFieldType: "AudioData", SourcePath: "audioPath"},
 		{GoFieldName: "CacheRead", GoFieldType: "int", SourcePath: "cacheReadTokensPath"},
 		{GoFieldName: "CacheWrite", GoFieldType: "int", SourcePath: "cacheWriteTokensPath"},
 		{GoFieldName: "FinishMessage", GoFieldType: "string", SourcePath: "finishMessagePath"},

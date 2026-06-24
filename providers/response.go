@@ -31,6 +31,8 @@ func ResponseTextPath(provider string) string {
 		return "choices[0].message.content"
 	case Groq:
 		return "choices[0].message.content"
+	case Inworld:
+		return ""
 	case Jan:
 		return "choices[0].message.content"
 	case Llamacpp:
@@ -107,6 +109,8 @@ func UsagePaths(provider string) (inputPath, outputPath string) {
 		return "usage.prompt_tokens", "usage.completion_tokens"
 	case Groq:
 		return "usage.prompt_tokens", "usage.completion_tokens"
+	case Inworld:
+		return "", ""
 	case Jan:
 		return "usage.prompt_tokens", "usage.completion_tokens"
 	case Llamacpp:

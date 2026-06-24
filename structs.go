@@ -183,6 +183,18 @@ type Response struct {
 	Raw json.RawMessage
 }
 
+// SpeechResponse is the universal text-to-speech response container returned by Speech.Generate. Carries the synthesized audio (a single clip), the provider-reported usage, and an optional finish reason — reusing the music pipeline's AudioData container unchanged (ADR-049).
+type SpeechResponse struct {
+	// Audio is the synthesized audio (mime type + raw bytes). One synthesis yields one clip, so this is a single AudioData, not a list (ADR-049 OQ-4).
+	Audio AudioData
+
+	// Usage holds provider-reported usage. Inworld reports characters processed (usage.processedCharactersCount); surfaced minimally through the Usage carrier without inventing a token axis (ADR-049 OQ-3).
+	Usage Usage
+
+	// FinishReason is the provider stop signal, when present. Optional.
+	FinishReason string
+}
+
 // ToolCall is a single tool invocation issued by the model on an assistant turn. Carries the provider-issued id, the tool name, and the JSON-decoded argument object. ADR-020 promotes this from a private per-SDK type into a public generated struct so *Agent history can carry tool turns end to end.
 type ToolCall struct {
 	// ID is the provider-issued call identifier. Round-tripped to ToolResult.tool_use_id on the response turn so the model can correlate the request with its execution outcome.

@@ -34,6 +34,7 @@ type Client struct {
 	Text      *Text
 	Image     *Image
 	Music     *Music
+	Speech    *Speech
 	Video     *Video
 	Agent     *Agent
 	Upload    *Upload
@@ -46,6 +47,7 @@ func newClient(p providers.ProviderName, apiKey string) *Client {
 	c.Text = &Text{client: c}
 	c.Image = &Image{client: c}
 	c.Music = &Music{client: c}
+	c.Speech = &Speech{client: c}
 	c.Video = &Video{client: c}
 	c.Agent = &Agent{client: c}
 	c.Upload = &Upload{client: c}
@@ -73,6 +75,7 @@ func Fireworks(apiKey string) *Client  { return newClient(providers.Fireworks, a
 func Google(apiKey string) *Client     { return newClient(providers.Google, apiKey) }
 func Grok(apiKey string) *Client       { return newClient(providers.Grok, apiKey) }
 func Groq(apiKey string) *Client       { return newClient(providers.Groq, apiKey) }
+func Inworld(apiKey string) *Client    { return newClient(providers.Inworld, apiKey) }
 func Jan(apiKey string) *Client        { return newClient(providers.Jan, apiKey) }
 func Llamacpp(apiKey string) *Client   { return newClient(providers.Llamacpp, apiKey) }
 func Lmstudio(apiKey string) *Client   { return newClient(providers.Lmstudio, apiKey) }
@@ -278,6 +281,20 @@ func (b *Music) Text(s string) *Music {
 	out.parts = append(append([]Part{}, b.parts...), Part{Text: s})
 	return &out
 } // ordered
+
+// === *Speech — SpeechGeneration builder ===
+
+// Speech accumulates configuration for a SpeechGeneration
+// call. Chain methods return new instances (immutable); skipped
+// terminals live in hand-written text.go / image.go.
+type Speech struct {
+	client *Client
+	model  string
+	voice  string
+}
+
+func (b *Speech) Model(name string) *Speech { out := *b; out.model = name; return &out }
+func (b *Speech) Voice(id string) *Speech   { out := *b; out.voice = id; return &out }
 
 // === *Video — VideoGeneration builder ===
 
