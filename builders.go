@@ -83,6 +83,7 @@ func Ollama(apiKey string) *Client     { return newClient(providers.Ollama, apiK
 func Openai(apiKey string) *Client     { return newClient(providers.OpenAI, apiKey) }
 func Openrouter(apiKey string) *Client { return newClient(providers.Openrouter, apiKey) }
 func Perplexity(apiKey string) *Client { return newClient(providers.Perplexity, apiKey) }
+func Pixverse(apiKey string) *Client   { return newClient(providers.Pixverse, apiKey) }
 func Qwen(apiKey string) *Client       { return newClient(providers.Qwen, apiKey) }
 func Recraft(apiKey string) *Client    { return newClient(providers.Recraft, apiKey) }
 func Sambanova(apiKey string) *Client  { return newClient(providers.Sambanova, apiKey) }

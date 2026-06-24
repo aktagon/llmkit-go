@@ -2,7 +2,9 @@ package llmkit
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -216,6 +218,20 @@ func dispatchVideoSubmit(
 		// endpoint rejects the request. Set per-request only.
 		headers = cloneStringMap(headers)
 		headers["X-DashScope-Async"] = "enable"
+	case providers.VideoShapePixVerse:
+		// PixVerse requires all five fields; the generic surface is prompt-only,
+		// so duration/quality/aspect_ratio are sent as reference-anchored defaults
+		// (valid across the recorded models). The per-request Ai-trace-id header
+		// (UUID, unique per request) is PixVerse's anti-cache key.
+		body = map[string]any{
+			"model":        model,
+			"prompt":       joinPromptText(parts),
+			"duration":     5,
+			"quality":      "540p",
+			"aspect_ratio": "16:9",
+		}
+		headers = cloneStringMap(headers)
+		headers["Ai-trace-id"] = newVideoTraceID()
 	case providers.VideoShapeVeo, providers.VideoShapeVertexVeo:
 		// Veo (Gemini API) and Vertex Veo share the submit body: the model is in
 		// the PATH (:predictLongRunning), not the body, so the body has no model
@@ -315,6 +331,13 @@ func (h VideoHandle) Wait(ctx context.Context, opts ...VideoOption) (VideoRespon
 
 	base := videoBaseURL(p, cfg, vgCfg)
 	headers := buildAuthHeaders(p, cfg)
+	// PixVerse requires the per-request Ai-trace-id header on the poll GET too
+	// (not just submit); one trace id per Wait call is sufficient — uniqueness is
+	// an anti-cache measure on the generation, and the poll is a read.
+	if vgCfg.WireShape == providers.VideoShapePixVerse {
+		headers = cloneStringMap(headers)
+		headers["Ai-trace-id"] = newVideoTraceID()
+	}
 
 	client := o.httpClient
 	if client == nil {
@@ -480,8 +503,33 @@ func lookupHandleField(raw map[string]any, path string) string {
 		}
 		cur = m[seg]
 	}
-	s, _ := cur.(string)
-	return s
+	// The leaf is usually a string handle, but some providers return a numeric
+	// job id (PixVerse's Resp.video_id is an integer) — JSON decodes it as
+	// float64, so format it back to its integer string form.
+	switch v := cur.(type) {
+	case string:
+		return v
+	case float64:
+		return strconv.FormatInt(int64(v), 10)
+	default:
+		return ""
+	}
+}
+
+// newVideoTraceID returns a random RFC-4122 v4 UUID string, used for providers
+// that require a unique per-request trace header (PixVerse's Ai-trace-id). It
+// reads 16 crypto-random bytes and sets the version (4) and variant bits.
+func newVideoTraceID() string {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		// crypto/rand failure is effectively impossible; fall back to a
+		// time-derived value so the header is still unique-ish rather than empty.
+		return fmt.Sprintf("%016x-%016x", time.Now().UnixNano(), time.Now().UnixNano())
+	}
+	b[6] = (b[6] & 0x0f) | 0x40 // version 4
+	b[8] = (b[8] & 0x3f) | 0x80 // variant 10
+	h := hex.EncodeToString(b[:])
+	return fmt.Sprintf("%s-%s-%s-%s-%s", h[0:8], h[8:12], h[12:16], h[16:20], h[20:32])
 }
 
 // parseVideoPoll decodes one poll response per wire shape. Returns
@@ -628,6 +676,20 @@ func parseVideoPoll(vgCfg *providers.VideoGenDef, body []byte) (VideoResponse, b
 		default: // InProgress (or any non-terminal status)
 			return VideoResponse{}, false, nil
 		}
+	case providers.VideoShapePixVerse:
+		// PixVerse status poll: the status is an INTEGER code nested under Resp.
+		// 1=success (terminal), 7/8=failed (terminal-error), 5=generating
+		// (pending). The finished video URL sits at Resp.url (url delivery).
+		resp, _ := raw["Resp"].(map[string]any)
+		status, _ := resp["status"].(float64)
+		switch int(status) {
+		case 1:
+			return videoResultFromPixVerse(vgCfg, raw), true, nil
+		case 7, 8:
+			return VideoResponse{}, false, fmt.Errorf("video generation failed (status %d)", int(status))
+		default: // 5 (generating) or any non-terminal status
+			return VideoResponse{}, false, nil
+		}
 	case providers.VideoShapeVidu:
 		// Vidu (Shengshu) task poll: state success terminal-success, failed
 		// terminal-error, created/queueing/processing pending. The finished
@@ -715,6 +777,20 @@ func videoResultFromTogether(vgCfg *providers.VideoGenDef, raw map[string]any) V
 		return VideoResponse{}
 	}
 	url, _ := outputs["video_url"].(string)
+	return VideoResponse{Videos: []VideoData{{MimeType: mime, URL: url}}}
+}
+
+// videoResultFromPixVerse extracts the finished video from a PixVerse poll
+// response. PixVerse uses url delivery: the finished video sits at Resp.url
+// (nested under the Resp envelope), so VideoData.URL carries the temporary
+// PixVerse-hosted URL and Bytes stays empty.
+func videoResultFromPixVerse(vgCfg *providers.VideoGenDef, raw map[string]any) VideoResponse {
+	mime := videoFallbackMime(vgCfg)
+	resp, _ := raw["Resp"].(map[string]any)
+	if resp == nil {
+		return VideoResponse{}
+	}
+	url, _ := resp["url"].(string)
 	return VideoResponse{Videos: []VideoData{{MimeType: mime, URL: url}}}
 }
 
