@@ -262,6 +262,10 @@ func SupportedOptions(provider string) map[OptionKey]string {
 			OptionTemperature:      "temperature",
 			OptionTopP:             "top_p",
 		}
+	case Pixverse:
+		return map[OptionKey]string{
+			OptionMaxTokens: "max_tokens",
+		}
 	case Qwen:
 		return map[OptionKey]string{
 			OptionMaxTokens:     "max_tokens",

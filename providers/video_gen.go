@@ -14,6 +14,7 @@ const (
 	VideoShapeBedrock   = "VideoBedrock"
 	VideoShapeVertexVeo = "VideoVertexVeo"
 	VideoShapeVidu      = "VideoVidu"
+	VideoShapePixVerse  = "VideoPixVerse"
 )
 
 // Video output-delivery modes. Drive whether the runtime downloads
@@ -142,6 +143,46 @@ func VideoGenConfig(provider string) *VideoGenDef {
 					MaxDurationSeconds:   6,
 					OutputMime:           "video/mp4",
 					Resolutions:          []string{"1080p", "768p"},
+					MaxInputImages:       0,
+				},
+			},
+		}
+	case Pixverse:
+		return &VideoGenDef{
+			WireShape:         "VideoPixVerse",
+			OutputDelivery:    "DeliveryURL",
+			VideoBaseURL:      "",
+			GenEndpoint:       "/openapi/v2/video/text/generate",
+			PollEndpoint:      "/openapi/v2/video/result/{id}",
+			FileEndpoint:      "",
+			SubmitHandleField: "Resp.video_id",
+			RequiresOutputURI: false,
+			Models: []VideoModelDef{
+				{
+					ModelID:              "v4.5",
+					Label:                "PixVerse v4.5",
+					SupportsImageToVideo: false,
+					MaxDurationSeconds:   8,
+					OutputMime:           "video/mp4",
+					Resolutions:          []string{},
+					MaxInputImages:       0,
+				},
+				{
+					ModelID:              "v5",
+					Label:                "PixVerse v5",
+					SupportsImageToVideo: false,
+					MaxDurationSeconds:   8,
+					OutputMime:           "video/mp4",
+					Resolutions:          []string{},
+					MaxInputImages:       0,
+				},
+				{
+					ModelID:              "v6",
+					Label:                "PixVerse v6",
+					SupportsImageToVideo: false,
+					MaxDurationSeconds:   15,
+					OutputMime:           "video/mp4",
+					Resolutions:          []string{},
 					MaxInputImages:       0,
 				},
 			},
