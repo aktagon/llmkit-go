@@ -297,6 +297,10 @@ func SupportedOptions(provider string) map[OptionKey]string {
 		return map[OptionKey]string{
 			OptionMaxTokens: "max_tokens",
 		}
+	case Vidu:
+		return map[OptionKey]string{
+			OptionMaxTokens: "max_tokens",
+		}
 	case Vllm:
 		return map[OptionKey]string{
 			OptionFrequencyPenalty: "frequency_penalty",

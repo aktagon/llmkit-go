@@ -734,6 +734,28 @@ func TestRequestWire_VideoZhipu(t *testing.T) {
 	assertRequestWireGolden(t, "video-zhipu", body)
 }
 
+// TestRequestWire_VideoVidu witnesses the Vidu (Shengshu) video-submit body:
+// {model, prompt} POSTed to /ent/v2/text2video — the shared {model, prompt}
+// arm, structurally identical to the Grok/Zhipu/Together submit bodies. The
+// lifecycle divergence (task_id handle, /ent/v2/tasks/{id}/creations poll,
+// state values, creations[0].url) is delivery-side, exercised by the unit
+// tests, not the request-wire suite.
+//
+// WIRE-005 provenance: NOT live-anchored (no VIDU_API_KEY available). The body
+// is the documented Vidu text-to-video submit, raw-source-anchored to the
+// official Vidu SDK (github.com/viduhq): prompt is the only required field
+// beyond model on the prompt-only hot path; optional aspect_ratio/resolution/
+// duration are unset.
+func TestRequestWire_VideoVidu(t *testing.T) {
+	body, _ := captureBody(t, providers.Vidu, func(c *Client) {
+		_, err := c.Video.Model(wireVideoViduModel).Submit(context.Background(), wireVideoViduPrompt)
+		if err != nil {
+			t.Fatalf("video submit vidu call: %v", err)
+		}
+	})
+	assertRequestWireGolden(t, "video-vidu", body)
+}
+
 // TestRequestWire_VideoTogether witnesses the Together video-submit body:
 // {model, prompt} POSTed to /v2/videos — structurally identical to the Grok
 // and Zhipu submit bodies (the shared {model, prompt} arm). The lifecycle

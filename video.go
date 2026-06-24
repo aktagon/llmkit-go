@@ -628,6 +628,26 @@ func parseVideoPoll(vgCfg *providers.VideoGenDef, body []byte) (VideoResponse, b
 		default: // InProgress (or any non-terminal status)
 			return VideoResponse{}, false, nil
 		}
+	case providers.VideoShapeVidu:
+		// Vidu (Shengshu) task poll: state success terminal-success, failed
+		// terminal-error, created/queueing/processing pending. The finished
+		// video URL sits at creations[0].url (url delivery, single-hop).
+		state, _ := raw["state"].(string)
+		switch state {
+		case "success":
+			return videoResultFromVidu(vgCfg, raw), true, nil
+		case "failed":
+			msg, _ := raw["err_code"].(string)
+			if msg == "" {
+				msg, _ = raw["message"].(string)
+			}
+			if msg == "" {
+				msg = "operation failed"
+			}
+			return VideoResponse{}, false, fmt.Errorf("video generation failed: %s", msg)
+		default: // created, queueing, processing (or any non-terminal state)
+			return VideoResponse{}, false, nil
+		}
 	case providers.VideoShapeGrok:
 		status, _ := raw["status"].(string)
 		switch status {
@@ -695,6 +715,24 @@ func videoResultFromTogether(vgCfg *providers.VideoGenDef, raw map[string]any) V
 		return VideoResponse{}
 	}
 	url, _ := outputs["video_url"].(string)
+	return VideoResponse{Videos: []VideoData{{MimeType: mime, URL: url}}}
+}
+
+// videoResultFromVidu extracts the finished video from a Vidu (Shengshu) poll
+// response. Vidu uses url delivery: the finished video sits at
+// creations[0].url, so VideoData.URL carries the temporary Vidu-hosted URL and
+// Bytes stays empty.
+func videoResultFromVidu(vgCfg *providers.VideoGenDef, raw map[string]any) VideoResponse {
+	mime := videoFallbackMime(vgCfg)
+	creations, _ := raw["creations"].([]any)
+	if len(creations) == 0 {
+		return VideoResponse{}
+	}
+	first, _ := creations[0].(map[string]any)
+	if first == nil {
+		return VideoResponse{}
+	}
+	url, _ := first["url"].(string)
 	return VideoResponse{Videos: []VideoData{{MimeType: mime, URL: url}}}
 }
 

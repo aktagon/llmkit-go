@@ -199,6 +199,112 @@ func TestVideoWaitFailedZhipu(t *testing.T) {
 	}
 }
 
+const viduVideoModel = "viduq3-pro"
+
+// viduVideoServer serves the Vidu (Shengshu) submit + poll endpoints. Submit
+// POST /ent/v2/text2video returns the poll handle as the top-level `task_id`
+// with state=created; the poll GET /ent/v2/tasks/{id}/creations returns
+// state=processing for the first pendingPolls calls, then the supplied done
+// body. Vidu auth uses the non-standard scheme word `Token` (Authorization:
+// Token <key>), not Bearer — asserted in-driver.
+func viduVideoServer(t *testing.T, pendingPolls int32, doneBody map[string]any) *httptest.Server {
+	t.Helper()
+	var polls int32
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Authorization"); got != "Token test-token" {
+			t.Errorf("expected Token auth scheme, got %q", got)
+		}
+		switch {
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/ent/v2/text2video"):
+			var body map[string]any
+			json.NewDecoder(r.Body).Decode(&body)
+			if body["model"] != viduVideoModel {
+				t.Errorf("expected model %q, got %v", viduVideoModel, body["model"])
+			}
+			if body["prompt"] == "" {
+				t.Error("expected non-empty prompt in submit body")
+			}
+			json.NewEncoder(w).Encode(map[string]any{"task_id": "vidu-task-1", "state": "created"})
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/ent/v2/tasks/vidu-task-1/creations"):
+			if atomic.AddInt32(&polls, 1) <= pendingPolls {
+				json.NewEncoder(w).Encode(map[string]any{"state": "processing"})
+				return
+			}
+			json.NewEncoder(w).Encode(doneBody)
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			http.Error(w, "unexpected", http.StatusNotFound)
+		}
+	}))
+}
+
+func TestSubmitAndWaitVideoVidu(t *testing.T) {
+	fastVideoPoll(t)
+	done := map[string]any{
+		"state":     "success",
+		"creations": []any{map[string]any{"url": "https://api.vidu.com/creations/abc/v.mp4", "cover_url": "https://api.vidu.com/creations/abc/c.jpg"}},
+	}
+	server := viduVideoServer(t, 2, done)
+	defer server.Close()
+
+	c := New(providers.Vidu, "test-token")
+	c.provider.baseURL = server.URL
+
+	h, err := c.Video.Model(viduVideoModel).Submit(context.Background(), "a drone shot over the alps")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h.ID != "vidu-task-1" {
+		t.Fatalf("expected handle id from top-level task_id (vidu-task-1), got %q", h.ID)
+	}
+
+	resp, err := h.Wait(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Videos) != 1 {
+		t.Fatalf("expected 1 video, got %d", len(resp.Videos))
+	}
+	if got := resp.Videos[0].URL; got != "https://api.vidu.com/creations/abc/v.mp4" {
+		t.Errorf("expected creations[0].url, got %q", got)
+	}
+	if got := resp.Videos[0].MimeType; got != "video/mp4" {
+		t.Errorf("expected video/mp4, got %q", got)
+	}
+	if len(resp.Videos[0].Bytes) != 0 {
+		t.Error("url delivery must not download bytes")
+	}
+}
+
+func TestVideoWaitFailedVidu(t *testing.T) {
+	fastVideoPoll(t)
+	done := map[string]any{"state": "failed", "err_code": "content_moderation"}
+	server := viduVideoServer(t, 0, done)
+	defer server.Close()
+
+	c := New(providers.Vidu, "test-token")
+	c.provider.baseURL = server.URL
+
+	h, err := c.Video.Model(viduVideoModel).Submit(context.Background(), "blocked prompt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = h.Wait(context.Background()); err == nil {
+		t.Fatal("expected error for failed job")
+	}
+}
+
+// TestVideoViduRejectsImagePart asserts the text-to-video-only gate: Vidu's
+// models set supportsImageToVideo false, so an image part is rejected
+// pre-flight (image-to-video / reference2video is the deferred BUG-010 slice).
+func TestVideoViduRejectsImagePart(t *testing.T) {
+	c := New(providers.Vidu, "test-token")
+	_, err := c.Video.Model(viduVideoModel).Image("image/png", []byte{0x89, 0x50}).Submit(context.Background(), "animate this")
+	if err == nil {
+		t.Fatal("expected pre-flight rejection of image part for text-to-video-only model")
+	}
+}
+
 const togetherVideoModel = "minimax/video-01-director"
 
 // togetherVideoServer serves the Together submit + poll endpoints. Submit

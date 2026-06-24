@@ -230,6 +230,13 @@ var providerInfoTable = map[ProviderName]ProviderInfo{
 		DefaultModel: "imagen-3.0-generate-002",
 		BaseURL:      "https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/models",
 	},
+	Vidu: {
+		ID:           Vidu,
+		Slug:         "vidu",
+		EnvVar:       "VIDU_API_KEY",
+		DefaultModel: "viduq3-pro",
+		BaseURL:      "https://api.vidu.com",
+	},
 	Vllm: {
 		ID:           Vllm,
 		Slug:         "vllm",
