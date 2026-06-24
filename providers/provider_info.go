@@ -195,6 +195,13 @@ var providerInfoTable = map[ProviderName]ProviderInfo{
 		DefaultModel: "sonar-pro",
 		BaseURL:      "https://api.perplexity.ai",
 	},
+	Pixverse: {
+		ID:           Pixverse,
+		Slug:         "pixverse",
+		EnvVar:       "PIXVERSE_API_KEY",
+		DefaultModel: "v4.5",
+		BaseURL:      "https://app-api.pixverse.ai",
+	},
 	Qwen: {
 		ID:           Qwen,
 		Slug:         "qwen",
