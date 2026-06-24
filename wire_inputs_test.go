@@ -10,6 +10,11 @@ const (
 	wireAnthropicTextDocumentModel              = "claude-opus-4-8"
 	wireAnthropicTextDocumentPrompt             = "Summarize the attached document in three sentences."
 	wireAnthropicTextDocumentFileId             = "file_011CMZq8h5VnVe8jL3qK7p2R"
+	wireBedrockChatPrompt                       = "Name the capital of Finland in one word, then write END_OF_ANSWER."
+	wireBedrockChatMaxTokens                    = 256
+	wireBedrockChatStopSequences                = "END_OF_ANSWER"
+	wireBedrockChatTemperature                  = 0.7
+	wireBedrockChatTopP                         = 0.9
 	wireCachingPrompt                           = "hi"
 	wireCachingSystem                           = "a long stable system prefix"
 	wireImageEditGoogleFlashModel               = "gemini-3.1-flash-image-preview"
@@ -93,6 +98,10 @@ const (
 	wireStructuredOutputSchema                  = "{\"type\":\"object\",\"properties\":{\"color\":{\"type\":\"string\"}},\"additionalProperties\":false}"
 	wireStructuredOutputNestedPrompt            = "Name a coastal city in Finland where a harbor pilot might reside. Reply as structured data."
 	wireStructuredOutputNestedSchema            = "{\"type\":\"object\",\"properties\":{\"residence\":{\"type\":\"object\",\"properties\":{\"addresses\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"additionalProperties\":false}}},\"additionalProperties\":false}},\"additionalProperties\":false}"
+	wireToolPrompt                              = "What is the weather in Helsinki right now?"
+	wireToolToolName                            = "get_weather"
+	wireToolToolDescription                     = "Get the current weather for a city."
+	wireToolToolSchema                          = "{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"additionalProperties\":false}"
 	wireVideoBedrockModel                       = "amazon.nova-reel-v1:0"
 	wireVideoBedrockPrompt                      = "A drone shot sweeping over snow-capped alpine peaks at sunrise"
 	wireVideoGoogleModel                        = "veo-3.1-generate-preview"
