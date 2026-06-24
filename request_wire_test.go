@@ -468,6 +468,90 @@ func TestRequestWire_OpenAITextDocument(t *testing.T) {
 	assertRequestWireGolden(t, "openai-text-document", body)
 }
 
+// === TASK-002: tool-definition fixtures across the four chat wire families ===
+//
+// The tool-def selectors (selectToolDefTransform et al.) had NO cross-SDK
+// request-wire golden — only per-SDK unit tests. These pin each family's
+// tool-definition wire block byte-identically across all four SDKs, so the
+// ADR-047 chatWireShape migration (which replaces the isBedrock /
+// SystemPlacement / ArgsFormat heuristics with a total switch) is provably
+// behavior-preserving on the tool path too. NOT live-anchored — parity held by
+// the cross-SDK comparator + mock body, like the keyless providers.
+
+// wireToolDef builds the single canonical tool from the generated wire-input
+// consts (ontology/wire-fixtures.ttl single source). The Run stub is never
+// invoked: the mock returns a plain text response, so the agent loop makes one
+// request (carrying the tool defs) and terminates.
+func wireToolDef(t *testing.T) Tool {
+	t.Helper()
+	var schema map[string]any
+	if err := json.Unmarshal([]byte(wireToolToolSchema), &schema); err != nil {
+		t.Fatalf("parse tool schema: %v", err)
+	}
+	return Tool{
+		Name:        wireToolToolName,
+		Description: wireToolToolDescription,
+		Schema:      schema,
+		Run:         func(map[string]any) (string, error) { return "", nil },
+	}
+}
+
+func TestRequestWire_ToolDefOpenAI(t *testing.T) {
+	body, _ := captureBody(t, providers.OpenAI, func(c *Client) {
+		if _, err := c.Agent.AddTool(wireToolDef(t)).Prompt(context.Background(), wireToolPrompt); err != nil {
+			t.Fatalf("openai tool-def call: %v", err)
+		}
+	})
+	assertRequestWireGolden(t, "tooldef-openai", body)
+}
+
+func TestRequestWire_ToolDefAnthropic(t *testing.T) {
+	body, _ := captureBody(t, providers.Anthropic, func(c *Client) {
+		if _, err := c.Agent.AddTool(wireToolDef(t)).Prompt(context.Background(), wireToolPrompt); err != nil {
+			t.Fatalf("anthropic tool-def call: %v", err)
+		}
+	})
+	assertRequestWireGolden(t, "tooldef-anthropic", body)
+}
+
+func TestRequestWire_ToolDefGoogle(t *testing.T) {
+	body, _ := captureBody(t, providers.Google, func(c *Client) {
+		if _, err := c.Agent.AddTool(wireToolDef(t)).Prompt(context.Background(), wireToolPrompt); err != nil {
+			t.Fatalf("google tool-def call: %v", err)
+		}
+	})
+	assertRequestWireGolden(t, "tooldef-google", body)
+}
+
+func TestRequestWire_ToolDefBedrock(t *testing.T) {
+	body, _ := captureBody(t, providers.Bedrock, func(c *Client) {
+		if _, err := c.Agent.AddTool(wireToolDef(t)).Prompt(context.Background(), wireToolPrompt); err != nil {
+			t.Fatalf("bedrock tool-def call: %v", err)
+		}
+	})
+	assertRequestWireGolden(t, "tooldef-bedrock", body)
+}
+
+// TestRequestWire_BedrockChat pins the Bedrock Converse message body — the
+// ChatBedrock message-transform arm that had no chat golden before TASK-002
+// (only video-bedrock existed). It also witnesses Bedrock's full chat option
+// surface (Temperature/TopP/MaxTokens/StopSequences -> inferenceConfig), which
+// had no chat fixture to exercise it.
+func TestRequestWire_BedrockChat(t *testing.T) {
+	body, _ := captureBody(t, providers.Bedrock, func(c *Client) {
+		_, err := c.Text.
+			MaxTokens(wireBedrockChatMaxTokens).
+			Temperature(wireBedrockChatTemperature).
+			TopP(wireBedrockChatTopP).
+			StopSequences(wireBedrockChatStopSequences).
+			Prompt(context.Background(), wireBedrockChatPrompt)
+		if err != nil {
+			t.Fatalf("bedrock chat call: %v", err)
+		}
+	})
+	assertRequestWireGolden(t, "bedrock-chat", body)
+}
+
 // TestRequestWire_WorkersAI witnesses Cloudflare Workers AI's OpenAI-compatible
 // chat body (prompt 043). Same OpenAI transform as Cerebras/Grok — no
 // provider-specific code — so the bytes are the standard chat-completions shape
