@@ -94,6 +94,9 @@ const (
 	wireOptionsOpenaiOSeriesMaxTokens           = 1024
 	wireOptionsOpenaiOSeriesReasoningEffort     = "medium"
 	wireOptionsOpenaiOSeriesSeed                = 7
+	wireSpeechInworldModel                      = "inworld-tts-2"
+	wireSpeechInworldPrompt                     = "Hello from llmkit."
+	wireSpeechInworldVoice                      = "Dennis"
 	wireStructuredOutputPrompt                  = "What color is a clear daytime sky?"
 	wireStructuredOutputSchema                  = "{\"type\":\"object\",\"properties\":{\"color\":{\"type\":\"string\"}},\"additionalProperties\":false}"
 	wireStructuredOutputNestedPrompt            = "Name a coastal city in Finland where a harbor pilot might reside. Reply as structured data."
