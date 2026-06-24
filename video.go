@@ -2,7 +2,9 @@ package llmkit
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -216,6 +218,20 @@ func dispatchVideoSubmit(
 		//
 		headers = cloneStringMap(headers)
 		headers["X-DashScope-Async"] = "enable"
+	case providers.VideoShapePixVerse:
+		//
+		//
+		//
+		//
+		body = map[string]any{
+			"model":        model,
+			"prompt":       joinPromptText(parts),
+			"duration":     5,
+			"quality":      "540p",
+			"aspect_ratio": "16:9",
+		}
+		headers = cloneStringMap(headers)
+		headers["Ai-trace-id"] = newVideoTraceID()
 	case providers.VideoShapeVeo, providers.VideoShapeVertexVeo:
 		//
 		//
@@ -315,6 +331,13 @@ func (h VideoHandle) Wait(ctx context.Context, opts ...VideoOption) (VideoRespon
 
 	base := videoBaseURL(p, cfg, vgCfg)
 	headers := buildAuthHeaders(p, cfg)
+	//
+	//
+	//
+	if vgCfg.WireShape == providers.VideoShapePixVerse {
+		headers = cloneStringMap(headers)
+		headers["Ai-trace-id"] = newVideoTraceID()
+	}
 
 	client := o.httpClient
 	if client == nil {
@@ -480,8 +503,33 @@ func lookupHandleField(raw map[string]any, path string) string {
 		}
 		cur = m[seg]
 	}
-	s, _ := cur.(string)
-	return s
+	//
+	//
+	//
+	switch v := cur.(type) {
+	case string:
+		return v
+	case float64:
+		return strconv.FormatInt(int64(v), 10)
+	default:
+		return ""
+	}
+}
+
+//
+//
+//
+func newVideoTraceID() string {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		//
+		//
+		return fmt.Sprintf("%016x-%016x", time.Now().UnixNano(), time.Now().UnixNano())
+	}
+	b[6] = (b[6] & 0x0f) | 0x40 // version 4
+	b[8] = (b[8] & 0x3f) | 0x80 // variant 10
+	h := hex.EncodeToString(b[:])
+	return fmt.Sprintf("%s-%s-%s-%s-%s", h[0:8], h[8:12], h[12:16], h[16:20], h[20:32])
 }
 
 //
@@ -628,6 +676,20 @@ func parseVideoPoll(vgCfg *providers.VideoGenDef, body []byte) (VideoResponse, b
 		default: // InProgress (or any non-terminal status)
 			return VideoResponse{}, false, nil
 		}
+	case providers.VideoShapePixVerse:
+		//
+		//
+		//
+		resp, _ := raw["Resp"].(map[string]any)
+		status, _ := resp["status"].(float64)
+		switch int(status) {
+		case 1:
+			return videoResultFromPixVerse(vgCfg, raw), true, nil
+		case 7, 8:
+			return VideoResponse{}, false, fmt.Errorf("video generation failed (status %d)", int(status))
+		default: // 5 (generating) or any non-terminal status
+			return VideoResponse{}, false, nil
+		}
 	case providers.VideoShapeVidu:
 		//
 		//
@@ -715,6 +777,20 @@ func videoResultFromTogether(vgCfg *providers.VideoGenDef, raw map[string]any) V
 		return VideoResponse{}
 	}
 	url, _ := outputs["video_url"].(string)
+	return VideoResponse{Videos: []VideoData{{MimeType: mime, URL: url}}}
+}
+
+//
+//
+//
+//
+func videoResultFromPixVerse(vgCfg *providers.VideoGenDef, raw map[string]any) VideoResponse {
+	mime := videoFallbackMime(vgCfg)
+	resp, _ := raw["Resp"].(map[string]any)
+	if resp == nil {
+		return VideoResponse{}
+	}
+	url, _ := resp["url"].(string)
 	return VideoResponse{Videos: []VideoData{{MimeType: mime, URL: url}}}
 }
 
