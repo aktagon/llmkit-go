@@ -271,6 +271,10 @@ func SupportedOptions(provider string) map[OptionKey]string {
 			OptionTopK:          "top_k",
 			OptionTopP:          "top_p",
 		}
+	case Recraft:
+		return map[OptionKey]string{
+			OptionMaxTokens: "max_tokens",
+		}
 	case Sambanova:
 		return map[OptionKey]string{
 			OptionMaxTokens:     "max_tokens",

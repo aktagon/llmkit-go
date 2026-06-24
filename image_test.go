@@ -699,6 +699,138 @@ func TestGenerateImageGrokGenerationsForcesB64Json(t *testing.T) {
 	}
 }
 
+// fakeSVG is a minimal SVG document used to exercise the vector-output mime
+// sniff (Recraft recraftv3_vector returns SVG bytes in the b64_json slot
+// without echoing a mime type).
+var fakeSVG = []byte(`<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"></svg>`)
+
+const (
+	recraftV3       = "recraftv3"
+	recraftV3Vector = "recraftv3_vector"
+)
+
+func TestGenerateImageRecraftGenerationsHappyPath(t *testing.T) {
+	encoded := base64.StdEncoding.EncodeToString(fakePNG)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/images/generations" {
+			t.Errorf("expected /v1/images/generations, got %s", r.URL.Path)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer test-key" {
+			t.Errorf("missing/incorrect bearer auth: %q", got)
+		}
+		body, _ := io.ReadAll(r.Body)
+		var req map[string]any
+		if err := json.Unmarshal(body, &req); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		if req["model"] != recraftV3 {
+			t.Errorf("expected model %s, got %v", recraftV3, req["model"])
+		}
+		if req["prompt"] != "A red circle" {
+			t.Errorf("expected prompt 'A red circle', got %v", req["prompt"])
+		}
+		// Recraft defaults to URL delivery — must be forced to b64_json so the
+		// runtime can decode the bytes uniformly.
+		if req["response_format"] != "b64_json" {
+			t.Errorf("expected response_format=b64_json (forced), got %v", req["response_format"])
+		}
+		if req["size"] != "1024x1024" {
+			t.Errorf("expected size 1024x1024, got %v", req["size"])
+		}
+		// Text-to-image only: no image/images fields on the wire.
+		if _, ok := req["image"]; ok {
+			t.Errorf("image field must not be set on Recraft generations path")
+		}
+		if _, ok := req["images"]; ok {
+			t.Errorf("images field must not be set on Recraft generations path")
+		}
+		json.NewEncoder(w).Encode(map[string]any{
+			"data": []map[string]any{{"b64_json": encoded}},
+		})
+	}))
+	defer server.Close()
+
+	c := New(providers.Recraft, "test-key")
+	c.provider.baseURL = server.URL
+	resp, err := c.Image.Model(recraftV3).ImageSize("1024x1024").Generate(context.Background(), "A red circle")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Images) != 1 {
+		t.Fatalf("expected 1 image, got %d", len(resp.Images))
+	}
+	if !bytes.Equal(resp.Images[0].Bytes, fakePNG) {
+		t.Errorf("image bytes did not round-trip through base64")
+	}
+	if resp.Images[0].MimeType != "image/png" {
+		t.Errorf("raster output should default to image/png, got %q", resp.Images[0].MimeType)
+	}
+	// Recraft generations returns no usage object; tokens stay zero (no
+	// fabricated values).
+	if resp.Usage.Input != 0 || resp.Usage.Output != 0 {
+		t.Errorf("Recraft has no token usage; expected 0/0, got %d/%d", resp.Usage.Input, resp.Usage.Output)
+	}
+}
+
+func TestGenerateImageRecraftVectorSniffsSVG(t *testing.T) {
+	encoded := base64.StdEncoding.EncodeToString(fakeSVG)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var req map[string]any
+		json.Unmarshal(body, &req)
+		if req["model"] != recraftV3Vector {
+			t.Errorf("expected model %s, got %v", recraftV3Vector, req["model"])
+		}
+		// Vector output: SVG bytes in the same b64_json slot, no mime echoed.
+		json.NewEncoder(w).Encode(map[string]any{
+			"data": []map[string]any{{"b64_json": encoded}},
+		})
+	}))
+	defer server.Close()
+
+	c := New(providers.Recraft, "test-key")
+	c.provider.baseURL = server.URL
+	resp, err := c.Image.Model(recraftV3Vector).Generate(context.Background(), "A sailboat logo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Images) != 1 {
+		t.Fatalf("expected 1 image, got %d", len(resp.Images))
+	}
+	if !bytes.Equal(resp.Images[0].Bytes, fakeSVG) {
+		t.Errorf("SVG bytes did not round-trip through base64")
+	}
+	if resp.Images[0].MimeType != "image/svg+xml" {
+		t.Errorf("vector output should be sniffed to image/svg+xml, got %q", resp.Images[0].MimeType)
+	}
+}
+
+func TestGenerateImageRecraftRejectsImageParts(t *testing.T) {
+	c := New(providers.Recraft, "test-key")
+	_, err := c.Image.Model(recraftV3).Image("image/png", fakePNG).Generate(context.Background(), "edit this")
+	var verr *ValidationError
+	if !errors.As(err, &verr) {
+		t.Fatalf("expected ValidationError for image parts on a text-to-image-only provider, got %v", err)
+	}
+	if verr.Field != "parts" {
+		t.Errorf("expected field 'parts', got %q", verr.Field)
+	}
+}
+
+func TestGenerateImageRecraftRejectsAspectRatio(t *testing.T) {
+	c := New(providers.Recraft, "test-key")
+	_, err := c.Image.Model(recraftV3).AspectRatio("16:9").Generate(context.Background(), "A red circle")
+	var verr *ValidationError
+	if !errors.As(err, &verr) {
+		t.Fatalf("expected ValidationError for aspect_ratio on Recraft, got %v", err)
+	}
+	if verr.Field != "aspect_ratio" {
+		t.Errorf("expected field 'aspect_ratio', got %q", verr.Field)
+	}
+}
+
 func TestGenerateImageGrokAspectRatioAndResolution(t *testing.T) {
 	encoded := base64.StdEncoding.EncodeToString(fakePNG)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -31,6 +31,10 @@ const (
 	wireImageGenOpenaiImageSize                 = "1024x1024"
 	wireImageGenOpenaiOutputFormat              = "png"
 	wireImageGenOpenaiQuality                   = "low"
+	wireImageGenRecraftModel                    = "recraftv3"
+	wireImageGenRecraftPrompt                   = "A minimalist line drawing of a sailboat"
+	wireImageGenRecraftCount                    = 1
+	wireImageGenRecraftImageSize                = "1024x1024"
 	wireOpenaiTextDocumentModel                 = "gpt-4o"
 	wireOpenaiTextDocumentPrompt                = "Summarize the attached document in three sentences."
 	wireOpenaiTextDocumentFileId                = "file-9aXr2bQ7m1Tn"

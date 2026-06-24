@@ -169,6 +169,48 @@ func TestIntegrationImageOpenAIGptImage2(t *testing.T) {
 	}
 }
 
+func TestIntegrationImageRecraftRecraftv3(t *testing.T) {
+	key := os.Getenv("RECRAFT_API_TOKEN")
+	if key == "" {
+		t.Skip("RECRAFT_API_TOKEN not set")
+	}
+	c := llmkit.New(providers.Recraft, key)
+	resp, err := c.Image.Model("recraftv3").Generate(context.Background(), "A simple red circle on a white background.")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Images) == 0 {
+		t.Fatal("no images returned")
+	}
+	if len(resp.Images[0].Bytes) == 0 {
+		t.Error("first image has zero bytes")
+	}
+	if resp.Tokens.Output == 0 {
+		t.Error("no output tokens reported (image-output tokens should land in candidatesTokenCount)")
+	}
+}
+
+func TestIntegrationImageRecraftRecraftv3Vector(t *testing.T) {
+	key := os.Getenv("RECRAFT_API_TOKEN")
+	if key == "" {
+		t.Skip("RECRAFT_API_TOKEN not set")
+	}
+	c := llmkit.New(providers.Recraft, key)
+	resp, err := c.Image.Model("recraftv3_vector").Generate(context.Background(), "A simple red circle on a white background.")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Images) == 0 {
+		t.Fatal("no images returned")
+	}
+	if len(resp.Images[0].Bytes) == 0 {
+		t.Error("first image has zero bytes")
+	}
+	if resp.Tokens.Output == 0 {
+		t.Error("no output tokens reported (image-output tokens should land in candidatesTokenCount)")
+	}
+}
+
 func TestIntegrationImageVertexImagen30FastGenerate001(t *testing.T) {
 	key := os.Getenv("VERTEX_BEARER_TOKEN")
 	if key == "" {

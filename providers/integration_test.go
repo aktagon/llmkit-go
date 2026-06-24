@@ -853,6 +853,24 @@ func TestIntegrationQwenStream(t *testing.T) {
 	}
 }
 
+func TestIntegrationRecraft(t *testing.T) {
+	key := os.Getenv("RECRAFT_API_TOKEN")
+	if key == "" {
+		t.Skip("RECRAFT_API_TOKEN not set")
+	}
+	c := llmkit.New(providers.Recraft, key)
+	resp, err := c.Text.System("Reply with only the word pong").Prompt(context.Background(), "ping")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Text == "" {
+		t.Error("empty response text")
+	}
+	if resp.Tokens.Input == 0 {
+		t.Error("no input tokens reported")
+	}
+}
+
 func TestIntegrationSambanova(t *testing.T) {
 	key := os.Getenv("SAMBANOVA_API_KEY")
 	if key == "" {
