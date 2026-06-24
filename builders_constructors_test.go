@@ -26,6 +26,7 @@ func TestEveryProviderFactory_Constructs(t *testing.T) {
 		{"google", Google},
 		{"grok", Grok},
 		{"groq", Groq},
+		{"inworld", Inworld},
 		{"jan", Jan},
 		{"llamacpp", Llamacpp},
 		{"lmstudio", Lmstudio},

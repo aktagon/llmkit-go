@@ -175,6 +175,10 @@ func SupportedOptions(provider string) map[OptionKey]string {
 			OptionTemperature:      "temperature",
 			OptionTopP:             "top_p",
 		}
+	case Inworld:
+		return map[OptionKey]string{
+			OptionMaxTokens: "max_tokens",
+		}
 	case Jan:
 		return map[OptionKey]string{
 			OptionMaxTokens:     "max_tokens",

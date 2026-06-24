@@ -22,6 +22,7 @@ const (
 	Google     ProviderName = "google"
 	Grok       ProviderName = "grok"
 	Groq       ProviderName = "groq"
+	Inworld    ProviderName = "inworld"
 	Jan        ProviderName = "jan"
 	Llamacpp   ProviderName = "llamacpp"
 	Lmstudio   ProviderName = "lmstudio"
@@ -76,6 +77,8 @@ func Parse(slug string) (ProviderName, bool) {
 		return Grok, true
 	case "groq":
 		return Groq, true
+	case "inworld":
+		return Inworld, true
 	case "jan":
 		return Jan, true
 	case "llamacpp":

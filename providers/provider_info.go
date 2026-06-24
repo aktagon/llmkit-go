@@ -125,6 +125,13 @@ var providerInfoTable = map[ProviderName]ProviderInfo{
 		DefaultModel: "llama-3.3-70b-versatile",
 		BaseURL:      "https://api.groq.com/openai",
 	},
+	Inworld: {
+		ID:           Inworld,
+		Slug:         "inworld",
+		EnvVar:       "INWORLD_API_KEY",
+		DefaultModel: "inworld-tts-2",
+		BaseURL:      "https://api.inworld.ai",
+	},
 	Jan: {
 		ID:           Jan,
 		Slug:         "jan",

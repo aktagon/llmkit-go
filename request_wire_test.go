@@ -108,6 +108,7 @@ func captureBody(t *testing.T, provider providers.ProviderName, call func(c *Cli
 			}}}},
 			"content":       []map[string]any{{"type": "text", "text": "done"}},
 			"data":          []map[string]any{{"b64_json": wireImageEditGoogleFlashImageBase64}},
+			"audioContent":  wireImageEditGoogleFlashImageBase64, // SpeechInworld: base64 synthesized audio
 			"usage":         map[string]any{"input_tokens": 2000, "output_tokens": 5},
 			"usageMetadata": map[string]any{"promptTokenCount": 5, "candidatesTokenCount": 3},
 		})
@@ -839,6 +840,18 @@ func TestRequestWire_VideoVidu(t *testing.T) {
 		}
 	})
 	assertRequestWireGolden(t, "video-vidu", body)
+}
+
+// TestRequestWire_SpeechInworld witnesses the Inworld text-to-speech body:
+// {text, voiceId, modelId, audioConfig, deliveryMode} (ADR-049 SPK-007).
+func TestRequestWire_SpeechInworld(t *testing.T) {
+	body, _ := captureBody(t, providers.Inworld, func(c *Client) {
+		_, err := c.Speech.Model(wireSpeechInworldModel).Voice(wireSpeechInworldVoice).Generate(context.Background(), wireSpeechInworldPrompt)
+		if err != nil {
+			t.Fatalf("speech generate inworld call: %v", err)
+		}
+	})
+	assertRequestWireGolden(t, "speech-inworld", body)
 }
 
 // TestRequestWire_VideoPixVerse witnesses the PixVerse video-submit body:
