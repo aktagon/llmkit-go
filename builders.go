@@ -88,6 +88,7 @@ func Recraft(apiKey string) *Client    { return newClient(providers.Recraft, api
 func Sambanova(apiKey string) *Client  { return newClient(providers.Sambanova, apiKey) }
 func Together(apiKey string) *Client   { return newClient(providers.Together, apiKey) }
 func Vertex(apiKey string) *Client     { return newClient(providers.Vertex, apiKey) }
+func Vidu(apiKey string) *Client       { return newClient(providers.Vidu, apiKey) }
 func Vllm(apiKey string) *Client       { return newClient(providers.Vllm, apiKey) }
 func Workersai(apiKey string) *Client  { return newClient(providers.Workersai, apiKey) }
 func Yi(apiKey string) *Client         { return newClient(providers.Yi, apiKey) }
