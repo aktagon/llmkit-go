@@ -973,6 +973,24 @@ func TestIntegrationVertex(t *testing.T) {
 	}
 }
 
+func TestIntegrationVidu(t *testing.T) {
+	key := os.Getenv("VIDU_API_KEY")
+	if key == "" {
+		t.Skip("VIDU_API_KEY not set")
+	}
+	c := llmkit.New(providers.Vidu, key)
+	resp, err := c.Text.System("Reply with only the word pong").Prompt(context.Background(), "ping")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Text == "" {
+		t.Error("empty response text")
+	}
+	if resp.Tokens.Input == 0 {
+		t.Error("no input tokens reported")
+	}
+}
+
 func TestIntegrationWorkersai(t *testing.T) {
 	key := os.Getenv("CLOUDFLARE_API_TOKEN")
 	if key == "" {

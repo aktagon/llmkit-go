@@ -111,6 +111,8 @@ const (
 	wireVideoTogetherPrompt                     = "A drone shot sweeping over snow-capped alpine peaks at sunrise"
 	wireVideoVertexModel                        = "veo-3.1-generate-preview"
 	wireVideoVertexPrompt                       = "A drone shot sweeping over snow-capped alpine peaks at sunrise"
+	wireVideoViduModel                          = "viduq3-pro"
+	wireVideoViduPrompt                         = "A drone shot sweeping over snow-capped alpine peaks at sunrise"
 	wireVideoZhipuModel                         = "cogvideox-3"
 	wireVideoZhipuPrompt                        = "A drone shot sweeping over snow-capped alpine peaks at sunrise"
 	wireWorkersaiModel                          = "@cf/meta/llama-3.1-8b-instruct"
