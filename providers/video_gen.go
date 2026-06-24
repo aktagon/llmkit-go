@@ -13,6 +13,7 @@ const (
 	VideoShapeVeo       = "VideoVeo"
 	VideoShapeBedrock   = "VideoBedrock"
 	VideoShapeVertexVeo = "VideoVertexVeo"
+	VideoShapeVidu      = "VideoVidu"
 )
 
 // Video output-delivery modes. Drive whether the runtime downloads
@@ -207,6 +208,46 @@ func VideoGenConfig(provider string) *VideoGenDef {
 					MaxDurationSeconds:   8,
 					OutputMime:           "video/mp4",
 					Resolutions:          []string{"1080p", "720p"},
+					MaxInputImages:       0,
+				},
+			},
+		}
+	case Vidu:
+		return &VideoGenDef{
+			WireShape:         "VideoVidu",
+			OutputDelivery:    "DeliveryURL",
+			VideoBaseURL:      "",
+			GenEndpoint:       "/ent/v2/text2video",
+			PollEndpoint:      "/ent/v2/tasks/{id}/creations",
+			FileEndpoint:      "",
+			SubmitHandleField: "task_id",
+			RequiresOutputURI: false,
+			Models: []VideoModelDef{
+				{
+					ModelID:              "viduq1",
+					Label:                "Vidu Q1",
+					SupportsImageToVideo: false,
+					MaxDurationSeconds:   16,
+					OutputMime:           "video/mp4",
+					Resolutions:          []string{},
+					MaxInputImages:       0,
+				},
+				{
+					ModelID:              "viduq2",
+					Label:                "Vidu Q2",
+					SupportsImageToVideo: false,
+					MaxDurationSeconds:   16,
+					OutputMime:           "video/mp4",
+					Resolutions:          []string{},
+					MaxInputImages:       0,
+				},
+				{
+					ModelID:              "viduq3-pro",
+					Label:                "Vidu Q3 Pro",
+					SupportsImageToVideo: false,
+					MaxDurationSeconds:   16,
+					OutputMime:           "video/mp4",
+					Resolutions:          []string{},
 					MaxInputImages:       0,
 				},
 			},

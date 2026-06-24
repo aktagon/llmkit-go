@@ -37,6 +37,7 @@ const (
 	Sambanova  ProviderName = "sambanova"
 	Together   ProviderName = "together"
 	Vertex     ProviderName = "vertex"
+	Vidu       ProviderName = "vidu"
 	Vllm       ProviderName = "vllm"
 	Workersai  ProviderName = "workersai"
 	Yi         ProviderName = "yi"
@@ -104,6 +105,8 @@ func Parse(slug string) (ProviderName, bool) {
 		return Together, true
 	case "vertex":
 		return Vertex, true
+	case "vidu":
+		return Vidu, true
 	case "vllm":
 		return Vllm, true
 	case "workersai":
