@@ -811,6 +811,24 @@ func TestIntegrationPerplexityStream(t *testing.T) {
 	}
 }
 
+func TestIntegrationPixverse(t *testing.T) {
+	key := os.Getenv("PIXVERSE_API_KEY")
+	if key == "" {
+		t.Skip("PIXVERSE_API_KEY not set")
+	}
+	c := llmkit.New(providers.Pixverse, key)
+	resp, err := c.Text.System("Reply with only the word pong").Prompt(context.Background(), "ping")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Text == "" {
+		t.Error("empty response text")
+	}
+	if resp.Tokens.Input == 0 {
+		t.Error("no input tokens reported")
+	}
+}
+
 func TestIntegrationQwen(t *testing.T) {
 	key := os.Getenv("DASHSCOPE_API_KEY")
 	if key == "" {

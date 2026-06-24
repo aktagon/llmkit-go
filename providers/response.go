@@ -51,6 +51,8 @@ func ResponseTextPath(provider string) string {
 		return "choices[0].message.content"
 	case Perplexity:
 		return "choices[0].message.content"
+	case Pixverse:
+		return ""
 	case Qwen:
 		return "choices[0].message.content"
 	case Recraft:
@@ -125,6 +127,8 @@ func UsagePaths(provider string) (inputPath, outputPath string) {
 		return "usage.prompt_tokens", "usage.completion_tokens"
 	case Perplexity:
 		return "usage.prompt_tokens", "usage.completion_tokens"
+	case Pixverse:
+		return "", ""
 	case Qwen:
 		return "usage.prompt_tokens", "usage.completion_tokens"
 	case Recraft:
