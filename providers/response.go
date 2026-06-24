@@ -61,6 +61,8 @@ func ResponseTextPath(provider string) string {
 		return "choices[0].message.content"
 	case Vertex:
 		return ""
+	case Vidu:
+		return ""
 	case Vllm:
 		return "choices[0].message.content"
 	case Workersai:
@@ -132,6 +134,8 @@ func UsagePaths(provider string) (inputPath, outputPath string) {
 	case Together:
 		return "usage.prompt_tokens", "usage.completion_tokens"
 	case Vertex:
+		return "", ""
+	case Vidu:
 		return "", ""
 	case Vllm:
 		return "usage.prompt_tokens", "usage.completion_tokens"
