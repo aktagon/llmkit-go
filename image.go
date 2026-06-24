@@ -318,6 +318,34 @@ func generateImage(ctx context.Context, p Provider, req ImageRequest, opts ...Im
 			return ImageResponse{}, &ValidationError{Field: "safety_settings", Message: "not supported by " + p.Name + "; use SafetyFilter for Vertex Imagen"}
 		}
 		//
+	case providers.ImageInputJSONGenerations: // Recraft
+		//
+		//
+		//
+		//
+		//
+		//
+		if o.aspectRatio != "" {
+			return ImageResponse{}, &ValidationError{Field: "aspect_ratio", Message: "not supported by " + p.Name + "; use ImageSize (Recraft sizes by WxH)"}
+		}
+		if o.quality != "" {
+			return ImageResponse{}, &ValidationError{Field: "quality", Message: "not supported by " + p.Name}
+		}
+		if o.outputFormat != "" {
+			return ImageResponse{}, &ValidationError{Field: "output_format", Message: "not supported by " + p.Name}
+		}
+		if o.background != "" {
+			return ImageResponse{}, &ValidationError{Field: "background", Message: "not supported by " + p.Name}
+		}
+		if o.mask != nil {
+			return ImageResponse{}, &ValidationError{Field: "mask", Message: "not supported by " + p.Name}
+		}
+		if o.safetyFilter != "" {
+			return ImageResponse{}, &ValidationError{Field: "safety_filter", Message: "not supported by " + p.Name}
+		}
+		if len(o.safetySettings) > 0 {
+			return ImageResponse{}, &ValidationError{Field: "safety_settings", Message: "not supported by " + p.Name}
+		}
 	}
 
 	baseEvent := providers.Event{
@@ -360,6 +388,9 @@ func generateImage(ctx context.Context, p Provider, req ImageRequest, opts ...Im
 	return resp, parseErr
 }
 
+//
+//
+//
 //
 //
 //
@@ -422,6 +453,15 @@ func dispatchImageHTTP(
 		}
 		endpoint := strings.ReplaceAll(cfg.Endpoint, "{model}", model)
 		return doPost(ctx, client, base+endpoint, jsonBody, headers)
+	}
+
+	if imgCfg.InputMode == providers.ImageInputJSONGenerations {
+		body := buildRecraftGenBody(parts, model, o)
+		jsonBody, err := json.Marshal(body)
+		if err != nil {
+			return nil, fmt.Errorf("marshal image request: %w", err)
+		}
+		return doPost(ctx, client, base+imgCfg.GenEndpoint, jsonBody, headers)
 	}
 
 	if imgCfg.InputMode == providers.ImageInputMultipartForm {
@@ -668,6 +708,31 @@ func buildVertexBody(parts []Part, o *imageOptions) map[string]any {
 	}
 }
 
+//
+//
+//
+//
+//
+//
+//
+func buildRecraftGenBody(parts []Part, model string, o *imageOptions) map[string]any {
+	body := map[string]any{
+		"model":           model,
+		"prompt":          joinTextParts(parts),
+		"response_format": "b64_json",
+	}
+	if o.imageSize != "" {
+		body["size"] = o.imageSize
+	}
+	if o.count != nil {
+		body["n"] = *o.count
+	}
+	for k, v := range o.extraFields {
+		body[k] = v
+	}
+	return body
+}
+
 func joinTextParts(parts []Part) string {
 	var texts []string
 	for _, part := range parts {
@@ -676,6 +741,15 @@ func joinTextParts(parts []Part) string {
 		}
 	}
 	return strings.Join(texts, "\n")
+}
+
+//
+//
+//
+//
+func looksLikeSVG(data []byte) bool {
+	s := strings.TrimSpace(string(data))
+	return strings.HasPrefix(s, "<?xml") || strings.HasPrefix(s, "<svg")
 }
 
 func extFromMime(mime string) string {
@@ -830,6 +904,13 @@ func parseImageResponse(provider string, body []byte) (ImageResponse, error) {
 		//
 		//
 		return parseImageResponseDataArray(raw, "", ""), nil
+	case providers.Recraft:
+		//
+		//
+		//
+		//
+		//
+		return parseImageResponseDataArray(raw, "", ""), nil
 	case providers.Vertex:
 		return parseVertexImageResponse(raw), nil
 	}
@@ -875,6 +956,14 @@ func parseImageResponseDataArray(raw map[string]any, inputPath, outputPath strin
 				mime = echoed
 			}
 			if decoded, err := base64.StdEncoding.DecodeString(b64); err == nil {
+				//
+				//
+				//
+				//
+				//
+				if mime == "image/png" && looksLikeSVG(decoded) {
+					mime = "image/svg+xml"
+				}
 				images = append(images, ImageData{MimeType: mime, Bytes: decoded})
 			}
 		}
