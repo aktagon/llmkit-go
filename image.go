@@ -43,6 +43,15 @@ type Part struct {
 	Text   string
 	Image  *MediaRef
 	Lyrics string
+
+	// AudioURL is a public audio URL for transcription (ADR-048), constructed
+	// via parts.Audio(url). Submitted to the provider directly as audio_url.
+	AudioURL string
+
+	// Audio is local audio bytes for transcription (ADR-048), constructed via
+	// parts.AudioBytes(mime, raw). The runtime uploads them first to obtain a
+	// URL, then submits that.
+	Audio *MediaRef
 }
 
 // ImageData and ImageResponse are declared in go/structs.go (ADR-018, API-PDS-002).

@@ -33,3 +33,15 @@ func Image(mime string, b []byte) llmkit.Part {
 // Providers with a dedicated lyrics field map it there; single-prompt
 // providers fold it into the prompt. Instrumental-only models reject it.
 func Lyrics(s string) llmkit.Part { return llmkit.Part{Lyrics: s} }
+
+// Audio constructs an audio-bearing Part from a public URL, for transcription
+// (ADR-048). The URL is submitted to the provider directly as the audio source.
+func Audio(url string) llmkit.Part { return llmkit.Part{AudioURL: url} }
+
+// AudioBytes constructs an audio-bearing Part from local bytes, for
+// transcription (ADR-048). mime is the IANA media type (e.g., "audio/mp3");
+// b is the raw bytes. The runtime uploads them to the provider first to obtain
+// a URL, then submits that.
+func AudioBytes(mime string, b []byte) llmkit.Part {
+	return llmkit.Part{Audio: &llmkit.MediaRef{MimeType: mime, Bytes: b}}
+}
