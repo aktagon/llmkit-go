@@ -15,6 +15,7 @@ func TestEveryProviderFactory_Constructs(t *testing.T) {
 		{"<custom>", func(k string) *Client { return New("custom", k) }},
 		{"ai21", Ai21},
 		{"anthropic", Anthropic},
+		{"assemblyai", Assemblyai},
 		{"azure", Azure},
 		{"bedrock", Bedrock},
 		{"cerebras", Cerebras},

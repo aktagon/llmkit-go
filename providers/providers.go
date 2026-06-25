@@ -11,6 +11,7 @@ type ProviderName string
 const (
 	AI21       ProviderName = "ai21"
 	Anthropic  ProviderName = "anthropic"
+	Assemblyai ProviderName = "assemblyai"
 	Azure      ProviderName = "azure"
 	Bedrock    ProviderName = "bedrock"
 	Cerebras   ProviderName = "cerebras"
@@ -55,6 +56,8 @@ func Parse(slug string) (ProviderName, bool) {
 		return AI21, true
 	case "anthropic":
 		return Anthropic, true
+	case "assemblyai":
+		return Assemblyai, true
 	case "azure":
 		return Azure, true
 	case "bedrock":

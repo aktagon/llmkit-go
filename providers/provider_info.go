@@ -48,6 +48,13 @@ var providerInfoTable = map[ProviderName]ProviderInfo{
 		DefaultModel: "claude-sonnet-4-6",
 		BaseURL:      "https://api.anthropic.com",
 	},
+	Assemblyai: {
+		ID:           Assemblyai,
+		Slug:         "assemblyai",
+		EnvVar:       "ASSEMBLYAI_API_KEY",
+		DefaultModel: "best",
+		BaseURL:      "https://api.assemblyai.com",
+	},
 	Azure: {
 		ID:           Azure,
 		Slug:         "azure",
