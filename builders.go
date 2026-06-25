@@ -30,16 +30,17 @@ func (pc providerConfig) toProvider(model string) Provider {
 // this client; chain methods return new instances, the field stays
 // constant.
 type Client struct {
-	provider  providerConfig
-	Text      *Text
-	Image     *Image
-	Music     *Music
-	Speech    *Speech
-	Video     *Video
-	Agent     *Agent
-	Upload    *Upload
-	Models    *Models
-	Providers *Providers
+	provider      providerConfig
+	Text          *Text
+	Image         *Image
+	Music         *Music
+	Speech        *Speech
+	Transcription *Transcription
+	Video         *Video
+	Agent         *Agent
+	Upload        *Upload
+	Models        *Models
+	Providers     *Providers
 }
 
 func newClient(p providers.ProviderName, apiKey string) *Client {
@@ -48,6 +49,7 @@ func newClient(p providers.ProviderName, apiKey string) *Client {
 	c.Image = &Image{client: c}
 	c.Music = &Music{client: c}
 	c.Speech = &Speech{client: c}
+	c.Transcription = &Transcription{client: c}
 	c.Video = &Video{client: c}
 	c.Agent = &Agent{client: c}
 	c.Upload = &Upload{client: c}
@@ -64,6 +66,7 @@ func New(p providers.ProviderName, apiKey string) *Client { return newClient(p, 
 // === Per-provider constructors ===
 func Ai21(apiKey string) *Client       { return newClient(providers.AI21, apiKey) }
 func Anthropic(apiKey string) *Client  { return newClient(providers.Anthropic, apiKey) }
+func Assemblyai(apiKey string) *Client { return newClient(providers.Assemblyai, apiKey) }
 func Azure(apiKey string) *Client      { return newClient(providers.Azure, apiKey) }
 func Bedrock(apiKey string) *Client    { return newClient(providers.Bedrock, apiKey) }
 func Cerebras(apiKey string) *Client   { return newClient(providers.Cerebras, apiKey) }
@@ -295,6 +298,15 @@ type Speech struct {
 
 func (b *Speech) Model(name string) *Speech { out := *b; out.model = name; return &out }
 func (b *Speech) Voice(id string) *Speech   { out := *b; out.voice = id; return &out }
+
+// === *Transcription — Transcription builder ===
+
+// Transcription accumulates configuration for a Transcription
+// call. Chain methods return new instances (immutable); skipped
+// terminals live in hand-written text.go / image.go.
+type Transcription struct {
+	client *Client
+}
 
 // === *Video — VideoGeneration builder ===
 

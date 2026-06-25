@@ -38,3 +38,27 @@ func TestLyrics(t *testing.T) {
 		t.Errorf("Lyrics(...) = %+v, want %+v", got, want)
 	}
 }
+
+func TestAudio(t *testing.T) {
+	got := Audio("https://storage.example.com/meeting-2026-06-24.mp3")
+	want := llmkit.Part{AudioURL: "https://storage.example.com/meeting-2026-06-24.mp3"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("Audio(...) = %+v, want %+v", got, want)
+	}
+}
+
+func TestAudioBytes(t *testing.T) {
+	got := AudioBytes("audio/wav", []byte{0x52, 0x49, 0x46, 0x46})
+	if got.Audio == nil {
+		t.Fatal("AudioBytes() returned Part with nil Audio field")
+	}
+	if got.Audio.MimeType != "audio/wav" {
+		t.Errorf("MimeType = %q, want audio/wav", got.Audio.MimeType)
+	}
+	if !reflect.DeepEqual(got.Audio.Bytes, []byte{0x52, 0x49, 0x46, 0x46}) {
+		t.Errorf("Bytes mismatch")
+	}
+	if got.AudioURL != "" {
+		t.Errorf("AudioURL should be empty, got %q", got.AudioURL)
+	}
+}

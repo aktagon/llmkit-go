@@ -70,6 +70,10 @@ func SupportedOptions(provider string) map[OptionKey]string {
 			OptionTopK:            "top_k",
 			OptionTopP:            "top_p",
 		}
+	case Assemblyai:
+		return map[OptionKey]string{
+			OptionMaxTokens: "max_tokens",
+		}
 	case Azure:
 		return map[OptionKey]string{
 			OptionFrequencyPenalty: "frequency_penalty",

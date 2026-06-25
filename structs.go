@@ -216,6 +216,42 @@ type ToolResult struct {
 	Content string
 }
 
+// TranscriptSegment is one timed span of transcript (ADR-048). Slice-1 segments carry text + millisecond offsets + an optional diarized speaker label; confidence (a float) is deferred until the struct-field type table gains a float type (ADR-048 OQ-4).
+type TranscriptSegment struct {
+	// Text is the segment text.
+	Text string
+
+	// Start is the segment start offset in milliseconds.
+	Start int
+
+	// End is the segment end offset in milliseconds.
+	End int
+
+	// Speaker is the diarized speaker label, when the provider reports one. Empty otherwise.
+	Speaker string
+}
+
+// TranscriptionHandle is a value struct identifying a submitted transcription job, modeled on VideoHandle / BatchHandle (ADR-014 / ADR-034). Cross-process resume works by persisting the fields and reconstructing the handle; the poll loop (Wait) is hand-written runtime, not part of the generated value.
+type TranscriptionHandle struct {
+	// ID is the provider-assigned transcript id returned by the submit endpoint (AssemblyAI: id). Opaque to the SDK; round-tripped to the poll endpoint verbatim.
+	ID string
+
+	// Provider is the Provider config used to submit the job. Carried on the handle so Wait knows where to poll without re-parameterising the client.
+	Provider Provider
+}
+
+// TranscriptionResponse is the universal speech-to-text response container returned by TranscriptionHandle.Wait. Carries the full transcript text, the timed transcript segments, and the provider-reported usage. The container is text-shaped, NOT a media *Data container — the structural divergence from video (ADR-048).
+type TranscriptionResponse struct {
+	// Text is the full transcript text.
+	Text string
+
+	// Segments are the timed transcript segments (start/end offsets in milliseconds). Empty when the provider returns no word-level timing.
+	Segments []TranscriptSegment
+
+	// Usage holds provider-reported usage. AssemblyAI bills by audio duration, not tokens; this stays zero unless a provider surfaces a token axis (ADR-048 OQ-2).
+	Usage Usage
+}
+
 // VideoData is one finished video returned in a VideoResponse. Models bytes (downloaded payload) XOR url (a provider link or caller S3 URI) — the source-XOR pattern (VID-004). url-delivery and output-uri providers set url; download-delivery providers set bytes.
 type VideoData struct {
 	// MimeType is the IANA media type of the video (video/mp4). Drives the file extension the caller picks for storage.

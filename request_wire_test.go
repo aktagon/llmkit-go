@@ -854,6 +854,19 @@ func TestRequestWire_SpeechInworld(t *testing.T) {
 	assertRequestWireGolden(t, "speech-inworld", body)
 }
 
+// TestRequestWire_TranscriptionAssemblyAI witnesses the AssemblyAI async submit
+// body: {audio_url} POSTed to /v2/transcript (ADR-048 STT-007). Submit returns
+// a handle (the canned response's id), so captureBody captures the submit body.
+func TestRequestWire_TranscriptionAssemblyAI(t *testing.T) {
+	body, _ := captureBody(t, providers.Assemblyai, func(c *Client) {
+		_, err := c.Transcription.Submit(context.Background(), Part{AudioURL: wireTranscriptionAssemblyaiAudioURL})
+		if err != nil {
+			t.Fatalf("transcription submit assemblyai call: %v", err)
+		}
+	})
+	assertRequestWireGolden(t, "transcription-assemblyai", body)
+}
+
 // TestRequestWire_VideoPixVerse witnesses the PixVerse video-submit body:
 // {model, prompt, duration, quality, aspect_ratio} POSTed to
 // /openapi/v2/video/text/generate. Unlike the shared {model, prompt} arm,
