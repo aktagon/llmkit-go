@@ -217,6 +217,42 @@ type ToolResult struct {
 }
 
 //
+type TranscriptSegment struct {
+	//
+	Text string
+
+	//
+	Start int
+
+	//
+	End int
+
+	//
+	Speaker string
+}
+
+//
+type TranscriptionHandle struct {
+	//
+	ID string
+
+	//
+	Provider Provider
+}
+
+//
+type TranscriptionResponse struct {
+	//
+	Text string
+
+	//
+	Segments []TranscriptSegment
+
+	//
+	Usage Usage
+}
+
+//
 type VideoData struct {
 	//
 	MimeType string

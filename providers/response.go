@@ -9,6 +9,8 @@ func ResponseTextPath(provider string) string {
 		return "choices[0].message.content"
 	case Anthropic:
 		return "content[0].text"
+	case Assemblyai:
+		return ""
 	case Azure:
 		return "choices[0].message.content"
 	case Bedrock:
@@ -87,6 +89,8 @@ func UsagePaths(provider string) (inputPath, outputPath string) {
 		return "usage.prompt_tokens", "usage.completion_tokens"
 	case Anthropic:
 		return "usage.input_tokens", "usage.output_tokens"
+	case Assemblyai:
+		return "", ""
 	case Azure:
 		return "usage.prompt_tokens", "usage.completion_tokens"
 	case Bedrock:

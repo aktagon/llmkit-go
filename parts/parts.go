@@ -33,3 +33,15 @@ func Image(mime string, b []byte) llmkit.Part {
 //
 //
 func Lyrics(s string) llmkit.Part { return llmkit.Part{Lyrics: s} }
+
+//
+//
+func Audio(url string) llmkit.Part { return llmkit.Part{AudioURL: url} }
+
+//
+//
+//
+//
+func AudioBytes(mime string, b []byte) llmkit.Part {
+	return llmkit.Part{Audio: &llmkit.MediaRef{MimeType: mime, Bytes: b}}
+}

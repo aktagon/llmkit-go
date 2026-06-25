@@ -43,6 +43,15 @@ type Part struct {
 	Text   string
 	Image  *MediaRef
 	Lyrics string
+
+	//
+	//
+	AudioURL string
+
+	//
+	//
+	//
+	Audio *MediaRef
 }
 
 //
