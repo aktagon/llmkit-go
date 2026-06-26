@@ -306,7 +306,10 @@ func (b *Speech) Voice(id string) *Speech   { out := *b; out.voice = id; return 
 // terminals live in hand-written text.go / image.go.
 type Transcription struct {
 	client *Client
+	model  string
 }
+
+func (b *Transcription) Model(name string) *Transcription { out := *b; out.model = name; return &out }
 
 // === *Video — VideoGeneration builder ===
 
