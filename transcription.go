@@ -1,10 +1,13 @@
 package llmkit
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"mime/multipart"
 	"net/http"
+	"net/textproto"
 	"strings"
 	"time"
 
@@ -15,7 +18,9 @@ import (
 //
 //
 //
+//
 type TranscriptionRequest struct {
+	Model string
 	Parts []Part
 }
 
@@ -74,6 +79,11 @@ func submitTranscription(ctx context.Context, p Provider, req TranscriptionReque
 	tcCfg := providers.TranscriptionConfig(p.Name)
 	if tcCfg == nil {
 		return TranscriptionHandle{}, &ValidationError{Field: "provider", Message: p.Name + " does not support transcription"}
+	}
+	//
+	//
+	if tcCfg.Interaction == "sync" {
+		return TranscriptionHandle{}, &ValidationError{Field: "interaction", Message: p.Name + " transcribes synchronously; use Transcribe, not Submit/Wait"}
 	}
 
 	audioURL, audioBytes, err := normalizeAudioPart(req.Parts)
@@ -190,6 +200,187 @@ func (h TranscriptionHandle) Wait(ctx context.Context, opts ...TranscriptionOpti
 		}
 		time.Sleep(transcriptionPollInterval)
 	}
+}
+
+//
+//
+//
+//
+//
+//
+//
+func transcribeSync(ctx context.Context, p Provider, req TranscriptionRequest, opts ...TranscriptionOption) (TranscriptionResponse, error) {
+	o := resolveTranscriptionOptions(opts)
+
+	if err := validateProvider(p); err != nil {
+		return TranscriptionResponse{}, err
+	}
+	cfg, ok := providerSpecs()[p.Name]
+	if !ok {
+		return TranscriptionResponse{}, &ValidationError{Field: "provider", Message: "unknown: " + p.Name}
+	}
+	tcCfg := providers.TranscriptionConfig(p.Name)
+	if tcCfg == nil {
+		return TranscriptionResponse{}, &ValidationError{Field: "provider", Message: p.Name + " does not support transcription"}
+	}
+	//
+	if tcCfg.Interaction != "sync" {
+		return TranscriptionResponse{}, &ValidationError{Field: "interaction", Message: p.Name + " transcribes asynchronously; use Submit/Wait, not Transcribe"}
+	}
+	if req.Model == "" {
+		return TranscriptionResponse{}, &ValidationError{Field: "model", Message: "required for synchronous transcription"}
+	}
+	ref, err := normalizeAudioBytesPart(req.Parts)
+	if err != nil {
+		return TranscriptionResponse{}, err
+	}
+
+	client := o.httpClient
+	if client == nil {
+		client = http.DefaultClient
+	}
+	base := transcriptionBaseURL(p, cfg)
+	headers := cloneStringMap(buildAuthHeaders(p, cfg))
+
+	body, contentType, err := buildTranscriptionMultipart(tcCfg.WireShape, req.Model, ref)
+	if err != nil {
+		return TranscriptionResponse{}, err
+	}
+	headers["Content-Type"] = contentType
+	respBody, err := doPost(ctx, client, base+tcCfg.SubmitEndpoint, body, headers)
+	if err != nil {
+		return TranscriptionResponse{}, err
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(respBody, &raw); err != nil {
+		return TranscriptionResponse{}, fmt.Errorf("unmarshal transcription response: %w", err)
+	}
+	return transcriptionResultFromOpenAI(raw), nil
+}
+
+//
+//
+//
+//
+//
+func buildTranscriptionMultipart(wireShape, model string, ref *MediaRef) ([]byte, string, error) {
+	switch wireShape {
+	case providers.TranscriptionShapeOpenAI:
+		return buildOpenAITranscriptionMultipart(model, "verbose_json", ref)
+	default:
+		return nil, "", fmt.Errorf("transcription: wire shape %q has no multipart encoder", wireShape)
+	}
+}
+
+//
+//
+//
+//
+//
+func buildOpenAITranscriptionMultipart(model, responseFormat string, ref *MediaRef) ([]byte, string, error) {
+	var buf bytes.Buffer
+	w := multipart.NewWriter(&buf)
+	if err := w.WriteField("model", model); err != nil {
+		return nil, "", err
+	}
+	if err := w.WriteField("response_format", responseFormat); err != nil {
+		return nil, "", err
+	}
+	h := make(textproto.MIMEHeader)
+	filename := "audio." + audioExtForMime(ref.MimeType)
+	h.Set("Content-Disposition", fmt.Sprintf("form-data; name=%q; filename=%q", "file", filename))
+	mimeType := ref.MimeType
+	if mimeType == "" {
+		mimeType = "application/octet-stream"
+	}
+	h.Set("Content-Type", mimeType)
+	fw, err := w.CreatePart(h)
+	if err != nil {
+		return nil, "", err
+	}
+	if _, err := fw.Write(ref.Bytes); err != nil {
+		return nil, "", err
+	}
+	if err := w.Close(); err != nil {
+		return nil, "", err
+	}
+	return buf.Bytes(), w.FormDataContentType(), nil
+}
+
+//
+//
+func audioExtForMime(mime string) string {
+	switch mime {
+	case "audio/mpeg", "audio/mp3":
+		return "mp3"
+	case "audio/wav", "audio/x-wav":
+		return "wav"
+	case "audio/mp4", "audio/m4a", "audio/x-m4a":
+		return "m4a"
+	case "audio/webm":
+		return "webm"
+	case "audio/ogg", "audio/opus":
+		return "ogg"
+	case "audio/flac":
+		return "flac"
+	default:
+		return "bin"
+	}
+}
+
+//
+//
+//
+//
+//
+//
+//
+func transcriptionResultFromOpenAI(raw map[string]any) TranscriptionResponse {
+	text, _ := raw["text"].(string)
+	segs, _ := raw["segments"].([]any)
+	segments := make([]TranscriptSegment, 0, len(segs))
+	for _, s := range segs {
+		m, ok := s.(map[string]any)
+		if !ok {
+			continue
+		}
+		seg := TranscriptSegment{}
+		seg.Text, _ = m["text"].(string)
+		if v, ok := m["start"].(float64); ok {
+			seg.Start = int(v*1000 + 0.5)
+		}
+		if v, ok := m["end"].(float64); ok {
+			seg.End = int(v*1000 + 0.5)
+		}
+		segments = append(segments, seg)
+	}
+	return TranscriptionResponse{Text: text, Segments: segments}
+}
+
+//
+//
+//
+//
+func normalizeAudioBytesPart(parts []Part) (*MediaRef, error) {
+	audioCount := 0
+	var ref *MediaRef
+	for i, part := range parts {
+		switch {
+		case part.Audio != nil:
+			audioCount++
+			ref = part.Audio
+		case part.AudioURL != "":
+			return nil, &ValidationError{Field: fmt.Sprintf("parts[%d]", i), Message: "synchronous transcription accepts inline audio bytes only (parts.AudioBytes); a remote audio URL is not supported"}
+		case part.Text != "" || part.Image != nil || part.Lyrics != "":
+			return nil, &ValidationError{Field: fmt.Sprintf("parts[%d]", i), Message: "transcription accepts only audio parts (parts.AudioBytes)"}
+		default:
+			return nil, &ValidationError{Field: fmt.Sprintf("parts[%d]", i), Message: "empty part"}
+		}
+	}
+	if audioCount != 1 {
+		return nil, &ValidationError{Field: "parts", Message: "transcription requires exactly one audio part"}
+	}
+	return ref, nil
 }
 
 //
