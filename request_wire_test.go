@@ -854,6 +854,19 @@ func TestRequestWire_SpeechInworld(t *testing.T) {
 	assertRequestWireGolden(t, "speech-inworld", body)
 }
 
+// TestRequestWire_SpeechOpenAI witnesses the OpenAI text-to-speech body:
+// {model, input, voice, response_format} POSTed to /v1/audio/speech (ADR-051).
+// The response is raw audio bytes (asserted in speech_test.go, not here).
+func TestRequestWire_SpeechOpenAI(t *testing.T) {
+	body, _ := captureBody(t, providers.OpenAI, func(c *Client) {
+		_, err := c.Speech.Model(wireSpeechOpenaiModel).Voice(wireSpeechOpenaiVoice).Generate(context.Background(), wireSpeechOpenaiPrompt)
+		if err != nil {
+			t.Fatalf("speech generate openai call: %v", err)
+		}
+	})
+	assertRequestWireGolden(t, "speech-openai", body)
+}
+
 // TestRequestWire_TranscriptionAssemblyAI witnesses the AssemblyAI async submit
 // body: {audio_url} POSTed to /v2/transcript (ADR-048 STT-007). Submit returns
 // a handle (the canned response's id), so captureBody captures the submit body.
