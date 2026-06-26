@@ -6,20 +6,26 @@ package providers
 // submit-body build + result-extraction transform.
 const (
 	TranscriptionShapeAssemblyAI = "TranscriptionAssemblyAI"
+	TranscriptionShapeOpenAI     = "TranscriptionOpenAI"
 )
 
 // TranscriptionDef holds one provider's speech-to-text configuration.
-// UploadEndpoint is empty for url-only providers; StatusPath /
-// DoneStatus / ErrorStatus are the status-to-terminal mapping (STT-005).
+// Interaction selects the Transcribe terminal (sync) vs Submit/Wait
+// (async); RequestEncoding selects the multipart encoder ("multipart")
+// vs JSON ("json"). UploadEndpoint is empty for url-only / inline-bytes
+// providers; PollEndpoint / SubmitHandleField / StatusPath / DoneStatus /
+// ErrorStatus are the async-only status-to-terminal mapping (STT-005).
 type TranscriptionDef struct {
-	WireShape         string // TranscriptionShapeAssemblyAI
+	WireShape         string // TranscriptionShapeAssemblyAI | TranscriptionShapeOpenAI
+	Interaction       string // "sync" | "async"
+	RequestEncoding   string // "json" | "multipart"
 	SubmitEndpoint    string // submit endpoint path, relative to the provider base
-	PollEndpoint      string // poll endpoint template with {id}, relative to the provider base
-	UploadEndpoint    string // local-bytes upload hop; "" = url-only provider
-	SubmitHandleField string // dotted path to the handle id in the submit response
-	StatusPath        string // dotted path to the status string in the poll response
-	DoneStatus        string // status value marking terminal success
-	ErrorStatus       string // status value marking terminal failure
+	PollEndpoint      string // poll endpoint template with {id}; async only
+	UploadEndpoint    string // local-bytes upload hop; "" = url-only / inline-bytes
+	SubmitHandleField string // dotted path to the handle id in the submit response; async only
+	StatusPath        string // dotted path to the status string in the poll response; async only
+	DoneStatus        string // status value marking terminal success; async only
+	ErrorStatus       string // status value marking terminal failure; async only
 }
 
 // TranscriptionConfig returns the transcription config for a provider, or
@@ -29,6 +35,8 @@ func TranscriptionConfig(provider string) *TranscriptionDef {
 	case Assemblyai:
 		return &TranscriptionDef{
 			WireShape:         "TranscriptionAssemblyAI",
+			Interaction:       "async",
+			RequestEncoding:   "json",
 			SubmitEndpoint:    "/v2/transcript",
 			PollEndpoint:      "/v2/transcript/{id}",
 			UploadEndpoint:    "/v2/upload",
@@ -36,6 +44,19 @@ func TranscriptionConfig(provider string) *TranscriptionDef {
 			StatusPath:        "status",
 			DoneStatus:        "completed",
 			ErrorStatus:       "error",
+		}
+	case OpenAI:
+		return &TranscriptionDef{
+			WireShape:         "TranscriptionOpenAI",
+			Interaction:       "sync",
+			RequestEncoding:   "multipart",
+			SubmitEndpoint:    "/v1/audio/transcriptions",
+			PollEndpoint:      "",
+			UploadEndpoint:    "",
+			SubmitHandleField: "",
+			StatusPath:        "",
+			DoneStatus:        "",
+			ErrorStatus:       "",
 		}
 	default:
 		return nil

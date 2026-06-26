@@ -1,10 +1,13 @@
 package llmkit
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"mime/multipart"
 	"net/http"
+	"net/textproto"
 	"strings"
 	"time"
 
@@ -13,9 +16,11 @@ import (
 
 // TranscriptionRequest is the canonical speech-to-text request (ADR-048). It
 // carries exactly one audio Part — a public URL (parts.Audio) or local bytes
-// the runtime uploads first (parts.AudioBytes). Transcription is single-turn,
-// so there is no Message/Role wrapper (golden rule).
+// (parts.AudioBytes). Transcription is single-turn, so there is no Message/Role
+// wrapper (golden rule). Model is used only by synchronous providers (OpenAI,
+// ADR-051), where it is a required multipart field; async providers ignore it.
 type TranscriptionRequest struct {
+	Model string
 	Parts []Part
 }
 
@@ -74,6 +79,11 @@ func submitTranscription(ctx context.Context, p Provider, req TranscriptionReque
 	tcCfg := providers.TranscriptionConfig(p.Name)
 	if tcCfg == nil {
 		return TranscriptionHandle{}, &ValidationError{Field: "provider", Message: p.Name + " does not support transcription"}
+	}
+	// A synchronous provider has no job handle; Submit/Wait is the wrong
+	// terminal for it (ADR-051 OAA-003). Name the supported one.
+	if tcCfg.Interaction == "sync" {
+		return TranscriptionHandle{}, &ValidationError{Field: "interaction", Message: p.Name + " transcribes synchronously; use Transcribe, not Submit/Wait"}
 	}
 
 	audioURL, audioBytes, err := normalizeAudioPart(req.Parts)
@@ -190,6 +200,187 @@ func (h TranscriptionHandle) Wait(ctx context.Context, opts ...TranscriptionOpti
 		}
 		time.Sleep(transcriptionPollInterval)
 	}
+}
+
+// transcribeSync runs a synchronous speech-to-text request (ADR-051): one
+// multipart/form-data POST returns the transcript directly, with no job handle.
+// Pre-flight validation rejects a non-sync provider (naming Submit/Wait), a
+// missing model, a remote audio URL (OpenAI ingests inline bytes only — the
+// inverse of AssemblyAI, OAA-005), and a non-single-audio-part input.
+//
+// Internal helper — the public surface is (*Transcription).Transcribe.
+func transcribeSync(ctx context.Context, p Provider, req TranscriptionRequest, opts ...TranscriptionOption) (TranscriptionResponse, error) {
+	o := resolveTranscriptionOptions(opts)
+
+	if err := validateProvider(p); err != nil {
+		return TranscriptionResponse{}, err
+	}
+	cfg, ok := providerSpecs()[p.Name]
+	if !ok {
+		return TranscriptionResponse{}, &ValidationError{Field: "provider", Message: "unknown: " + p.Name}
+	}
+	tcCfg := providers.TranscriptionConfig(p.Name)
+	if tcCfg == nil {
+		return TranscriptionResponse{}, &ValidationError{Field: "provider", Message: p.Name + " does not support transcription"}
+	}
+	// An async provider has no synchronous terminal; Submit/Wait is its surface.
+	if tcCfg.Interaction != "sync" {
+		return TranscriptionResponse{}, &ValidationError{Field: "interaction", Message: p.Name + " transcribes asynchronously; use Submit/Wait, not Transcribe"}
+	}
+	if req.Model == "" {
+		return TranscriptionResponse{}, &ValidationError{Field: "model", Message: "required for synchronous transcription"}
+	}
+	ref, err := normalizeAudioBytesPart(req.Parts)
+	if err != nil {
+		return TranscriptionResponse{}, err
+	}
+
+	client := o.httpClient
+	if client == nil {
+		client = http.DefaultClient
+	}
+	base := transcriptionBaseURL(p, cfg)
+	headers := cloneStringMap(buildAuthHeaders(p, cfg))
+
+	body, contentType, err := buildTranscriptionMultipart(tcCfg.WireShape, req.Model, ref)
+	if err != nil {
+		return TranscriptionResponse{}, err
+	}
+	headers["Content-Type"] = contentType
+	respBody, err := doPost(ctx, client, base+tcCfg.SubmitEndpoint, body, headers)
+	if err != nil {
+		return TranscriptionResponse{}, err
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(respBody, &raw); err != nil {
+		return TranscriptionResponse{}, fmt.Errorf("unmarshal transcription response: %w", err)
+	}
+	return transcriptionResultFromOpenAI(raw), nil
+}
+
+// buildTranscriptionMultipart encodes the synchronous transcription request as
+// multipart/form-data per wire shape (ADR-051 OAA-004). Fields are written in a
+// FIXED order (model, response_format, file) so all four SDKs emit the same
+// canonical descriptor. Returns the body bytes and the Content-Type carrying
+// the generated boundary.
+func buildTranscriptionMultipart(wireShape, model string, ref *MediaRef) ([]byte, string, error) {
+	switch wireShape {
+	case providers.TranscriptionShapeOpenAI:
+		return buildOpenAITranscriptionMultipart(model, "verbose_json", ref)
+	default:
+		return nil, "", fmt.Errorf("transcription: wire shape %q has no multipart encoder", wireShape)
+	}
+}
+
+// buildOpenAITranscriptionMultipart writes the OpenAI /v1/audio/transcriptions
+// body: form fields model + response_format, then the audio as the `file` part
+// with its IANA Content-Type and a filename whose extension reflects the format
+// (OpenAI keys format detection off the filename). response_format=verbose_json
+// requests segment timings (whisper-1).
+func buildOpenAITranscriptionMultipart(model, responseFormat string, ref *MediaRef) ([]byte, string, error) {
+	var buf bytes.Buffer
+	w := multipart.NewWriter(&buf)
+	if err := w.WriteField("model", model); err != nil {
+		return nil, "", err
+	}
+	if err := w.WriteField("response_format", responseFormat); err != nil {
+		return nil, "", err
+	}
+	h := make(textproto.MIMEHeader)
+	filename := "audio." + audioExtForMime(ref.MimeType)
+	h.Set("Content-Disposition", fmt.Sprintf("form-data; name=%q; filename=%q", "file", filename))
+	mimeType := ref.MimeType
+	if mimeType == "" {
+		mimeType = "application/octet-stream"
+	}
+	h.Set("Content-Type", mimeType)
+	fw, err := w.CreatePart(h)
+	if err != nil {
+		return nil, "", err
+	}
+	if _, err := fw.Write(ref.Bytes); err != nil {
+		return nil, "", err
+	}
+	if err := w.Close(); err != nil {
+		return nil, "", err
+	}
+	return buf.Bytes(), w.FormDataContentType(), nil
+}
+
+// audioExtForMime maps an audio IANA media type to the file extension OpenAI
+// uses to detect the format. Falls back to "bin" for unknown types.
+func audioExtForMime(mime string) string {
+	switch mime {
+	case "audio/mpeg", "audio/mp3":
+		return "mp3"
+	case "audio/wav", "audio/x-wav":
+		return "wav"
+	case "audio/mp4", "audio/m4a", "audio/x-m4a":
+		return "m4a"
+	case "audio/webm":
+		return "webm"
+	case "audio/ogg", "audio/opus":
+		return "ogg"
+	case "audio/flac":
+		return "flac"
+	default:
+		return "bin"
+	}
+}
+
+// transcriptionResultFromOpenAI extracts the transcript text and (when the
+// response_format yields them) segment timings from a synchronous OpenAI
+// transcription response. verbose_json offsets are in SECONDS (float); the
+// TranscriptSegment stores integer milliseconds, so each is scaled x1000 and
+// rounded (OAA-006). Models without verbose_json (gpt-4o-*-transcribe) carry no
+// segments[] — segments is empty, not an error. Usage stays zero pending a
+// live-verified usage envelope (OAA-007).
+func transcriptionResultFromOpenAI(raw map[string]any) TranscriptionResponse {
+	text, _ := raw["text"].(string)
+	segs, _ := raw["segments"].([]any)
+	segments := make([]TranscriptSegment, 0, len(segs))
+	for _, s := range segs {
+		m, ok := s.(map[string]any)
+		if !ok {
+			continue
+		}
+		seg := TranscriptSegment{}
+		seg.Text, _ = m["text"].(string)
+		if v, ok := m["start"].(float64); ok {
+			seg.Start = int(v*1000 + 0.5)
+		}
+		if v, ok := m["end"].(float64); ok {
+			seg.End = int(v*1000 + 0.5)
+		}
+		segments = append(segments, seg)
+	}
+	return TranscriptionResponse{Text: text, Segments: segments}
+}
+
+// normalizeAudioBytesPart enforces the single-audio-part rule for the
+// synchronous path (OAA-005): exactly one inline-bytes audio Part. A remote
+// audio URL is rejected (OpenAI ingests no URL — the inverse of AssemblyAI), as
+// is any non-audio part.
+func normalizeAudioBytesPart(parts []Part) (*MediaRef, error) {
+	audioCount := 0
+	var ref *MediaRef
+	for i, part := range parts {
+		switch {
+		case part.Audio != nil:
+			audioCount++
+			ref = part.Audio
+		case part.AudioURL != "":
+			return nil, &ValidationError{Field: fmt.Sprintf("parts[%d]", i), Message: "synchronous transcription accepts inline audio bytes only (parts.AudioBytes); a remote audio URL is not supported"}
+		case part.Text != "" || part.Image != nil || part.Lyrics != "":
+			return nil, &ValidationError{Field: fmt.Sprintf("parts[%d]", i), Message: "transcription accepts only audio parts (parts.AudioBytes)"}
+		default:
+			return nil, &ValidationError{Field: fmt.Sprintf("parts[%d]", i), Message: "empty part"}
+		}
+	}
+	if audioCount != 1 {
+		return nil, &ValidationError{Field: "parts", Message: "transcription requires exactly one audio part"}
+	}
+	return ref, nil
 }
 
 // transcriptionResult extracts the finished transcript per wire shape. Only the
