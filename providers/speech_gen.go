@@ -6,6 +6,7 @@ package providers
 // body and the response audio path.
 const (
 	SpeechShapeInworld = "SpeechInworld"
+	SpeechShapeOpenAI  = "SpeechOpenAI"
 )
 
 // SpeechModelDef describes one speech-generation model. SampleRateHz is
@@ -21,10 +22,11 @@ type SpeechModelDef struct {
 // GenEndpoint is an override; empty means reuse the provider's main
 // endpoint template. Voices is the catalogue the Voice setter validates against.
 type SpeechGenDef struct {
-	WireShape   string // SpeechShapeInworld
-	GenEndpoint string // override; empty = use provider main endpoint
-	Voices      []string
-	Models      []SpeechModelDef
+	WireShape     string // SpeechShapeInworld | SpeechShapeOpenAI
+	AudioEncoding string // base64Envelope | rawBody (ADR-051 OAA-002)
+	GenEndpoint   string // override; empty = use provider main endpoint
+	Voices        []string
+	Models        []SpeechModelDef
 }
 
 // SpeechGenConfig returns the speech-generation config for a provider, or
@@ -33,9 +35,10 @@ func SpeechGenConfig(provider string) *SpeechGenDef {
 	switch ProviderName(provider) {
 	case Inworld:
 		return &SpeechGenDef{
-			WireShape:   "SpeechInworld",
-			GenEndpoint: "/tts/v1/voice",
-			Voices:      []string{"Alex", "Ashley", "Dennis"},
+			WireShape:     "SpeechInworld",
+			AudioEncoding: "base64Envelope",
+			GenEndpoint:   "/tts/v1/voice",
+			Voices:        []string{"Alex", "Ashley", "Dennis"},
 			Models: []SpeechModelDef{
 				{
 					ModelID:      "inworld-tts-1.5-max",
@@ -53,6 +56,33 @@ func SpeechGenConfig(provider string) *SpeechGenDef {
 					ModelID:      "inworld-tts-2",
 					Label:        "Inworld TTS 2",
 					OutputMime:   "audio/wav",
+					SampleRateHz: 0,
+				},
+			},
+		}
+	case OpenAI:
+		return &SpeechGenDef{
+			WireShape:     "SpeechOpenAI",
+			AudioEncoding: "rawBody",
+			GenEndpoint:   "/v1/audio/speech",
+			Voices:        []string{"alloy", "ash", "ballad", "coral", "echo", "fable", "nova", "onyx", "sage", "shimmer"},
+			Models: []SpeechModelDef{
+				{
+					ModelID:      "gpt-4o-mini-tts",
+					Label:        "GPT-4o mini TTS",
+					OutputMime:   "audio/mpeg",
+					SampleRateHz: 0,
+				},
+				{
+					ModelID:      "tts-1",
+					Label:        "TTS 1",
+					OutputMime:   "audio/mpeg",
+					SampleRateHz: 0,
+				},
+				{
+					ModelID:      "tts-1-hd",
+					Label:        "TTS 1 HD",
+					OutputMime:   "audio/mpeg",
 					SampleRateHz: 0,
 				},
 			},

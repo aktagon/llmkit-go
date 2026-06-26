@@ -73,12 +73,13 @@ func generateSpeech(ctx context.Context, p Provider, req SpeechRequest) (SpeechR
 		return SpeechResponse{}, err
 	}
 
-	return parseSpeechResponse(sgCfg.WireShape, model.OutputMime, respBody)
+	return parseSpeechResponse(sgCfg.AudioEncoding, model.OutputMime, respBody)
 }
 
 // dispatchSpeechHTTP picks a wire shape per provider config (never by provider
-// name — the wire shape is the single discriminator). Only SpeechInworld exists
-// today: a flat-JSON POST whose response carries base64 audio at audioContent.
+// name — the wire shape is the single discriminator). SpeechInworld is a
+// flat-JSON POST whose response carries base64 audio at audioContent;
+// SpeechOpenAI is a flat-JSON POST whose response body is the raw audio bytes.
 func dispatchSpeechHTTP(
 	ctx context.Context,
 	client *http.Client,
@@ -101,7 +102,13 @@ func dispatchSpeechHTTP(
 		url = base + endpoint
 	}
 
-	body := buildInworldSpeechBody(req)
+	var body map[string]any
+	switch sgCfg.WireShape {
+	case providers.SpeechShapeOpenAI:
+		body = buildOpenAISpeechBody(req)
+	default: // SpeechShapeInworld
+		body = buildInworldSpeechBody(req)
+	}
 	jsonBody, err := json.Marshal(body)
 	if err != nil {
 		return nil, fmt.Errorf("marshal speech request: %w", err)
@@ -126,6 +133,19 @@ func buildInworldSpeechBody(req SpeechRequest) map[string]any {
 	}
 }
 
+// buildOpenAISpeechBody assembles the OpenAI /v1/audio/speech request body.
+// Slice 1 fixes response_format=mp3 (KISS; the model's outputMime is audio/mpeg
+// to match), so the response body is mp3 audio bytes. Format selection is a
+// later slice (ADR-051).
+func buildOpenAISpeechBody(req SpeechRequest) map[string]any {
+	return map[string]any{
+		"model":           req.Model,
+		"input":           req.Text,
+		"voice":           req.Voice,
+		"response_format": "mp3",
+	}
+}
+
 func findSpeechModel(cfg *providers.SpeechGenDef, modelID string) *providers.SpeechModelDef {
 	for i := range cfg.Models {
 		if cfg.Models[i].ModelID == modelID {
@@ -144,14 +164,19 @@ func voiceInCatalogue(cfg *providers.SpeechGenDef, voice string) bool {
 	return false
 }
 
-// parseSpeechResponse decodes the synthesized audio per wire shape.
-func parseSpeechResponse(wireShape, fallbackMime string, body []byte) (SpeechResponse, error) {
-	var raw map[string]any
-	if err := json.Unmarshal(body, &raw); err != nil {
-		return SpeechResponse{}, fmt.Errorf("unmarshal speech response: %w", err)
-	}
-	switch wireShape {
-	default: // SpeechShapeInworld
+// parseSpeechResponse decodes the synthesized audio per the wire shape's audio
+// response encoding (ADR-051 OAA-002). "rawBody" (OpenAI) takes the response
+// body verbatim as the audio bytes; "base64Envelope" (Inworld) parses a JSON
+// envelope and base64-decodes the audio field.
+func parseSpeechResponse(audioEncoding, fallbackMime string, body []byte) (SpeechResponse, error) {
+	switch audioEncoding {
+	case "rawBody":
+		return SpeechResponse{Audio: AudioData{MimeType: fallbackMime, Bytes: body}}, nil
+	default: // base64Envelope
+		var raw map[string]any
+		if err := json.Unmarshal(body, &raw); err != nil {
+			return SpeechResponse{}, fmt.Errorf("unmarshal speech response: %w", err)
+		}
 		return parseInworldSpeechResponse(raw, fallbackMime), nil
 	}
 }
