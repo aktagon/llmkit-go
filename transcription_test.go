@@ -3,6 +3,7 @@ package llmkit
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -226,12 +227,156 @@ func TestWithTranscriptionHTTPClientOverridesDefault(t *testing.T) {
 }
 
 func TestTranscriptionUnsupportedProviderRejected(t *testing.T) {
-	c := New(providers.OpenAI, "test-key")
+	// Anthropic does not support transcription (OpenAI now does, ADR-051).
+	c := New(providers.Anthropic, "test-key")
 	_, err := c.Transcription.Submit(context.Background(), audioURLPart(assemblyAIAudioURL))
 	if err == nil {
 		t.Fatal("expected an unsupported provider to be rejected")
 	}
 	if !strings.Contains(err.Error(), "does not support transcription") {
 		t.Errorf("expected unsupported-provider error, got %v", err)
+	}
+}
+
+// === Synchronous transcription — OpenAI (TranscriptionOpenAI, ADR-051) ===
+
+// openaiVerboseTranscript is the OpenAI verbose_json response: full text plus
+// segment timings with start/end in SECONDS (float).
+func openaiVerboseTranscript() map[string]any {
+	return map[string]any{
+		"text": "The quarterly review is scheduled for Tuesday.",
+		"segments": []map[string]any{
+			{"start": 0.0, "end": 1.5, "text": "The quarterly review"},
+			{"start": 1.5, "end": 2.84, "text": " is scheduled for Tuesday."},
+		},
+	}
+}
+
+// openaiTranscriptionServer serves POST /v1/audio/transcriptions, asserting the
+// multipart fields (model, response_format, the file part + its Content-Type),
+// and returns the supplied JSON body.
+func openaiTranscriptionServer(t *testing.T, respBody map[string]any) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/audio/transcriptions" {
+			t.Errorf("expected /v1/audio/transcriptions, got %s", r.URL.Path)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer test-key" {
+			t.Errorf("expected Bearer auth, got %q", got)
+		}
+		if err := r.ParseMultipartForm(8 << 20); err != nil {
+			t.Fatalf("parse multipart: %v", err)
+		}
+		if got := r.FormValue("model"); got != "whisper-1" {
+			t.Errorf("expected model whisper-1, got %q", got)
+		}
+		if got := r.FormValue("response_format"); got != "verbose_json" {
+			t.Errorf("expected response_format verbose_json, got %q", got)
+		}
+		f, hdr, err := r.FormFile("file")
+		if err != nil {
+			t.Fatalf("expected file part: %v", err)
+		}
+		defer f.Close()
+		data, _ := io.ReadAll(f)
+		if len(data) == 0 {
+			t.Error("expected non-empty audio file bytes")
+		}
+		if ct := hdr.Header.Get("Content-Type"); ct != "audio/mpeg" {
+			t.Errorf("expected file Content-Type audio/mpeg, got %q", ct)
+		}
+		json.NewEncoder(w).Encode(respBody)
+	}))
+}
+
+func TestTranscribeSyncOpenAI(t *testing.T) {
+	server := openaiTranscriptionServer(t, openaiVerboseTranscript())
+	defer server.Close()
+
+	c := New(providers.OpenAI, "test-key")
+	c.provider.baseURL = server.URL
+
+	resp, err := c.Transcription.Model("whisper-1").Transcribe(context.Background(), audioBytesPart("audio/mpeg", fakeSpeechMP3))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := resp.Text, "The quarterly review is scheduled for Tuesday."; got != want {
+		t.Errorf("text: got %q, want %q", got, want)
+	}
+	if got := len(resp.Segments); got != 2 {
+		t.Fatalf("expected 2 segments, got %d", got)
+	}
+	// verbose_json offsets are seconds; the segment stores integer ms.
+	if got, want := resp.Segments[0].End, 1500; got != want {
+		t.Errorf("segment[0].End: got %d ms, want %d ms (1.5s)", got, want)
+	}
+	if got, want := resp.Segments[1].End, 2840; got != want {
+		t.Errorf("segment[1].End: got %d ms, want %d ms (2.84s)", got, want)
+	}
+}
+
+func TestTranscribeOpenAIEmptySegments(t *testing.T) {
+	// The gpt-4o-*-transcribe models return text with NO segments[] (OAA-006):
+	// segments is empty, not an error.
+	server := openaiTranscriptionServer(t, map[string]any{"text": "Hello there."})
+	defer server.Close()
+
+	c := New(providers.OpenAI, "test-key")
+	c.provider.baseURL = server.URL
+
+	resp, err := c.Transcription.Model("whisper-1").Transcribe(context.Background(), audioBytesPart("audio/mpeg", fakeSpeechMP3))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Text != "Hello there." {
+		t.Errorf("text: got %q", resp.Text)
+	}
+	if len(resp.Segments) != 0 {
+		t.Errorf("expected no segments, got %d", len(resp.Segments))
+	}
+}
+
+func TestSubmitOnSyncProviderRejected(t *testing.T) {
+	// OpenAI is synchronous; Submit/Wait is the wrong terminal (OAA-003).
+	c := New(providers.OpenAI, "test-key")
+	_, err := c.Transcription.Model("whisper-1").Submit(context.Background(), audioBytesPart("audio/mpeg", fakeSpeechMP3))
+	var verr *ValidationError
+	if !errors.As(err, &verr) || verr.Field != "interaction" {
+		t.Fatalf("expected interaction ValidationError, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "Transcribe") {
+		t.Errorf("expected the error to name Transcribe, got %v", err)
+	}
+}
+
+func TestTranscribeOnAsyncProviderRejected(t *testing.T) {
+	// AssemblyAI is asynchronous; Transcribe is the wrong terminal (OAA-003).
+	c := New(providers.Assemblyai, "test-key")
+	_, err := c.Transcription.Model("best").Transcribe(context.Background(), audioBytesPart("audio/mpeg", fakeSpeechMP3))
+	var verr *ValidationError
+	if !errors.As(err, &verr) || verr.Field != "interaction" {
+		t.Fatalf("expected interaction ValidationError, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "Submit/Wait") {
+		t.Errorf("expected the error to name Submit/Wait, got %v", err)
+	}
+}
+
+func TestTranscribeRejectsAudioURL(t *testing.T) {
+	// OpenAI ingests inline bytes only; a remote URL is rejected (OAA-005).
+	c := New(providers.OpenAI, "test-key")
+	_, err := c.Transcription.Model("whisper-1").Transcribe(context.Background(), audioURLPart("https://storage.example.com/talk.mp3"))
+	var verr *ValidationError
+	if !errors.As(err, &verr) || verr.Field != "parts[0]" {
+		t.Fatalf("expected parts ValidationError, got %v", err)
+	}
+}
+
+func TestTranscribeRequiresModel(t *testing.T) {
+	c := New(providers.OpenAI, "test-key")
+	_, err := c.Transcription.Transcribe(context.Background(), audioBytesPart("audio/mpeg", fakeSpeechMP3))
+	var verr *ValidationError
+	if !errors.As(err, &verr) || verr.Field != "model" {
+		t.Fatalf("expected model ValidationError, got %v", err)
 	}
 }

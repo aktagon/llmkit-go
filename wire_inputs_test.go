@@ -109,6 +109,8 @@ const (
 	wireToolToolDescription                     = "Get the current weather for a city."
 	wireToolToolSchema                          = "{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"additionalProperties\":false}"
 	wireTranscriptionAssemblyaiAudioURL         = "https://storage.example.com/meeting-2026-06-24.mp3"
+	wireTranscriptionOpenaiModel                = "whisper-1"
+	wireTranscriptionOpenaiAudioMime            = "audio/mpeg"
 	wireVideoBedrockModel                       = "amazon.nova-reel-v1:0"
 	wireVideoBedrockPrompt                      = "A drone shot sweeping over snow-capped alpine peaks at sunrise"
 	wireVideoGoogleModel                        = "veo-3.1-generate-preview"
