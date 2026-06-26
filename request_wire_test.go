@@ -1,10 +1,13 @@
 package llmkit
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
 	"io"
+	"mime"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -865,6 +868,77 @@ func TestRequestWire_SpeechOpenAI(t *testing.T) {
 		}
 	})
 	assertRequestWireGolden(t, "speech-openai", body)
+}
+
+// multipartToDescriptor decodes an encoded multipart/form-data body into the
+// canonical descriptor the cross-SDK comparator asserts (ADR-051 OQ-3): an
+// ordered list of form fields. The file part keeps its filename + content-type
+// but its bytes are replaced by a fixed placeholder (caller-supplied audio is
+// not asserted). Parsing the ACTUAL encoded bytes (not the pre-encoding fields)
+// keeps the descriptor independent of the golden.
+func multipartToDescriptor(t *testing.T, body []byte, contentType string) []byte {
+	t.Helper()
+	_, params, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		t.Fatalf("parse multipart content-type %q: %v", contentType, err)
+	}
+	boundary, ok := params["boundary"]
+	if !ok {
+		t.Fatalf("multipart content-type carried no boundary: %q", contentType)
+	}
+	mr := multipart.NewReader(bytes.NewReader(body), boundary)
+	fields := []map[string]any{}
+	for {
+		part, err := mr.NextPart()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatalf("read multipart part: %v", err)
+		}
+		if fn := part.FileName(); fn != "" {
+			fields = append(fields, map[string]any{
+				"name":        part.FormName(),
+				"filename":    fn,
+				"contentType": part.Header.Get("Content-Type"),
+				"bytes":       "<audio-bytes>",
+			})
+		} else {
+			val, _ := io.ReadAll(part)
+			fields = append(fields, map[string]any{
+				"name":  part.FormName(),
+				"value": string(val),
+			})
+		}
+		part.Close()
+	}
+	descriptor := map[string]any{
+		"_encoding": "multipart/form-data",
+		"fields":    fields,
+	}
+	out, err := json.Marshal(descriptor)
+	if err != nil {
+		t.Fatalf("marshal multipart descriptor: %v", err)
+	}
+	return out
+}
+
+// TestRequestWire_TranscriptionOpenAI witnesses the OpenAI SYNCHRONOUS
+// transcription body: a multipart/form-data POST to /v1/audio/transcriptions
+// with ordered fields {model, response_format, file} (ADR-051). The golden is
+// the canonical multipart descriptor (OQ-3); the audio bytes are a placeholder.
+func TestRequestWire_TranscriptionOpenAI(t *testing.T) {
+	body, headers := captureBody(t, providers.OpenAI, func(c *Client) {
+		_, err := c.Transcription.Model(wireTranscriptionOpenaiModel).Transcribe(
+			context.Background(),
+			Part{Audio: &MediaRef{MimeType: wireTranscriptionOpenaiAudioMime, Bytes: []byte("fake-audio-bytes")}},
+		)
+		if err != nil {
+			t.Fatalf("transcription transcribe openai call: %v", err)
+		}
+	})
+	descriptor := multipartToDescriptor(t, body, headers.Get("Content-Type"))
+	assertRequestWireGolden(t, "transcription-openai", descriptor)
 }
 
 // TestRequestWire_TranscriptionAssemblyAI witnesses the AssemblyAI async submit
