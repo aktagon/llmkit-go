@@ -73,9 +73,10 @@ func generateSpeech(ctx context.Context, p Provider, req SpeechRequest) (SpeechR
 		return SpeechResponse{}, err
 	}
 
-	return parseSpeechResponse(sgCfg.WireShape, model.OutputMime, respBody)
+	return parseSpeechResponse(sgCfg.AudioEncoding, model.OutputMime, respBody)
 }
 
+//
 //
 //
 //
@@ -101,7 +102,13 @@ func dispatchSpeechHTTP(
 		url = base + endpoint
 	}
 
-	body := buildInworldSpeechBody(req)
+	var body map[string]any
+	switch sgCfg.WireShape {
+	case providers.SpeechShapeOpenAI:
+		body = buildOpenAISpeechBody(req)
+	default: // SpeechShapeInworld
+		body = buildInworldSpeechBody(req)
+	}
 	jsonBody, err := json.Marshal(body)
 	if err != nil {
 		return nil, fmt.Errorf("marshal speech request: %w", err)
@@ -126,6 +133,19 @@ func buildInworldSpeechBody(req SpeechRequest) map[string]any {
 	}
 }
 
+//
+//
+//
+//
+func buildOpenAISpeechBody(req SpeechRequest) map[string]any {
+	return map[string]any{
+		"model":           req.Model,
+		"input":           req.Text,
+		"voice":           req.Voice,
+		"response_format": "mp3",
+	}
+}
+
 func findSpeechModel(cfg *providers.SpeechGenDef, modelID string) *providers.SpeechModelDef {
 	for i := range cfg.Models {
 		if cfg.Models[i].ModelID == modelID {
@@ -145,13 +165,18 @@ func voiceInCatalogue(cfg *providers.SpeechGenDef, voice string) bool {
 }
 
 //
-func parseSpeechResponse(wireShape, fallbackMime string, body []byte) (SpeechResponse, error) {
-	var raw map[string]any
-	if err := json.Unmarshal(body, &raw); err != nil {
-		return SpeechResponse{}, fmt.Errorf("unmarshal speech response: %w", err)
-	}
-	switch wireShape {
-	default: // SpeechShapeInworld
+//
+//
+//
+func parseSpeechResponse(audioEncoding, fallbackMime string, body []byte) (SpeechResponse, error) {
+	switch audioEncoding {
+	case "rawBody":
+		return SpeechResponse{Audio: AudioData{MimeType: fallbackMime, Bytes: body}}, nil
+	default: // base64Envelope
+		var raw map[string]any
+		if err := json.Unmarshal(body, &raw); err != nil {
+			return SpeechResponse{}, fmt.Errorf("unmarshal speech response: %w", err)
+		}
 		return parseInworldSpeechResponse(raw, fallbackMime), nil
 	}
 }
