@@ -13,6 +13,11 @@ type Provider struct {
 	APIKey  string
 	Model   string // optional, uses default if empty
 	BaseURL string // optional, overrides default API endpoint
+	// Headers are custom HTTP headers added via Client.AddHeader (ADR-052).
+	// Merged into every request before the provider auth header and the
+	// static required header, so a gateway header (e.g. cf-aig-authorization)
+	// rides alongside the provider key without clobbering it.
+	Headers map[string]string
 }
 
 // Capability names one of the SDK's modelled capabilities. The set mirrors

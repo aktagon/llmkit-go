@@ -344,6 +344,7 @@ func buildCatalogueHeaders(p Provider, pcfg providerSpec) map[string]string {
 	if pcfg.RequiredHeader != "" {
 		headers[pcfg.RequiredHeader] = pcfg.RequiredHeaderValue
 	}
+	mergeCallerHeaders(headers, p) // ADR-052: custom headers reach the catalogue path too.
 	return headers
 }
 

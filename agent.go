@@ -125,7 +125,7 @@ func (a *legacyAgent) runToolLoop(ctx context.Context) (Response, error) {
 			region := os.Getenv(cfg.RegionEnvVar)
 			secretKey := os.Getenv(cfg.SecretKeyEnvVar)
 			sessionToken := os.Getenv(cfg.SessionTokenEnvVar)
-			respBody, err = doSigV4Post(ctx, a.opts.httpClient, url, jsonBody, a.provider.APIKey, secretKey, sessionToken, region, cfg.ServiceName)
+			respBody, err = doSigV4Post(ctx, a.opts.httpClient, url, jsonBody, a.provider.APIKey, secretKey, sessionToken, region, cfg.ServiceName, a.provider.Headers)
 		} else {
 			respBody, err = doPost(ctx, a.opts.httpClient, url, jsonBody, headers)
 		}

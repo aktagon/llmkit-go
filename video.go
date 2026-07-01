@@ -292,7 +292,7 @@ func dispatchVideoSubmit(
 		region := os.Getenv(cfg.RegionEnvVar)
 		secretKey := os.Getenv(cfg.SecretKeyEnvVar)
 		sessionToken := os.Getenv(cfg.SessionTokenEnvVar)
-		respBody, err = doSigV4Post(ctx, client, submitURL, jsonBody, p.APIKey, secretKey, sessionToken, region, cfg.ServiceName)
+		respBody, err = doSigV4Post(ctx, client, submitURL, jsonBody, p.APIKey, secretKey, sessionToken, region, cfg.ServiceName, p.Headers)
 	} else {
 		respBody, err = doPost(ctx, client, submitURL, jsonBody, headers)
 	}
@@ -402,7 +402,7 @@ func (h VideoHandle) Wait(ctx context.Context, opts ...VideoOption) (VideoRespon
 		var err error
 		switch {
 		case sigV4:
-			respBody, err = doSigV4Get(ctx, client, pollURL, p.APIKey, secretKey, sessionToken, region, cfg.ServiceName)
+			respBody, err = doSigV4Get(ctx, client, pollURL, p.APIKey, secretKey, sessionToken, region, cfg.ServiceName, p.Headers)
 		case vertexPoll:
 			respBody, err = doPost(ctx, client, pollURL, vertexPollBody, headers)
 		default:
