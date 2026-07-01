@@ -172,6 +172,14 @@ func applyResourceCaching(ctx context.Context, body map[string]any, p Provider, 
 
 	respBody, err := doPost(ctx, o.httpClient, createURL, createJSON, headers)
 	if err != nil {
+		//
+		//
+		//
+		//
+		//
+		if apiErr, ok := err.(*APIError); ok && respBody != nil {
+			err = parseError(p.Name, apiErr.StatusCode, respBody, nil)
+		}
 		wrapped := fmt.Errorf("cache create request: %w", err)
 		postEv := baseEvent
 		postEv.Err = wrapped
