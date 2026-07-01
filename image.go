@@ -891,6 +891,7 @@ func imageAuthHeaders(p Provider, cfg providerSpec) map[string]string {
 	if cfg.RequiredHeader != "" {
 		headers[cfg.RequiredHeader] = cfg.RequiredHeaderValue
 	}
+	mergeCallerHeaders(headers, p) // ADR-052: additive; never clobbers auth/required above.
 	return headers
 }
 
