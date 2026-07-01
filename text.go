@@ -81,7 +81,7 @@ func (b *Text) Prompt(ctx context.Context, finalText string) (Response, error) {
 		region := os.Getenv(cfg.RegionEnvVar)
 		secretKey := os.Getenv(cfg.SecretKeyEnvVar)
 		sessionToken := os.Getenv(cfg.SessionTokenEnvVar)
-		respBody, err = doSigV4Post(ctx, o.httpClient, url, jsonBody, p.APIKey, secretKey, sessionToken, region, cfg.ServiceName)
+		respBody, err = doSigV4Post(ctx, o.httpClient, url, jsonBody, p.APIKey, secretKey, sessionToken, region, cfg.ServiceName, p.Headers)
 	} else {
 		respBody, err = doPost(ctx, o.httpClient, url, jsonBody, headers)
 	}

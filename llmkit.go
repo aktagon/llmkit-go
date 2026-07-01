@@ -15,15 +15,8 @@ import (
 // StreamCallback is called with each text chunk during streaming.
 type StreamCallback func(chunk string)
 
-// WithBaseURL overrides the provider's default endpoint root for this
-// client. Required for providers whose default base URL is a template
-// (e.g. Vertex AI Imagen, where the caller must substitute the
-// {location} and {project_id} placeholders). Returns the same Client so
-// callers can chain: c := llmkit.Vertex(token).WithBaseURL(url).
-func (c *Client) WithBaseURL(url string) *Client {
-	c.provider.baseURL = url
-	return c
-}
+// BaseURL and AddHeader (Client-scoped config setters, ADR-052) are
+// generated into builders.go from the api:ClientConfigMethod manifest.
 
 // Supports reports whether an explicit request for cap will not
 // hard-fail pre-flight on this client's provider (ADR-030). Gated
@@ -235,6 +228,7 @@ func uploadFile(ctx context.Context, p Provider, data []byte, name, mime string,
 	if fuDef.BetaHeader != "" {
 		headers["anthropic-beta"] = fuDef.BetaHeader
 	}
+	mergeCallerHeaders(headers, p) // ADR-052: additive; never clobbers the SDK headers above.
 
 	// Parse extra form fields
 	extraFields := map[string]string{}
@@ -564,6 +558,12 @@ func buildRequest(p Provider, req Request, msgs []msg, o *options, cfg providerS
 	if cfg.RequiredHeader != "" {
 		headers[cfg.RequiredHeader] = cfg.RequiredHeaderValue
 	}
+
+	// Caller custom headers (Client.AddHeader, ADR-052) — added AFTER the
+	// provider auth + required header so those can never be clobbered (HTTP
+	// header names are case-insensitive); a gateway header (cf-aig-authorization)
+	// still rides alongside the provider key.
+	mergeCallerHeaders(headers, p)
 
 	return body, headers
 }

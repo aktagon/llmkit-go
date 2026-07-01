@@ -276,7 +276,7 @@ const baseURL = "https://us-central1-aiplatform.googleapis.com" +
     "/v1/projects/my-gcp-project/locations/us-central1/publishers/google/models"
 
 token := os.Getenv("VERTEX_BEARER_TOKEN") // e.g. `gcloud auth print-access-token`
-c := llmkit.Vertex(token).WithBaseURL(baseURL)
+c := llmkit.Vertex(token).BaseURL(baseURL)
 
 resp, err := c.Image.Model("imagen-3.0-generate-002").
     AspectRatio("16:9").
@@ -298,7 +298,7 @@ Generate audio from a text prompt. Use the typed-builder chain on
 text. Decoded audio bytes come back on `resp.Audio[0].Bytes`.
 
 ```go
-c := llmkit.Vertex(token).WithBaseURL(vertexBaseURL)
+c := llmkit.Vertex(token).BaseURL(vertexBaseURL)
 resp, err := c.Music.Model("lyria-002").
     Generate(ctx, "a calm, slow instrumental with warm piano and soft strings")
 os.WriteFile("out.wav", resp.Audio[0].Bytes, 0o644)
@@ -434,6 +434,30 @@ history internally across `Prompt` calls instead.
 | presence_penalty  |           | x      |        | x    |
 | thinking_budget   | x         |        | x      |      |
 | reasoning_effort  |           | x      | x      |      |
+
+## Self-hosted endpoints
+
+`BaseURL` retargets the API host — any OpenAI-compatible server (vLLM, LM
+Studio, Ollama, corporate gateways):
+
+```go
+c := llmkit.OpenAI("anything").BaseURL("http://localhost:8080/v1")
+```
+
+## Custom headers
+
+`AddHeader` attaches a custom HTTP header to every request — for example an
+authenticated gateway that needs its own auth header alongside the provider
+key. `AddHeader` is chainable and calls accumulate.
+
+```go
+c := llmkit.Anthropic(apiKey).
+    BaseURL("https://gateway.example.com/anthropic").
+    AddHeader("cf-aig-authorization", "Bearer "+gatewayToken)
+```
+
+The custom header is sent in addition to the provider's auth header; it cannot
+override the provider auth header or the required version header.
 
 ## Middleware
 

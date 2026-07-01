@@ -182,16 +182,34 @@ func TestText_AddMiddleware_Appends(t *testing.T) {
 // TestEveryProviderFactory_Constructs in builders_constructors_test.go
 // — keeps the list and the ontology in lockstep.
 
-func TestClient_WithBaseURL_SetsAndReturnsSelf(t *testing.T) {
+func TestClient_BaseURL_SetsAndReturnsSelf(t *testing.T) {
 	override := "https://example.test/v1"
-	c := Vertex("test-token").WithBaseURL(override)
+	c := Vertex("test-token").BaseURL(override)
 	if c.provider.baseURL != override {
 		t.Errorf("baseURL not stored: got %q, want %q", c.provider.baseURL, override)
 	}
-	// Chainability: WithBaseURL must return the same *Client so callers
-	// can write `c := Vertex(t).WithBaseURL(url)` in one line.
-	if Vertex("k").WithBaseURL(override) == nil {
-		t.Error("WithBaseURL returned nil")
+	// Chainability: BaseURL must return the same *Client so callers
+	// can write `c := Vertex(t).BaseURL(url)` in one line.
+	if Vertex("k").BaseURL(override) == nil {
+		t.Error("BaseURL returned nil")
+	}
+}
+
+func TestClient_AddHeader_AccumulatesOntoProvider(t *testing.T) {
+	c := Anthropic("test-key").
+		AddHeader("cf-aig-authorization", "Bearer gw-token").
+		AddHeader("x-trace-id", "abc123")
+	if got := c.provider.headers["cf-aig-authorization"]; got != "Bearer gw-token" {
+		t.Errorf("first header not stored: got %q", got)
+	}
+	if got := c.provider.headers["x-trace-id"]; got != "abc123" {
+		t.Errorf("second header not stored (calls must accumulate): got %q", got)
+	}
+	// The headers must lower onto the runtime Provider via toProvider so
+	// every capability picks them up (ADR-052).
+	p := c.provider.toProvider("claude-sonnet-4-6")
+	if p.Headers["cf-aig-authorization"] != "Bearer gw-token" {
+		t.Errorf("headers not copied onto Provider: %v", p.Headers)
 	}
 }
 
