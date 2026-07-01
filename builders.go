@@ -17,12 +17,15 @@ type providerConfig struct {
 	name    string
 	apiKey  string
 	baseURL string
+	// headers are custom HTTP headers added via Client.AddHeader
+	// (ADR-052); copied onto every request's Provider.
+	headers map[string]string
 }
 
 // toProvider lowers the internal config to a Provider for the
 // internal request runtime.
 func (pc providerConfig) toProvider(model string) Provider {
-	return Provider{Name: pc.name, APIKey: pc.apiKey, Model: model, BaseURL: pc.baseURL}
+	return Provider{Name: pc.name, APIKey: pc.apiKey, Model: model, BaseURL: pc.baseURL, Headers: pc.headers}
 }
 
 // Client is the entry point for the typed-builder API. Each
@@ -100,6 +103,28 @@ func Vllm(apiKey string) *Client       { return newClient(providers.Vllm, apiKey
 func Workersai(apiKey string) *Client  { return newClient(providers.Workersai, apiKey) }
 func Yi(apiKey string) *Client         { return newClient(providers.Yi, apiKey) }
 func Zhipu(apiKey string) *Client      { return newClient(providers.Zhipu, apiKey) }
+
+// AddHeader attaches a custom HTTP header to every request for this
+// client; calls accumulate. Applied before the provider auth header,
+// so a gateway header (e.g. cf-aig-authorization) rides alongside the
+// provider key. Returns the same *Client for chaining.
+func (c *Client) AddHeader(name, value string) *Client {
+	if c.provider.headers == nil {
+		c.provider.headers = map[string]string{}
+	}
+	c.provider.headers[name] = value
+	return c
+}
+
+// BaseURL overrides the provider's default endpoint root for this
+// client. Required for providers whose default base URL is a
+// template the caller must substitute (e.g. Vertex AI Imagen) and
+// to point an OpenAI-compatible provider or gateway at a self-hosted
+// endpoint. Returns the same *Client for chaining.
+func (c *Client) BaseURL(url string) *Client {
+	c.provider.baseURL = url
+	return c
+}
 
 // === *Text — ChatCompletion builder ===
 

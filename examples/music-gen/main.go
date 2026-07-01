@@ -43,7 +43,7 @@ func main() {
 	)
 
 	ctx := context.Background()
-	c := llmkit.Vertex(token).WithBaseURL(baseURL)
+	c := llmkit.Vertex(token).BaseURL(baseURL)
 
 	// Keep the prompt abstract and instrumental — genre/artist-evocative
 	// prompts can trip Lyria's recitation filter (returns a 400).
