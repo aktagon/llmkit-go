@@ -214,9 +214,13 @@ func doMultipartPostMulti(ctx context.Context, client *http.Client, url string,
 	return data, nil
 }
 
-// doSigV4Post sends a POST request signed with AWS SigV4.
+// doSigV4Post sends a POST request signed with AWS SigV4. customHeaders are
+// caller-supplied custom headers (Client.AddHeader, ADR-052); they are added
+// AFTER signing so they ride alongside the request without altering the AWS
+// signature (extra unsigned headers are permitted, and a gateway in front of
+// Bedrock can read them).
 func doSigV4Post(ctx context.Context, client *http.Client, url string, body []byte,
-	accessKey, secretKey, sessionToken, region, service string) ([]byte, error) {
+	accessKey, secretKey, sessionToken, region, service string, customHeaders map[string]string) ([]byte, error) {
 
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
 	if err != nil {
@@ -225,6 +229,11 @@ func doSigV4Post(ctx context.Context, client *http.Client, url string, body []by
 	req.Header.Set("Content-Type", "application/json")
 
 	signSigV4(req, body, accessKey, secretKey, sessionToken, region, service)
+	for k, v := range customHeaders {
+		if req.Header.Get(k) == "" { // never overwrite a signed header (auth/amz/content-type)
+			req.Header.Set(k, v)
+		}
+	}
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -253,7 +262,7 @@ func doSigV4Post(ctx context.Context, client *http.Client, url string, body []by
 // by the caller — signSigV4 signs the escaped path so the signature matches
 // the bytes on the wire.
 func doSigV4Get(ctx context.Context, client *http.Client, url string,
-	accessKey, secretKey, sessionToken, region, service string) ([]byte, error) {
+	accessKey, secretKey, sessionToken, region, service string, customHeaders map[string]string) ([]byte, error) {
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
@@ -261,6 +270,11 @@ func doSigV4Get(ctx context.Context, client *http.Client, url string,
 	}
 
 	signSigV4(req, nil, accessKey, secretKey, sessionToken, region, service)
+	for k, v := range customHeaders {
+		if req.Header.Get(k) == "" { // never overwrite a signed header (auth/amz/content-type)
+			req.Header.Set(k, v)
+		}
+	}
 
 	resp, err := client.Do(req)
 	if err != nil {

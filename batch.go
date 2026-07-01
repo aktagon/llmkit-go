@@ -370,6 +370,34 @@ func navigateMapPath(data map[string]any, path string) map[string]any {
 	return current
 }
 
+// mergeCallerHeaders adds caller-supplied custom headers (Client.AddHeader,
+// ADR-052) to dst that do NOT already exist (case-insensitively). Call it
+// AFTER the SDK-set headers (provider auth, the static required header) are
+// written, so those can never be clobbered — HTTP header names are
+// case-insensitive, and Go's http.Header.Set canonicalizes, so a caller
+// "authorization" must not shadow the provider's "Authorization". The caller
+// can still add a new header (e.g. cf-aig-authorization) that the SDK did not
+// set.
+func mergeCallerHeaders(dst map[string]string, p Provider) {
+	for k, v := range p.Headers {
+		if headerPresent(dst, k) {
+			continue
+		}
+		dst[k] = v
+	}
+}
+
+// headerPresent reports whether m already carries key, comparing
+// case-insensitively (HTTP header names are case-insensitive).
+func headerPresent(m map[string]string, key string) bool {
+	for k := range m {
+		if strings.EqualFold(k, key) {
+			return true
+		}
+	}
+	return false
+}
+
 // buildAuthHeaders constructs authentication headers for a provider.
 func buildAuthHeaders(p Provider, cfg providerSpec) map[string]string {
 	headers := map[string]string{}
@@ -382,6 +410,7 @@ func buildAuthHeaders(p Provider, cfg providerSpec) map[string]string {
 	if cfg.RequiredHeader != "" {
 		headers[cfg.RequiredHeader] = cfg.RequiredHeaderValue
 	}
+	mergeCallerHeaders(headers, p) // ADR-052: additive; never clobbers auth/required above.
 	return headers
 }
 
