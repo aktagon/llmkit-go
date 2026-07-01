@@ -168,6 +168,7 @@ func applyResourceCaching(ctx context.Context, body map[string]any, p Provider, 
 	} else if cfg.AuthScheme == providers.AuthHeaderAPIKey {
 		headers[cfg.AuthHeader] = p.APIKey
 	}
+	mergeCallerHeaders(headers, p) // ADR-052: additive; never clobbers provider auth above.
 
 	respBody, err := doPost(ctx, o.httpClient, createURL, createJSON, headers)
 	if err != nil {
