@@ -172,6 +172,14 @@ func applyResourceCaching(ctx context.Context, body map[string]any, p Provider, 
 
 	respBody, err := doPost(ctx, o.httpClient, createURL, createJSON, headers)
 	if err != nil {
+		// Surface the provider's own error envelope (e.g. Gemini's
+		// "Cached content is too small ... min_total_token_count=1024")
+		// rather than the raw body. Caching is optional but must fail
+		// honestly: llmkit never invents the provider's size floor, it
+		// reports whatever the provider rejected with.
+		if apiErr, ok := err.(*APIError); ok && respBody != nil {
+			err = parseError(p.Name, apiErr.StatusCode, respBody, nil)
+		}
 		wrapped := fmt.Errorf("cache create request: %w", err)
 		postEv := baseEvent
 		postEv.Err = wrapped
