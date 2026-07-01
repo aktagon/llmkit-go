@@ -3,6 +3,7 @@ package llmkit
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -934,6 +935,52 @@ func TestWithCachingUnsupported(t *testing.T) {
 	_, err := New(providers.Groq, "key").Text.Caching().Prompt(context.Background(), "Hi")
 	if err == nil {
 		t.Error("expected error for unsupported caching")
+	}
+}
+
+// TestResourceCachingCreateSurfacesProviderError is the BUG-016 regression.
+// When the ResourceCaching create (Google's POST /v1beta/cachedContents) is
+// rejected — e.g. Gemini's "Cached content is too small" 400 for content
+// below its per-model token floor — the caller must get a clean, typed
+// *APIError carrying the provider's OWN message, not an opaque raw-body wrap.
+// llmkit invents no size floor; it surfaces whatever the provider rejected
+// with. This typed, structured error (provider + status + message) is also
+// the substrate the opt-in capability telemetry will read from the Event.Err
+// channel to infer live what a model supports.
+func TestResourceCachingCreateSurfacesProviderError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// The cachedContents create is the first call; reject it as Gemini
+		// does for sub-floor content.
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]any{
+			"error": map[string]any{
+				"code":    400,
+				"message": "Cached content is too small. total_token_count=653, min_total_token_count=1024",
+				"status":  "INVALID_ARGUMENT",
+			},
+		})
+	}))
+	defer server.Close()
+
+	c := New(providers.Google, "key")
+	c.provider.baseURL = server.URL
+	_, err := c.Text.System("small system prompt").Caching().Prompt(context.Background(), "Hi")
+	if err == nil {
+		t.Fatal("expected an error from the cachedContents create, got nil")
+	}
+
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("expected error to unwrap to *APIError, got %T: %v", err, err)
+	}
+	if apiErr.Provider != "google" {
+		t.Errorf("expected provider \"google\" (proves parseError ran), got %q", apiErr.Provider)
+	}
+	if apiErr.StatusCode != 400 {
+		t.Errorf("expected status 400, got %d", apiErr.StatusCode)
+	}
+	if !strings.Contains(apiErr.Message, "min_total_token_count=1024") {
+		t.Errorf("expected the provider's own message to surface, got %q", apiErr.Message)
 	}
 }
 
