@@ -371,6 +371,34 @@ func navigateMapPath(data map[string]any, path string) map[string]any {
 }
 
 //
+//
+//
+//
+//
+//
+//
+//
+func mergeCallerHeaders(dst map[string]string, p Provider) {
+	for k, v := range p.Headers {
+		if headerPresent(dst, k) {
+			continue
+		}
+		dst[k] = v
+	}
+}
+
+//
+//
+func headerPresent(m map[string]string, key string) bool {
+	for k := range m {
+		if strings.EqualFold(k, key) {
+			return true
+		}
+	}
+	return false
+}
+
+//
 func buildAuthHeaders(p Provider, cfg providerSpec) map[string]string {
 	headers := map[string]string{}
 	switch cfg.AuthScheme {
@@ -382,6 +410,7 @@ func buildAuthHeaders(p Provider, cfg providerSpec) map[string]string {
 	if cfg.RequiredHeader != "" {
 		headers[cfg.RequiredHeader] = cfg.RequiredHeaderValue
 	}
+	mergeCallerHeaders(headers, p) // ADR-052: additive; never clobbers auth/required above.
 	return headers
 }
 

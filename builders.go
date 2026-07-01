@@ -17,12 +17,15 @@ type providerConfig struct {
 	name    string
 	apiKey  string
 	baseURL string
+	//
+	//
+	headers map[string]string
 }
 
 //
 //
 func (pc providerConfig) toProvider(model string) Provider {
-	return Provider{Name: pc.name, APIKey: pc.apiKey, Model: model, BaseURL: pc.baseURL}
+	return Provider{Name: pc.name, APIKey: pc.apiKey, Model: model, BaseURL: pc.baseURL, Headers: pc.headers}
 }
 
 //
@@ -100,6 +103,28 @@ func Vllm(apiKey string) *Client       { return newClient(providers.Vllm, apiKey
 func Workersai(apiKey string) *Client  { return newClient(providers.Workersai, apiKey) }
 func Yi(apiKey string) *Client         { return newClient(providers.Yi, apiKey) }
 func Zhipu(apiKey string) *Client      { return newClient(providers.Zhipu, apiKey) }
+
+//
+//
+//
+//
+func (c *Client) AddHeader(name, value string) *Client {
+	if c.provider.headers == nil {
+		c.provider.headers = map[string]string{}
+	}
+	c.provider.headers[name] = value
+	return c
+}
+
+//
+//
+//
+//
+//
+func (c *Client) BaseURL(url string) *Client {
+	c.provider.baseURL = url
+	return c
+}
 
 //
 

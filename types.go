@@ -13,6 +13,11 @@ type Provider struct {
 	APIKey  string
 	Model   string // optional, uses default if empty
 	BaseURL string // optional, overrides default API endpoint
+	//
+	//
+	//
+	//
+	Headers map[string]string
 }
 
 //

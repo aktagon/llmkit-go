@@ -17,13 +17,6 @@ type StreamCallback func(chunk string)
 
 //
 //
-//
-//
-//
-func (c *Client) WithBaseURL(url string) *Client {
-	c.provider.baseURL = url
-	return c
-}
 
 //
 //
@@ -235,6 +228,7 @@ func uploadFile(ctx context.Context, p Provider, data []byte, name, mime string,
 	if fuDef.BetaHeader != "" {
 		headers["anthropic-beta"] = fuDef.BetaHeader
 	}
+	mergeCallerHeaders(headers, p) // ADR-052: additive; never clobbers the SDK headers above.
 
 	//
 	extraFields := map[string]string{}
@@ -564,6 +558,12 @@ func buildRequest(p Provider, req Request, msgs []msg, o *options, cfg providerS
 	if cfg.RequiredHeader != "" {
 		headers[cfg.RequiredHeader] = cfg.RequiredHeaderValue
 	}
+
+	//
+	//
+	//
+	//
+	mergeCallerHeaders(headers, p)
 
 	return body, headers
 }

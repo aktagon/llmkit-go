@@ -215,8 +215,12 @@ func doMultipartPostMulti(ctx context.Context, client *http.Client, url string,
 }
 
 //
+//
+//
+//
+//
 func doSigV4Post(ctx context.Context, client *http.Client, url string, body []byte,
-	accessKey, secretKey, sessionToken, region, service string) ([]byte, error) {
+	accessKey, secretKey, sessionToken, region, service string, customHeaders map[string]string) ([]byte, error) {
 
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
 	if err != nil {
@@ -225,6 +229,11 @@ func doSigV4Post(ctx context.Context, client *http.Client, url string, body []by
 	req.Header.Set("Content-Type", "application/json")
 
 	signSigV4(req, body, accessKey, secretKey, sessionToken, region, service)
+	for k, v := range customHeaders {
+		if req.Header.Get(k) == "" { // never overwrite a signed header (auth/amz/content-type)
+			req.Header.Set(k, v)
+		}
+	}
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -253,7 +262,7 @@ func doSigV4Post(ctx context.Context, client *http.Client, url string, body []by
 //
 //
 func doSigV4Get(ctx context.Context, client *http.Client, url string,
-	accessKey, secretKey, sessionToken, region, service string) ([]byte, error) {
+	accessKey, secretKey, sessionToken, region, service string, customHeaders map[string]string) ([]byte, error) {
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
@@ -261,6 +270,11 @@ func doSigV4Get(ctx context.Context, client *http.Client, url string,
 	}
 
 	signSigV4(req, nil, accessKey, secretKey, sessionToken, region, service)
+	for k, v := range customHeaders {
+		if req.Header.Get(k) == "" { // never overwrite a signed header (auth/amz/content-type)
+			req.Header.Set(k, v)
+		}
+	}
 
 	resp, err := client.Do(req)
 	if err != nil {

@@ -43,7 +43,7 @@ func main() {
 	)
 
 	ctx := context.Background()
-	c := llmkit.Vertex(token).WithBaseURL(baseURL)
+	c := llmkit.Vertex(token).BaseURL(baseURL)
 
 	//
 	//
