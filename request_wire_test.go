@@ -572,6 +572,29 @@ func TestRequestWire_WorkersAI(t *testing.T) {
 	assertRequestWireGolden(t, "workersai", body)
 }
 
+// TestRequestWire_ResponsesOpenAI witnesses the OpenAI Responses protocol body
+// (ADR-055): Text.Protocol(Responses) POSTs the SAME flat message array as Chat
+// Completions but under the "input" key (NOT "messages") with the output-token
+// cap renamed max_tokens -> max_output_tokens, to /v1/responses. The default
+// Chat Completions goldens are untouched (default pinned), so this fixture is
+// the sole witness that the wire shape diverges only in envelope key + endpoint
+// + that one option key.
+//
+// WIRE-005 provenance: live-anchored 2026-07-02 — this exact body shape (input
+// array + max_output_tokens) POSTed to /v1/responses returned HTTP 200, status
+// "completed", reply at output[0].content[0].text ("Helsinki."); the flat
+// max_tokens key is rejected 400 (unknown_parameter), confirming the rename.
+func TestRequestWire_ResponsesOpenAI(t *testing.T) {
+	body, _ := captureBody(t, providers.OpenAI, func(c *Client) {
+		_, err := c.Text.Protocol(Responses).Model(wireResponsesOpenaiModel).MaxTokens(wireResponsesOpenaiMaxTokens).
+			Prompt(context.Background(), wireResponsesOpenaiPrompt)
+		if err != nil {
+			t.Fatalf("responses openai call: %v", err)
+		}
+	})
+	assertRequestWireGolden(t, "responses-openai", body)
+}
+
 // TestRequestWire_OptionsAnthropicAdaptive witnesses the adaptive thinking
 // surface (ADR-029): ReasoningEffort resolves to the output_config.effort
 // dotted path AND root-merges {"thinking":{"type":"adaptive"}} via

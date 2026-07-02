@@ -389,6 +389,65 @@ func containsValue(csv, value string) bool {
 	return false
 }
 
+// Responses is the ADR-055 opt-in chat-protocol token for OpenAI's Responses
+// API. Pass it to Text.Protocol to POST the {input} envelope to /v1/responses
+// instead of the default Chat Completions {messages} envelope to
+// /v1/chat/completions. It is a plain string; c.Text.Protocol("responses") is
+// equivalent (per-SDK idiom note, ADR-055 — Go adds this ergonomic const).
+const Responses = "responses"
+
+// protocolWireShape maps a public Protocol token to its llm:ChatWireShape.
+// An empty token keeps the provider's default protocol.
+func protocolWireShape(token string) string {
+	switch token {
+	case Responses:
+		return providers.ChatResponsesOpenAI
+	}
+	return ""
+}
+
+// rejectNonDefaultProtocol enforces that Protocol (e.g. Responses) is opt-in
+// only on the sync prompt terminal (ADR-055 slice 1). The batch and stream
+// terminals raise a loud ValidationError rather than silently sending the
+// default Chat Completions request — a silent drop of an explicit opt-in is a
+// footgun, and the four SDKs stay uniform (streaming/batch Responses is a
+// documented follow-up slice).
+func rejectNonDefaultProtocol(protocol, terminal string) error {
+	if protocol == "" {
+		return nil
+	}
+	return &ValidationError{
+		Field:   "protocol",
+		Message: "protocol (e.g. Responses) is only supported on the prompt terminal, not " + terminal + " (ADR-055)",
+	}
+}
+
+// resolveChatProtocol returns cfg with Endpoint + ChatWireShape overridden for a
+// non-default chat protocol opt-in (ADR-055 Protocol(...)). An empty token keeps
+// the default (cfg unchanged). A provider that does not expose the requested
+// protocol raises ValidationError(field:"protocol") — the loud, uniform error
+// the ADR requires. cfg is a value, so the override never leaks to other calls.
+func resolveChatProtocol(cfg providerSpec, token string) (providerSpec, error) {
+	if token == "" {
+		return cfg, nil
+	}
+	want := protocolWireShape(token)
+	if want == "" {
+		return cfg, &ValidationError{Field: "protocol", Message: "unknown protocol: " + token}
+	}
+	for _, cp := range cfg.ChatProtocols {
+		if cp.WireShape == want {
+			cfg.Endpoint = cp.Endpoint
+			cfg.ChatWireShape = cp.WireShape
+			return cfg, nil
+		}
+	}
+	return cfg, &ValidationError{
+		Field:   "protocol",
+		Message: fmt.Sprintf("provider %q does not support protocol %q", cfg.Name, token),
+	}
+}
+
 // buildURL constructs the full API URL for a provider.
 func buildURL(p Provider, cfg providerSpec) string {
 	base := p.BaseURL
@@ -564,6 +623,18 @@ func buildRequest(p Provider, req Request, msgs []msg, o *options, cfg providerS
 	// header names are case-insensitive); a gateway header (cf-aig-authorization)
 	// still rides alongside the provider key.
 	mergeCallerHeaders(headers, p)
+
+	// ADR-055 Responses wire-shape body fixup: the Responses API names the
+	// output-token cap max_output_tokens and rejects max_tokens with a 400
+	// (live-verified 2026-07-02). Every other body field is shared with Chat
+	// Completions, so this single rename is the only option-key divergence in
+	// slice 1. Behavior held by responses-openai.json, not the ontology.
+	if cfg.ChatWireShape == providers.ChatResponsesOpenAI {
+		if v, ok := body["max_tokens"]; ok {
+			body["max_output_tokens"] = v
+			delete(body, "max_tokens")
+		}
+	}
 
 	return body, headers
 }
@@ -815,11 +886,18 @@ func removeAdditionalProperties(schema any) {
 	}
 }
 
-// parseResponse extracts text and usage from a provider response.
-func parseResponse(provider string, body []byte) (Response, error) {
+// parseResponse extracts text and usage from a provider response. chatWireShape
+// is the EFFECTIVE wire shape for this request (after Protocol(...) resolution,
+// ADR-055): only ChatResponsesOpenAI diverges (the output[] envelope); every
+// other value uses the provider's declared response paths.
+func parseResponse(provider, chatWireShape string, body []byte) (Response, error) {
 	var raw map[string]any
 	if err := json.Unmarshal(body, &raw); err != nil {
 		return Response{}, fmt.Errorf("unmarshal response: %w", err)
+	}
+
+	if chatWireShape == providers.ChatResponsesOpenAI {
+		return parseResponsesEnvelope(raw), nil
 	}
 
 	text := extractPath(raw, providers.ResponseTextPath(provider))
@@ -844,6 +922,59 @@ func parseResponse(provider string, body []byte) (Response, error) {
 		FinishReason:  finishReason,
 		FinishMessage: finishMessage,
 	}, nil
+}
+
+// parseResponsesEnvelope extracts text + usage from OpenAI's Responses reply
+// (ADR-055). Unlike Chat Completions (choices[].message.content), the reply is
+// an output[] array whose message item carries content[] blocks of type
+// "output_text"; usage is input_tokens/output_tokens with cached + reasoning
+// sub-details. Live-anchored 2026-07-02. Hand-coded per wire shape, symmetric
+// with the transformResponsesInput request arm (ADR-028: behavior held by tests,
+// not by declared response paths).
+func parseResponsesEnvelope(raw map[string]any) Response {
+	resp := Response{
+		Text: extractResponsesText(raw),
+		Usage: Usage{
+			Input:     extractIntPath(raw, "usage.input_tokens"),
+			Output:    extractIntPath(raw, "usage.output_tokens"),
+			CacheRead: extractIntPath(raw, "usage.input_tokens_details.cached_tokens"),
+			Reasoning: extractIntPath(raw, "usage.output_tokens_details.reasoning_tokens"),
+		},
+	}
+	if pathPresent(raw, "status") {
+		resp.FinishReason = extractPath(raw, "status")
+	}
+	return resp
+}
+
+// extractResponsesText walks the Responses output[] array for the first
+// message item and returns its first output_text block. Iterating (rather than
+// a fixed output[0].content[0] path) tolerates a leading reasoning item.
+func extractResponsesText(raw map[string]any) string {
+	output, ok := raw["output"].([]any)
+	if !ok {
+		return ""
+	}
+	for _, item := range output {
+		m, ok := item.(map[string]any)
+		if !ok || m["type"] != "message" {
+			continue
+		}
+		content, ok := m["content"].([]any)
+		if !ok {
+			continue
+		}
+		for _, c := range content {
+			cm, ok := c.(map[string]any)
+			if !ok || cm["type"] != "output_text" {
+				continue
+			}
+			if t, ok := cm["text"].(string); ok {
+				return t
+			}
+		}
+	}
+	return ""
 }
 
 // extractFinishSignal pulls the provider stop signal and free-text message

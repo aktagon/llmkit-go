@@ -142,6 +142,7 @@ type Text struct {
 	maxTokens        *int
 	model            string
 	presencePenalty  *float64
+	protocol         string
 	raw              bool
 	reasoningEffort  string
 	safetySettings   []SafetySetting
@@ -190,7 +191,8 @@ func (b *Text) PresencePenalty(v float64) *Text {
 	out.presencePenalty = &x
 	return &out
 }
-func (b *Text) Raw() *Text { out := *b; out.raw = true; return &out }
+func (b *Text) Protocol(name string) *Text { out := *b; out.protocol = name; return &out }
+func (b *Text) Raw() *Text                 { out := *b; out.raw = true; return &out }
 func (b *Text) ReasoningEffort(level string) *Text {
 	out := *b
 	out.reasoningEffort = level

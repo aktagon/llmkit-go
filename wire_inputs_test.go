@@ -94,6 +94,9 @@ const (
 	wireOptionsOpenaiOSeriesMaxTokens           = 1024
 	wireOptionsOpenaiOSeriesReasoningEffort     = "medium"
 	wireOptionsOpenaiOSeriesSeed                = 7
+	wireResponsesOpenaiModel                    = "gpt-4o-mini"
+	wireResponsesOpenaiPrompt                   = "Name the capital of Finland in one word."
+	wireResponsesOpenaiMaxTokens                = 256
 	wireSpeechInworldModel                      = "inworld-tts-2"
 	wireSpeechInworldPrompt                     = "Hello from llmkit."
 	wireSpeechInworldVoice                      = "Dennis"
