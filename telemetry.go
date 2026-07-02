@@ -70,7 +70,13 @@ func makeTelemetryMiddleware(t Telemetry) MiddlewareFn {
 		if e.Phase != providers.PhasePost {
 			return nil
 		}
-		exportTelemetry(ctx, t, e)
+		// Fire-and-forget on a detached context: a slow/hung collector must not
+		// add latency to the caller (up to the 5s client timeout). The request
+		// ctx is cancelled when the call returns, so use context.Background();
+		// e is passed by value and exportTelemetry has its own recover(). One
+		// goroutine per export; a shared worker + bounded channel is the FU-6
+		// upgrade.
+		go exportTelemetry(context.Background(), t, e)
 		return nil
 	}
 }
