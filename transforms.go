@@ -27,6 +27,8 @@ func selectMessageTransform(cfg providerSpec) messageTransformFunc {
 		return transformBedrockConverse
 	case providers.ChatGoogle:
 		return transformGoogleParts
+	case providers.ChatResponsesOpenAI:
+		return transformResponsesInput
 	default: // ChatOpenAI, ChatAnthropic — flat {messages} envelope
 		return transformFlatContent
 	}
@@ -174,6 +176,21 @@ func toInternal(messages []Message) ([]msg, error) {
 type messageTransformFunc func(body map[string]any, msgs []msg, req Request, cfg providerSpec)
 
 func transformFlatContent(body map[string]any, msgs []msg, req Request, cfg providerSpec) {
+	body["messages"] = buildFlatMessageArray(msgs, req, cfg)
+}
+
+// transformResponsesInput builds the OpenAI Responses envelope (ADR-055): the
+// SAME flat {role, content} array as Chat Completions, but under the "input"
+// key instead of "messages" and POSTed to /v1/responses. The array shape is
+// shared with transformFlatContent via buildFlatMessageArray, so the golden
+// witnesses that the only wire delta is the envelope key + endpoint.
+func transformResponsesInput(body map[string]any, msgs []msg, req Request, cfg providerSpec) {
+	body["input"] = buildFlatMessageArray(msgs, req, cfg)
+}
+
+// buildFlatMessageArray builds the shared flat message array used by both the
+// Chat Completions ("messages") and Responses ("input") envelopes.
+func buildFlatMessageArray(msgs []msg, req Request, cfg providerSpec) []map[string]any {
 	out := []map[string]any{}
 
 	if cfg.SystemPlacement == providers.PlacementMessageInArray && req.System != "" {
@@ -217,7 +234,7 @@ func transformFlatContent(body map[string]any, msgs []msg, req Request, cfg prov
 		}
 	}
 
-	body["messages"] = out
+	return out
 }
 
 // buildFlatContentParts builds a content array for OpenAI/Anthropic with files and images.
