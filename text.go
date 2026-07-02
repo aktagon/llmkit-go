@@ -39,6 +39,13 @@ func (b *Text) Prompt(ctx context.Context, finalText string) (Response, error) {
 		return Response{}, &ValidationError{Field: "provider", Message: "unknown: " + p.Name}
 	}
 
+	// ADR-055: opt into a non-default chat protocol (Responses). Overrides the
+	// endpoint + wire shape on this call's cfg copy; empty keeps the default.
+	cfg, err = resolveChatProtocol(cfg, b.protocol)
+	if err != nil {
+		return Response{}, err
+	}
+
 	model, err := resolveModel(p, cfg)
 	if err != nil {
 		return Response{}, err
@@ -100,7 +107,7 @@ func (b *Text) Prompt(ctx context.Context, finalText string) (Response, error) {
 		return Response{}, err
 	}
 
-	resp, parseErr := parseResponse(p.Name, respBody)
+	resp, parseErr := parseResponse(p.Name, cfg.ChatWireShape, respBody)
 	if o.raw && parseErr == nil {
 		resp.Raw = append(json.RawMessage(nil), respBody...)
 	}
