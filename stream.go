@@ -40,12 +40,17 @@ type TextStream struct {
 func (b *Text) Stream(ctx context.Context, finalText string) *TextStream {
 	req, opts := b.buildRequest(finalText)
 	provider := b.client.provider.toProvider(b.model)
-	return &TextStream{
+	ts := &TextStream{
 		ctx:      ctx,
 		provider: provider,
 		req:      req,
 		opts:     opts,
 	}
+	//
+	//
+	//
+	ts.err = rejectNonDefaultProtocol(b.protocol, "stream")
+	return ts
 }
 
 //
@@ -61,6 +66,13 @@ func (s *TextStream) Chunks() iter.Seq2[string, error] {
 			return
 		}
 		s.consumed = true
+
+		//
+		//
+		if s.err != nil {
+			yield("", s.err)
+			return
+		}
 
 		innerCtx, cancel := context.WithCancel(s.ctx)
 		defer cancel()

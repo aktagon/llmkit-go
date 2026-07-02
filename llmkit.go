@@ -390,6 +390,65 @@ func containsValue(csv, value string) bool {
 }
 
 //
+//
+//
+//
+//
+const Responses = "responses"
+
+//
+//
+func protocolWireShape(token string) string {
+	switch token {
+	case Responses:
+		return providers.ChatResponsesOpenAI
+	}
+	return ""
+}
+
+//
+//
+//
+//
+//
+//
+func rejectNonDefaultProtocol(protocol, terminal string) error {
+	if protocol == "" {
+		return nil
+	}
+	return &ValidationError{
+		Field:   "protocol",
+		Message: "protocol (e.g. Responses) is only supported on the prompt terminal, not " + terminal + " (ADR-055)",
+	}
+}
+
+//
+//
+//
+//
+//
+func resolveChatProtocol(cfg providerSpec, token string) (providerSpec, error) {
+	if token == "" {
+		return cfg, nil
+	}
+	want := protocolWireShape(token)
+	if want == "" {
+		return cfg, &ValidationError{Field: "protocol", Message: "unknown protocol: " + token}
+	}
+	for _, cp := range cfg.ChatProtocols {
+		if cp.WireShape == want {
+			cfg.Endpoint = cp.Endpoint
+			cfg.ChatWireShape = cp.WireShape
+			return cfg, nil
+		}
+	}
+	return cfg, &ValidationError{
+		Field:   "protocol",
+		Message: fmt.Sprintf("provider %q does not support protocol %q", cfg.Name, token),
+	}
+}
+
+//
 func buildURL(p Provider, cfg providerSpec) string {
 	base := p.BaseURL
 	if base == "" {
@@ -564,6 +623,18 @@ func buildRequest(p Provider, req Request, msgs []msg, o *options, cfg providerS
 	//
 	//
 	mergeCallerHeaders(headers, p)
+
+	//
+	//
+	//
+	//
+	//
+	if cfg.ChatWireShape == providers.ChatResponsesOpenAI {
+		if v, ok := body["max_tokens"]; ok {
+			body["max_output_tokens"] = v
+			delete(body, "max_tokens")
+		}
+	}
 
 	return body, headers
 }
@@ -816,10 +887,17 @@ func removeAdditionalProperties(schema any) {
 }
 
 //
-func parseResponse(provider string, body []byte) (Response, error) {
+//
+//
+//
+func parseResponse(provider, chatWireShape string, body []byte) (Response, error) {
 	var raw map[string]any
 	if err := json.Unmarshal(body, &raw); err != nil {
 		return Response{}, fmt.Errorf("unmarshal response: %w", err)
+	}
+
+	if chatWireShape == providers.ChatResponsesOpenAI {
+		return parseResponsesEnvelope(raw), nil
 	}
 
 	text := extractPath(raw, providers.ResponseTextPath(provider))
@@ -844,6 +922,59 @@ func parseResponse(provider string, body []byte) (Response, error) {
 		FinishReason:  finishReason,
 		FinishMessage: finishMessage,
 	}, nil
+}
+
+//
+//
+//
+//
+//
+//
+//
+func parseResponsesEnvelope(raw map[string]any) Response {
+	resp := Response{
+		Text: extractResponsesText(raw),
+		Usage: Usage{
+			Input:     extractIntPath(raw, "usage.input_tokens"),
+			Output:    extractIntPath(raw, "usage.output_tokens"),
+			CacheRead: extractIntPath(raw, "usage.input_tokens_details.cached_tokens"),
+			Reasoning: extractIntPath(raw, "usage.output_tokens_details.reasoning_tokens"),
+		},
+	}
+	if pathPresent(raw, "status") {
+		resp.FinishReason = extractPath(raw, "status")
+	}
+	return resp
+}
+
+//
+//
+//
+func extractResponsesText(raw map[string]any) string {
+	output, ok := raw["output"].([]any)
+	if !ok {
+		return ""
+	}
+	for _, item := range output {
+		m, ok := item.(map[string]any)
+		if !ok || m["type"] != "message" {
+			continue
+		}
+		content, ok := m["content"].([]any)
+		if !ok {
+			continue
+		}
+		for _, c := range content {
+			cm, ok := c.(map[string]any)
+			if !ok || cm["type"] != "output_text" {
+				continue
+			}
+			if t, ok := cm["text"].(string); ok {
+				return t
+			}
+		}
+	}
+	return ""
 }
 
 //

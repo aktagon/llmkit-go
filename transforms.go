@@ -27,6 +27,8 @@ func selectMessageTransform(cfg providerSpec) messageTransformFunc {
 		return transformBedrockConverse
 	case providers.ChatGoogle:
 		return transformGoogleParts
+	case providers.ChatResponsesOpenAI:
+		return transformResponsesInput
 	default: // ChatOpenAI, ChatAnthropic — flat {messages} envelope
 		return transformFlatContent
 	}
@@ -174,6 +176,21 @@ func toInternal(messages []Message) ([]msg, error) {
 type messageTransformFunc func(body map[string]any, msgs []msg, req Request, cfg providerSpec)
 
 func transformFlatContent(body map[string]any, msgs []msg, req Request, cfg providerSpec) {
+	body["messages"] = buildFlatMessageArray(msgs, req, cfg)
+}
+
+//
+//
+//
+//
+//
+func transformResponsesInput(body map[string]any, msgs []msg, req Request, cfg providerSpec) {
+	body["input"] = buildFlatMessageArray(msgs, req, cfg)
+}
+
+//
+//
+func buildFlatMessageArray(msgs []msg, req Request, cfg providerSpec) []map[string]any {
 	out := []map[string]any{}
 
 	if cfg.SystemPlacement == providers.PlacementMessageInArray && req.System != "" {
@@ -217,7 +234,7 @@ func transformFlatContent(body map[string]any, msgs []msg, req Request, cfg prov
 		}
 	}
 
-	body["messages"] = out
+	return out
 }
 
 //
