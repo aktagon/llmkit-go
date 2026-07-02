@@ -10,6 +10,17 @@ const (
 )
 
 //
+//
+//
+const (
+	ChatOpenAI          = "ChatOpenAI"
+	ChatAnthropic       = "ChatAnthropic"
+	ChatGoogle          = "ChatGoogle"
+	ChatBedrock         = "ChatBedrock"
+	ChatResponsesOpenAI = "ChatResponsesOpenAI"
+)
+
+//
 const (
 	AuthBearerToken   = "BearerToken"
 	AuthHeaderAPIKey  = "HeaderAPIKey"

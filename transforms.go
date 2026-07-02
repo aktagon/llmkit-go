@@ -13,27 +13,31 @@ import (
 //
 
 //
-func isBedrock(cfg providerSpec) bool {
-	return cfg.WrapsOptionsIn == "inferenceConfig" && cfg.AuthScheme == providers.AuthSigV4
-}
+//
+//
+//
+//
+//
+//
 
 //
 func selectMessageTransform(cfg providerSpec) messageTransformFunc {
-	if isBedrock(cfg) {
+	switch cfg.ChatWireShape {
+	case providers.ChatBedrock:
 		return transformBedrockConverse
-	}
-	if cfg.SystemPlacement == providers.PlacementSiblingObject {
+	case providers.ChatGoogle:
 		return transformGoogleParts
+	default: // ChatOpenAI, ChatAnthropic — flat {messages} envelope
+		return transformFlatContent
 	}
-	return transformFlatContent
 }
 
 //
 func selectToolDefTransform(cfg providerSpec) toolDefTransformFunc {
-	if isBedrock(cfg) {
+	switch cfg.ChatWireShape {
+	case providers.ChatBedrock:
 		return transformBedrockToolDefs
-	}
-	if cfg.SystemPlacement == providers.PlacementSiblingObject {
+	case providers.ChatGoogle:
 		//
 		//
 		//
@@ -54,10 +58,10 @@ func selectToolDefTransform(cfg providerSpec) toolDefTransformFunc {
 
 //
 func selectToolCallTransform(cfg providerSpec) toolCallTransformFunc {
-	if isBedrock(cfg) {
+	switch cfg.ChatWireShape {
+	case providers.ChatBedrock:
 		return transformBedrockToolCallMsg
-	}
-	if cfg.SystemPlacement == providers.PlacementSiblingObject {
+	case providers.ChatGoogle:
 		return transformGoogleToolCallMsg
 	}
 	tc := providers.ToolCallConfig(cfg.Name)
@@ -69,10 +73,10 @@ func selectToolCallTransform(cfg providerSpec) toolCallTransformFunc {
 
 //
 func selectToolResultTransform(cfg providerSpec) toolResultTransformFunc {
-	if isBedrock(cfg) {
+	switch cfg.ChatWireShape {
+	case providers.ChatBedrock:
 		return transformBedrockToolResultMsg
-	}
-	if cfg.SystemPlacement == providers.PlacementSiblingObject {
+	case providers.ChatGoogle:
 		return transformGoogleToolResultMsg
 	}
 	tc := providers.ToolCallConfig(cfg.Name)
@@ -84,10 +88,10 @@ func selectToolResultTransform(cfg providerSpec) toolResultTransformFunc {
 
 //
 func selectToolCallExtractor(cfg providerSpec) toolCallExtractFunc {
-	if isBedrock(cfg) {
+	switch cfg.ChatWireShape {
+	case providers.ChatBedrock:
 		return extractBedrockToolCalls
-	}
-	if cfg.SystemPlacement == providers.PlacementSiblingObject {
+	case providers.ChatGoogle:
 		return extractGoogleToolCalls
 	}
 	tc := providers.ToolCallConfig(cfg.Name)
@@ -220,7 +224,7 @@ func transformFlatContent(body map[string]any, msgs []msg, req Request, cfg prov
 func buildFlatContentParts(req Request, cfg providerSpec) []map[string]any {
 	parts := []map[string]any{}
 
-	isAnthropic := cfg.SystemPlacement == providers.PlacementTopLevelField
+	isAnthropic := cfg.ChatWireShape == providers.ChatAnthropic
 
 	for _, f := range req.Files {
 		if isAnthropic {
