@@ -70,7 +70,13 @@ func makeTelemetryMiddleware(t Telemetry) MiddlewareFn {
 		if e.Phase != providers.PhasePost {
 			return nil
 		}
-		exportTelemetry(ctx, t, e)
+		//
+		//
+		//
+		//
+		//
+		//
+		go exportTelemetry(context.Background(), t, e)
 		return nil
 	}
 }
