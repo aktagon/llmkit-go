@@ -3,6 +3,8 @@ package llmkit
 import (
 	"encoding/json"
 	"testing"
+
+	"github.com/aktagon/llmkit-go/providers"
 )
 
 func googleConfig() providerSpec {
@@ -379,8 +381,8 @@ func TestParseErrorInvalidJSON(t *testing.T) {
 func TestSelectTransformsBedrock(t *testing.T) {
 	cfg := bedrockConfig()
 
-	if !isBedrock(cfg) {
-		t.Fatal("expected isBedrock to be true for bedrock config")
+	if cfg.ChatWireShape != providers.ChatBedrock {
+		t.Fatalf("expected ChatWireShape ChatBedrock for bedrock config, got %q", cfg.ChatWireShape)
 	}
 
 	// Should pick Bedrock-specific transforms
@@ -401,8 +403,8 @@ func TestSelectTransformsBedrock(t *testing.T) {
 func TestSelectTransformsGoogle(t *testing.T) {
 	cfg := googleConfig()
 
-	if isBedrock(cfg) {
-		t.Fatal("Google should not be detected as Bedrock")
+	if cfg.ChatWireShape != providers.ChatGoogle {
+		t.Fatalf("expected ChatWireShape ChatGoogle for google config, got %q", cfg.ChatWireShape)
 	}
 
 	msg := selectMessageTransform(cfg)
