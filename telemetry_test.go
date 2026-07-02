@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/aktagon/llmkit-go/providers"
 )
@@ -84,6 +85,9 @@ func TestTelemetry_ExportsToMockCollector(t *testing.T) {
 		gotHdr string
 		body   []byte
 	)
+	// Export is now fire-and-forget on a goroutine (FU-2), so signal when the
+	// POST lands rather than reading the captured fields racily.
+	done := make(chan struct{})
 	collector := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		b, _ := io.ReadAll(r.Body)
 		mu.Lock()
@@ -92,6 +96,7 @@ func TestTelemetry_ExportsToMockCollector(t *testing.T) {
 		body = b
 		mu.Unlock()
 		w.WriteHeader(200)
+		close(done)
 	}))
 	defer collector.Close()
 
@@ -107,6 +112,12 @@ func TestTelemetry_ExportsToMockCollector(t *testing.T) {
 	}
 	if err := mw(context.Background(), ev); err != nil {
 		t.Fatalf("post middleware returned error (should be fail-open): %v", err)
+	}
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("collector did not receive export within 2s")
 	}
 
 	mu.Lock()
