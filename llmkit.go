@@ -240,7 +240,7 @@ func uploadFile(ctx context.Context, p Provider, data []byte, name, mime string,
 	}
 
 	// Google needs metadata as a JSON form field
-	if cfg.SystemPlacement == providers.PlacementSiblingObject {
+	if cfg.ChatWireShape == providers.ChatGoogle {
 		metadata := map[string]any{"file": map[string]any{"display_name": name}}
 		metaJSON, _ := json.Marshal(metadata)
 		extraFields["metadata"] = string(metaJSON)

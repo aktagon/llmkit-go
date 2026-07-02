@@ -9,6 +9,17 @@ const (
 	PlacementSiblingObject  = "SiblingObject"
 )
 
+// Chat wire shapes — the request/response transform family selected
+// per chat protocol (ADR-055). The runtime switches on ChatWireShape
+// instead of inferring the family from SystemPlacement/auth (ADR-047).
+const (
+	ChatOpenAI          = "ChatOpenAI"
+	ChatAnthropic       = "ChatAnthropic"
+	ChatGoogle          = "ChatGoogle"
+	ChatBedrock         = "ChatBedrock"
+	ChatResponsesOpenAI = "ChatResponsesOpenAI"
+)
+
 // Authentication schemes.
 const (
 	AuthBearerToken   = "BearerToken"
