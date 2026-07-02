@@ -60,23 +60,23 @@ const (
 type Event struct {
 	// Op — Always set.
 	Op MiddlewareOp
-	// Phase — Always set.
+	// Phase — Always set. Internal-only (drives pre/post dispatch); not an OTEL attribute.
 	Phase MiddlewarePhase
 	// Provider — Always set.
 	Provider string
 	// Model — Always set.
 	Model string
-	// Tool — Only set when Op=tool_call.
+	// Tool — Only set when Op=tool_call. Internal-only.
 	Tool string
-	// Args — Only set when Op=tool_call, Phase=pre. Mutation by middleware is observed by the tool.
+	// Args — Only set when Op=tool_call, Phase=pre. Mutation by middleware is observed by the tool. Internal-only.
 	Args map[string]any
-	// Result — Only set when Op=tool_call, Phase=post.
+	// Result — Only set when Op=tool_call, Phase=post. Internal-only.
 	Result string
-	// Usage — Set for Op=llm_request, Phase=post.
+	// Usage — Set for Op=llm_request, Phase=post. Expanded to gen_ai.usage.* via llm:otelUsageAttribute on each TokenDimension, not a single attribute.
 	Usage Usage
 	// Err — Set in Phase=post when the operation failed.
 	Err error
-	// Duration — Set in Phase=post.
+	// Duration — Set in Phase=post. Internal-only (maps to span duration, not a gen_ai attribute).
 	Duration time.Duration
 }
 
