@@ -2,6 +2,12 @@
 
 package llmkit
 
+type chatProtocol struct {
+	WireShape  string
+	Endpoint   string
+	StateModel string
+}
+
 // providerSpec is HOW the library talks to a provider (PRIVATE): the
 // internal wire/transform spec (response paths, auth scheme, role mappings,
 // ...) consumed only by the runtime. Volatile; never the public surface.
@@ -20,7 +26,8 @@ type providerSpec struct {
 	RequiredHeader          string
 	RequiredHeaderValue     string
 	SystemPlacement         string
-	ChatWireShape           string // ADR-055: total-switch chat transform discriminator (ChatOpenAI/ChatAnthropic/ChatGoogle/ChatBedrock/ChatResponsesOpenAI); empty for media-only providers
+	ChatWireShape           string         // ADR-055: total-switch chat transform discriminator (ChatOpenAI/ChatAnthropic/ChatGoogle/ChatBedrock/ChatResponsesOpenAI); empty for media-only providers
+	ChatProtocols           []chatProtocol // ADR-055: full chat protocol set (default + opt-in, e.g. OpenAI Responses); empty for media-only providers
 	RoleMappings            map[string]string
 	UsageInputPath          string
 	UsageOutputPath         string
@@ -62,6 +69,9 @@ var providerSpecRegistry = map[string]providerSpec{
 		RequiredHeaderValue: "",
 		SystemPlacement:     "MessageInArray",
 		ChatWireShape:       "ChatOpenAI",
+		ChatProtocols: []chatProtocol{
+			{WireShape: "ChatOpenAI", Endpoint: "/v1/chat/completions", StateModel: "Stateless"},
+		},
 		RoleMappings: map[string]string{
 			"assistant": "assistant",
 			"system":    "system",
@@ -102,6 +112,9 @@ var providerSpecRegistry = map[string]providerSpec{
 		RequiredHeaderValue: "2023-06-01",
 		SystemPlacement:     "TopLevelField",
 		ChatWireShape:       "ChatAnthropic",
+		ChatProtocols: []chatProtocol{
+			{WireShape: "ChatAnthropic", Endpoint: "/v1/messages", StateModel: "Stateless"},
+		},
 		RoleMappings: map[string]string{
 			"assistant": "assistant",
 			"user":      "user",
@@ -177,6 +190,9 @@ var providerSpecRegistry = map[string]providerSpec{
 		RequiredHeaderValue: "",
 		SystemPlacement:     "MessageInArray",
 		ChatWireShape:       "ChatOpenAI",
+		ChatProtocols: []chatProtocol{
+			{WireShape: "ChatOpenAI", Endpoint: "/openai/deployments/{model}/chat/completions?api-version=2024-10-21", StateModel: "Stateless"},
+		},
 		RoleMappings: map[string]string{
 			"assistant": "assistant",
 			"system":    "system",
@@ -217,6 +233,9 @@ var providerSpecRegistry = map[string]providerSpec{
 		RequiredHeaderValue: "",
 		SystemPlacement:     "TopLevelField",
 		ChatWireShape:       "ChatBedrock",
+		ChatProtocols: []chatProtocol{
+			{WireShape: "ChatBedrock", Endpoint: "/model/{model}/converse", StateModel: "Stateless"},
+		},
 		RoleMappings: map[string]string{
 			"assistant": "assistant",
 			"user":      "user",
@@ -255,6 +274,9 @@ var providerSpecRegistry = map[string]providerSpec{
 		RequiredHeaderValue: "",
 		SystemPlacement:     "MessageInArray",
 		ChatWireShape:       "ChatOpenAI",
+		ChatProtocols: []chatProtocol{
+			{WireShape: "ChatOpenAI", Endpoint: "/v1/chat/completions", StateModel: "Stateless"},
+		},
 		RoleMappings: map[string]string{
 			"assistant": "assistant",
 			"system":    "system",
@@ -295,6 +317,9 @@ var providerSpecRegistry = map[string]providerSpec{
 		RequiredHeaderValue: "",
 		SystemPlacement:     "MessageInArray",
 		ChatWireShape:       "ChatOpenAI",
+		ChatProtocols: []chatProtocol{
+			{WireShape: "ChatOpenAI", Endpoint: "/v1/chat/completions", StateModel: "Stateless"},
+		},
 		RoleMappings: map[string]string{
 			"assistant": "assistant",
 			"system":    "system",
@@ -335,6 +360,9 @@ var providerSpecRegistry = map[string]providerSpec{
 		RequiredHeaderValue: "",
 		SystemPlacement:     "MessageInArray",
 		ChatWireShape:       "ChatOpenAI",
+		ChatProtocols: []chatProtocol{
+			{WireShape: "ChatOpenAI", Endpoint: "/v1/chat/completions", StateModel: "Stateless"},
+		},
 		RoleMappings: map[string]string{
 			"assistant": "assistant",
 			"system":    "system",
@@ -375,6 +403,9 @@ var providerSpecRegistry = map[string]providerSpec{
 		RequiredHeaderValue: "",
 		SystemPlacement:     "MessageInArray",
 		ChatWireShape:       "ChatOpenAI",
+		ChatProtocols: []chatProtocol{
+			{WireShape: "ChatOpenAI", Endpoint: "/chat/completions", StateModel: "Stateless"},
+		},
 		RoleMappings: map[string]string{
 			"assistant": "assistant",
 			"system":    "system",
@@ -415,6 +446,9 @@ var providerSpecRegistry = map[string]providerSpec{
 		RequiredHeaderValue: "",
 		SystemPlacement:     "MessageInArray",
 		ChatWireShape:       "ChatOpenAI",
+		ChatProtocols: []chatProtocol{
+			{WireShape: "ChatOpenAI", Endpoint: "/chat/completions", StateModel: "Stateless"},
+		},
 		RoleMappings: map[string]string{
 			"assistant": "assistant",
 			"system":    "system",
@@ -455,6 +489,9 @@ var providerSpecRegistry = map[string]providerSpec{
 		RequiredHeaderValue: "",
 		SystemPlacement:     "MessageInArray",
 		ChatWireShape:       "ChatOpenAI",
+		ChatProtocols: []chatProtocol{
+			{WireShape: "ChatOpenAI", Endpoint: "/v1/chat/completions", StateModel: "Stateless"},
+		},
 		RoleMappings: map[string]string{
 			"assistant": "assistant",
 			"system":    "system",
@@ -495,6 +532,9 @@ var providerSpecRegistry = map[string]providerSpec{
 		RequiredHeaderValue: "",
 		SystemPlacement:     "SiblingObject",
 		ChatWireShape:       "ChatGoogle",
+		ChatProtocols: []chatProtocol{
+			{WireShape: "ChatGoogle", Endpoint: "/v1beta/models/{model}:generateContent", StateModel: "Stateless"},
+		},
 		RoleMappings: map[string]string{
 			"assistant": "model",
 			"user":      "user",
@@ -533,6 +573,9 @@ var providerSpecRegistry = map[string]providerSpec{
 		RequiredHeaderValue: "",
 		SystemPlacement:     "MessageInArray",
 		ChatWireShape:       "ChatOpenAI",
+		ChatProtocols: []chatProtocol{
+			{WireShape: "ChatOpenAI", Endpoint: "/v1/chat/completions", StateModel: "Stateless"},
+		},
 		RoleMappings: map[string]string{
 			"assistant": "assistant",
 			"system":    "system",
@@ -573,6 +616,9 @@ var providerSpecRegistry = map[string]providerSpec{
 		RequiredHeaderValue: "",
 		SystemPlacement:     "MessageInArray",
 		ChatWireShape:       "ChatOpenAI",
+		ChatProtocols: []chatProtocol{
+			{WireShape: "ChatOpenAI", Endpoint: "/v1/chat/completions", StateModel: "Stateless"},
+		},
 		RoleMappings: map[string]string{
 			"assistant": "assistant",
 			"system":    "system",
@@ -650,6 +696,9 @@ var providerSpecRegistry = map[string]providerSpec{
 		RequiredHeaderValue: "",
 		SystemPlacement:     "MessageInArray",
 		ChatWireShape:       "ChatOpenAI",
+		ChatProtocols: []chatProtocol{
+			{WireShape: "ChatOpenAI", Endpoint: "/v1/chat/completions", StateModel: "Stateless"},
+		},
 		RoleMappings: map[string]string{
 			"assistant": "assistant",
 			"system":    "system",
@@ -690,6 +739,9 @@ var providerSpecRegistry = map[string]providerSpec{
 		RequiredHeaderValue: "",
 		SystemPlacement:     "MessageInArray",
 		ChatWireShape:       "ChatOpenAI",
+		ChatProtocols: []chatProtocol{
+			{WireShape: "ChatOpenAI", Endpoint: "/v1/chat/completions", StateModel: "Stateless"},
+		},
 		RoleMappings: map[string]string{
 			"assistant": "assistant",
 			"system":    "system",
@@ -730,6 +782,9 @@ var providerSpecRegistry = map[string]providerSpec{
 		RequiredHeaderValue: "",
 		SystemPlacement:     "MessageInArray",
 		ChatWireShape:       "ChatOpenAI",
+		ChatProtocols: []chatProtocol{
+			{WireShape: "ChatOpenAI", Endpoint: "/v1/chat/completions", StateModel: "Stateless"},
+		},
 		RoleMappings: map[string]string{
 			"assistant": "assistant",
 			"system":    "system",
@@ -770,6 +825,9 @@ var providerSpecRegistry = map[string]providerSpec{
 		RequiredHeaderValue: "",
 		SystemPlacement:     "MessageInArray",
 		ChatWireShape:       "ChatOpenAI",
+		ChatProtocols: []chatProtocol{
+			{WireShape: "ChatOpenAI", Endpoint: "/v1/text/chatcompletion_v2", StateModel: "Stateless"},
+		},
 		RoleMappings: map[string]string{
 			"assistant": "assistant",
 			"system":    "system",
@@ -810,6 +868,9 @@ var providerSpecRegistry = map[string]providerSpec{
 		RequiredHeaderValue: "",
 		SystemPlacement:     "MessageInArray",
 		ChatWireShape:       "ChatOpenAI",
+		ChatProtocols: []chatProtocol{
+			{WireShape: "ChatOpenAI", Endpoint: "/v1/chat/completions", StateModel: "Stateless"},
+		},
 		RoleMappings: map[string]string{
 			"assistant": "assistant",
 			"system":    "system",
@@ -850,6 +911,9 @@ var providerSpecRegistry = map[string]providerSpec{
 		RequiredHeaderValue: "",
 		SystemPlacement:     "MessageInArray",
 		ChatWireShape:       "ChatOpenAI",
+		ChatProtocols: []chatProtocol{
+			{WireShape: "ChatOpenAI", Endpoint: "/v1/chat/completions", StateModel: "Stateless"},
+		},
 		RoleMappings: map[string]string{
 			"assistant": "assistant",
 			"system":    "system",
@@ -890,6 +954,9 @@ var providerSpecRegistry = map[string]providerSpec{
 		RequiredHeaderValue: "",
 		SystemPlacement:     "MessageInArray",
 		ChatWireShape:       "ChatOpenAI",
+		ChatProtocols: []chatProtocol{
+			{WireShape: "ChatOpenAI", Endpoint: "/v1/chat/completions", StateModel: "Stateless"},
+		},
 		RoleMappings: map[string]string{
 			"assistant": "assistant",
 			"system":    "system",
@@ -930,6 +997,10 @@ var providerSpecRegistry = map[string]providerSpec{
 		RequiredHeaderValue: "",
 		SystemPlacement:     "MessageInArray",
 		ChatWireShape:       "ChatOpenAI",
+		ChatProtocols: []chatProtocol{
+			{WireShape: "ChatOpenAI", Endpoint: "/v1/chat/completions", StateModel: "Stateless"},
+			{WireShape: "ChatResponsesOpenAI", Endpoint: "/v1/responses", StateModel: "ServerSideState"},
+		},
 		RoleMappings: map[string]string{
 			"assistant": "assistant",
 			"system":    "system",
@@ -970,6 +1041,9 @@ var providerSpecRegistry = map[string]providerSpec{
 		RequiredHeaderValue: "",
 		SystemPlacement:     "MessageInArray",
 		ChatWireShape:       "ChatOpenAI",
+		ChatProtocols: []chatProtocol{
+			{WireShape: "ChatOpenAI", Endpoint: "/v1/chat/completions", StateModel: "Stateless"},
+		},
 		RoleMappings: map[string]string{
 			"assistant": "assistant",
 			"system":    "system",
@@ -1010,6 +1084,9 @@ var providerSpecRegistry = map[string]providerSpec{
 		RequiredHeaderValue: "",
 		SystemPlacement:     "MessageInArray",
 		ChatWireShape:       "ChatOpenAI",
+		ChatProtocols: []chatProtocol{
+			{WireShape: "ChatOpenAI", Endpoint: "/chat/completions", StateModel: "Stateless"},
+		},
 		RoleMappings: map[string]string{
 			"assistant": "assistant",
 			"system":    "system",
@@ -1086,6 +1163,9 @@ var providerSpecRegistry = map[string]providerSpec{
 		RequiredHeaderValue: "",
 		SystemPlacement:     "MessageInArray",
 		ChatWireShape:       "ChatOpenAI",
+		ChatProtocols: []chatProtocol{
+			{WireShape: "ChatOpenAI", Endpoint: "/v1/chat/completions", StateModel: "Stateless"},
+		},
 		RoleMappings: map[string]string{
 			"assistant": "assistant",
 			"system":    "system",
@@ -1163,6 +1243,9 @@ var providerSpecRegistry = map[string]providerSpec{
 		RequiredHeaderValue: "",
 		SystemPlacement:     "MessageInArray",
 		ChatWireShape:       "ChatOpenAI",
+		ChatProtocols: []chatProtocol{
+			{WireShape: "ChatOpenAI", Endpoint: "/v1/chat/completions", StateModel: "Stateless"},
+		},
 		RoleMappings: map[string]string{
 			"assistant": "assistant",
 			"system":    "system",
@@ -1203,6 +1286,9 @@ var providerSpecRegistry = map[string]providerSpec{
 		RequiredHeaderValue: "",
 		SystemPlacement:     "MessageInArray",
 		ChatWireShape:       "ChatOpenAI",
+		ChatProtocols: []chatProtocol{
+			{WireShape: "ChatOpenAI", Endpoint: "/v1/chat/completions", StateModel: "Stateless"},
+		},
 		RoleMappings: map[string]string{
 			"assistant": "assistant",
 			"system":    "system",
@@ -1317,6 +1403,9 @@ var providerSpecRegistry = map[string]providerSpec{
 		RequiredHeaderValue: "",
 		SystemPlacement:     "MessageInArray",
 		ChatWireShape:       "ChatOpenAI",
+		ChatProtocols: []chatProtocol{
+			{WireShape: "ChatOpenAI", Endpoint: "/v1/chat/completions", StateModel: "Stateless"},
+		},
 		RoleMappings: map[string]string{
 			"assistant": "assistant",
 			"system":    "system",
@@ -1357,6 +1446,9 @@ var providerSpecRegistry = map[string]providerSpec{
 		RequiredHeaderValue: "",
 		SystemPlacement:     "MessageInArray",
 		ChatWireShape:       "ChatOpenAI",
+		ChatProtocols: []chatProtocol{
+			{WireShape: "ChatOpenAI", Endpoint: "/chat/completions", StateModel: "Stateless"},
+		},
 		RoleMappings: map[string]string{
 			"assistant": "assistant",
 			"system":    "system",
@@ -1397,6 +1489,9 @@ var providerSpecRegistry = map[string]providerSpec{
 		RequiredHeaderValue: "",
 		SystemPlacement:     "MessageInArray",
 		ChatWireShape:       "ChatOpenAI",
+		ChatProtocols: []chatProtocol{
+			{WireShape: "ChatOpenAI", Endpoint: "/v1/chat/completions", StateModel: "Stateless"},
+		},
 		RoleMappings: map[string]string{
 			"assistant": "assistant",
 			"system":    "system",
@@ -1436,6 +1531,9 @@ var providerSpecRegistry = map[string]providerSpec{
 		RequiredHeaderValue: "",
 		SystemPlacement:     "MessageInArray",
 		ChatWireShape:       "ChatOpenAI",
+		ChatProtocols: []chatProtocol{
+			{WireShape: "ChatOpenAI", Endpoint: "/v4/chat/completions", StateModel: "Stateless"},
+		},
 		RoleMappings: map[string]string{
 			"assistant": "assistant",
 			"system":    "system",
