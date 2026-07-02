@@ -12,28 +12,32 @@ import (
 // Transform selection — derive which transform to use from ProviderSpec
 // =============================================================================
 
-// isBedrock detects Bedrock Converse API shape from config fields.
-func isBedrock(cfg providerSpec) bool {
-	return cfg.WrapsOptionsIn == "inferenceConfig" && cfg.AuthScheme == providers.AuthSigV4
-}
+// Transform selection switches on the ChatWireShape discriminant (ADR-055):
+// a single declared fact per provider replaces the old isBedrock/SystemPlacement
+// inference (ADR-047), which permitted the SigV4+non-Bedrock illegal state. The
+// OpenAI and Anthropic families share the flat {messages} envelope, so they fall
+// through to the default arm; the OpenAI-vs-Anthropic split (tool arg format,
+// content-part encoding) stays keyed on its own ToolCallConfig/ChatWireShape
+// facts, not on system placement. ChatResponsesOpenAI has no arm yet (Phase B).
 
-// selectMessageTransform picks the message builder based on config.
+// selectMessageTransform picks the message builder based on the chat wire shape.
 func selectMessageTransform(cfg providerSpec) messageTransformFunc {
-	if isBedrock(cfg) {
+	switch cfg.ChatWireShape {
+	case providers.ChatBedrock:
 		return transformBedrockConverse
-	}
-	if cfg.SystemPlacement == providers.PlacementSiblingObject {
+	case providers.ChatGoogle:
 		return transformGoogleParts
+	default: // ChatOpenAI, ChatAnthropic — flat {messages} envelope
+		return transformFlatContent
 	}
-	return transformFlatContent
 }
 
 // selectToolDefTransform picks the tool definition builder.
 func selectToolDefTransform(cfg providerSpec) toolDefTransformFunc {
-	if isBedrock(cfg) {
+	switch cfg.ChatWireShape {
+	case providers.ChatBedrock:
 		return transformBedrockToolDefs
-	}
-	if cfg.SystemPlacement == providers.PlacementSiblingObject {
+	case providers.ChatGoogle:
 		// Google carries tool params under a per-provider wire field
 		// (ADR-025): "parametersJsonSchema" to accept native JSON Schema
 		// verbatim, vs the OpenAPI-3.0-subset "parameters" default.
@@ -54,10 +58,10 @@ func selectToolDefTransform(cfg providerSpec) toolDefTransformFunc {
 
 // selectToolCallTransform picks the tool call message builder.
 func selectToolCallTransform(cfg providerSpec) toolCallTransformFunc {
-	if isBedrock(cfg) {
+	switch cfg.ChatWireShape {
+	case providers.ChatBedrock:
 		return transformBedrockToolCallMsg
-	}
-	if cfg.SystemPlacement == providers.PlacementSiblingObject {
+	case providers.ChatGoogle:
 		return transformGoogleToolCallMsg
 	}
 	tc := providers.ToolCallConfig(cfg.Name)
@@ -69,10 +73,10 @@ func selectToolCallTransform(cfg providerSpec) toolCallTransformFunc {
 
 // selectToolResultTransform picks the tool result message builder.
 func selectToolResultTransform(cfg providerSpec) toolResultTransformFunc {
-	if isBedrock(cfg) {
+	switch cfg.ChatWireShape {
+	case providers.ChatBedrock:
 		return transformBedrockToolResultMsg
-	}
-	if cfg.SystemPlacement == providers.PlacementSiblingObject {
+	case providers.ChatGoogle:
 		return transformGoogleToolResultMsg
 	}
 	tc := providers.ToolCallConfig(cfg.Name)
@@ -84,10 +88,10 @@ func selectToolResultTransform(cfg providerSpec) toolResultTransformFunc {
 
 // selectToolCallExtractor picks the tool call parser for responses.
 func selectToolCallExtractor(cfg providerSpec) toolCallExtractFunc {
-	if isBedrock(cfg) {
+	switch cfg.ChatWireShape {
+	case providers.ChatBedrock:
 		return extractBedrockToolCalls
-	}
-	if cfg.SystemPlacement == providers.PlacementSiblingObject {
+	case providers.ChatGoogle:
 		return extractGoogleToolCalls
 	}
 	tc := providers.ToolCallConfig(cfg.Name)
@@ -220,7 +224,7 @@ func transformFlatContent(body map[string]any, msgs []msg, req Request, cfg prov
 func buildFlatContentParts(req Request, cfg providerSpec) []map[string]any {
 	parts := []map[string]any{}
 
-	isAnthropic := cfg.SystemPlacement == providers.PlacementTopLevelField
+	isAnthropic := cfg.ChatWireShape == providers.ChatAnthropic
 
 	for _, f := range req.Files {
 		if isAnthropic {
