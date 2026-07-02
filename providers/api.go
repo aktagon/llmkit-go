@@ -56,6 +56,7 @@ func APIOptions() []APIOptionDef {
 		{GoFunc: "WithOutputURI", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithPath", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithPresencePenalty", SubOptions: []APISubOptionDef{}},
+		{GoFunc: "WithProtocol", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithProvider", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithQuality", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithRaw", SubOptions: []APISubOptionDef{}},

@@ -344,7 +344,9 @@ func parseBatchResults(provider string, data []byte, bc *providers.BatchDef, raw
 			responseBytes, _ = json.Marshal(inner)
 		}
 
-		resp, err := parseResponse(provider, responseBytes)
+		// Batch is Chat-Completions-only (ADR-055): empty wire shape selects the
+		// provider's declared response paths, not the Responses output[] arm.
+		resp, err := parseResponse(provider, "", responseBytes)
 		if err != nil {
 			continue
 		}

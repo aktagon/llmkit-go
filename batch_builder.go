@@ -12,6 +12,9 @@ import (
 // Provider gate: only Anthropic, Google, OpenAI support batch APIs;
 // other providers surface a ValidationError from PromptBatch.
 func (b *Text) Batch(ctx context.Context, prompts ...string) ([]Response, error) {
+	if err := rejectNonDefaultProtocol(b.protocol, "batch"); err != nil {
+		return nil, err
+	}
 	reqs, opts := b.batchInputs(prompts)
 	provider := b.client.provider.toProvider(b.model)
 	return promptBatch(ctx, provider, reqs, opts...)
@@ -25,6 +28,9 @@ func (b *Text) Batch(ctx context.Context, prompts ...string) ([]Response, error)
 // to re-specify. Cross-process resume callers persist
 // {ID, Provider, Raw} and reconstruct directly.
 func (b *Text) SubmitBatch(ctx context.Context, prompts ...string) (BatchHandle, error) {
+	if err := rejectNonDefaultProtocol(b.protocol, "batch"); err != nil {
+		return BatchHandle{}, err
+	}
 	reqs, opts := b.batchInputs(prompts)
 	provider := b.client.provider.toProvider(b.model)
 	legacy, err := submitBatch(ctx, provider, reqs, opts...)
