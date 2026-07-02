@@ -40,12 +40,17 @@ type TextStream struct {
 func (b *Text) Stream(ctx context.Context, finalText string) *TextStream {
 	req, opts := b.buildRequest(finalText)
 	provider := b.client.provider.toProvider(b.model)
-	return &TextStream{
+	ts := &TextStream{
 		ctx:      ctx,
 		provider: provider,
 		req:      req,
 		opts:     opts,
 	}
+	// ADR-055: Protocol (e.g. Responses) is prompt-only in slice 1; surface a
+	// loud error via the trailing handle rather than silently streaming Chat
+	// Completions. Chunks() yields it before starting the producer.
+	ts.err = rejectNonDefaultProtocol(b.protocol, "stream")
+	return ts
 }
 
 // Chunks returns an iter.Seq2[string, error] that yields chunk-string /
@@ -61,6 +66,13 @@ func (s *TextStream) Chunks() iter.Seq2[string, error] {
 			return
 		}
 		s.consumed = true
+
+		// Pre-terminal error (e.g. ADR-055 Protocol on the stream terminal):
+		// surface it without starting the producer goroutine.
+		if s.err != nil {
+			yield("", s.err)
+			return
+		}
 
 		innerCtx, cancel := context.WithCancel(s.ctx)
 		defer cancel()
