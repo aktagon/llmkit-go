@@ -20,6 +20,7 @@ type providerSpec struct {
 	RequiredHeader          string
 	RequiredHeaderValue     string
 	SystemPlacement         string
+	ChatWireShape           string // ADR-055: total-switch chat transform discriminator (ChatOpenAI/ChatAnthropic/ChatGoogle/ChatBedrock/ChatResponsesOpenAI); empty for media-only providers
 	RoleMappings            map[string]string
 	UsageInputPath          string
 	UsageOutputPath         string
@@ -60,6 +61,7 @@ var providerSpecRegistry = map[string]providerSpec{
 		RequiredHeader:      "",
 		RequiredHeaderValue: "",
 		SystemPlacement:     "MessageInArray",
+		ChatWireShape:       "ChatOpenAI",
 		RoleMappings: map[string]string{
 			"assistant": "assistant",
 			"system":    "system",
@@ -99,6 +101,7 @@ var providerSpecRegistry = map[string]providerSpec{
 		RequiredHeader:      "anthropic-version",
 		RequiredHeaderValue: "2023-06-01",
 		SystemPlacement:     "TopLevelField",
+		ChatWireShape:       "ChatAnthropic",
 		RoleMappings: map[string]string{
 			"assistant": "assistant",
 			"user":      "user",
@@ -136,6 +139,7 @@ var providerSpecRegistry = map[string]providerSpec{
 		RequiredHeader:      "",
 		RequiredHeaderValue: "",
 		SystemPlacement:     "MessageInArray",
+		ChatWireShape:       "",
 		RoleMappings: map[string]string{
 			"user": "user",
 		},
@@ -172,6 +176,7 @@ var providerSpecRegistry = map[string]providerSpec{
 		RequiredHeader:      "",
 		RequiredHeaderValue: "",
 		SystemPlacement:     "MessageInArray",
+		ChatWireShape:       "ChatOpenAI",
 		RoleMappings: map[string]string{
 			"assistant": "assistant",
 			"system":    "system",
@@ -211,6 +216,7 @@ var providerSpecRegistry = map[string]providerSpec{
 		RequiredHeader:      "",
 		RequiredHeaderValue: "",
 		SystemPlacement:     "TopLevelField",
+		ChatWireShape:       "ChatBedrock",
 		RoleMappings: map[string]string{
 			"assistant": "assistant",
 			"user":      "user",
@@ -248,6 +254,7 @@ var providerSpecRegistry = map[string]providerSpec{
 		RequiredHeader:      "",
 		RequiredHeaderValue: "",
 		SystemPlacement:     "MessageInArray",
+		ChatWireShape:       "ChatOpenAI",
 		RoleMappings: map[string]string{
 			"assistant": "assistant",
 			"system":    "system",
@@ -287,6 +294,7 @@ var providerSpecRegistry = map[string]providerSpec{
 		RequiredHeader:      "",
 		RequiredHeaderValue: "",
 		SystemPlacement:     "MessageInArray",
+		ChatWireShape:       "ChatOpenAI",
 		RoleMappings: map[string]string{
 			"assistant": "assistant",
 			"system":    "system",
@@ -326,6 +334,7 @@ var providerSpecRegistry = map[string]providerSpec{
 		RequiredHeader:      "",
 		RequiredHeaderValue: "",
 		SystemPlacement:     "MessageInArray",
+		ChatWireShape:       "ChatOpenAI",
 		RoleMappings: map[string]string{
 			"assistant": "assistant",
 			"system":    "system",
@@ -365,6 +374,7 @@ var providerSpecRegistry = map[string]providerSpec{
 		RequiredHeader:      "",
 		RequiredHeaderValue: "",
 		SystemPlacement:     "MessageInArray",
+		ChatWireShape:       "ChatOpenAI",
 		RoleMappings: map[string]string{
 			"assistant": "assistant",
 			"system":    "system",
@@ -404,6 +414,7 @@ var providerSpecRegistry = map[string]providerSpec{
 		RequiredHeader:      "",
 		RequiredHeaderValue: "",
 		SystemPlacement:     "MessageInArray",
+		ChatWireShape:       "ChatOpenAI",
 		RoleMappings: map[string]string{
 			"assistant": "assistant",
 			"system":    "system",
@@ -443,6 +454,7 @@ var providerSpecRegistry = map[string]providerSpec{
 		RequiredHeader:      "",
 		RequiredHeaderValue: "",
 		SystemPlacement:     "MessageInArray",
+		ChatWireShape:       "ChatOpenAI",
 		RoleMappings: map[string]string{
 			"assistant": "assistant",
 			"system":    "system",
@@ -482,6 +494,7 @@ var providerSpecRegistry = map[string]providerSpec{
 		RequiredHeader:      "",
 		RequiredHeaderValue: "",
 		SystemPlacement:     "SiblingObject",
+		ChatWireShape:       "ChatGoogle",
 		RoleMappings: map[string]string{
 			"assistant": "model",
 			"user":      "user",
@@ -519,6 +532,7 @@ var providerSpecRegistry = map[string]providerSpec{
 		RequiredHeader:      "",
 		RequiredHeaderValue: "",
 		SystemPlacement:     "MessageInArray",
+		ChatWireShape:       "ChatOpenAI",
 		RoleMappings: map[string]string{
 			"assistant": "assistant",
 			"system":    "system",
@@ -558,6 +572,7 @@ var providerSpecRegistry = map[string]providerSpec{
 		RequiredHeader:      "",
 		RequiredHeaderValue: "",
 		SystemPlacement:     "MessageInArray",
+		ChatWireShape:       "ChatOpenAI",
 		RoleMappings: map[string]string{
 			"assistant": "assistant",
 			"system":    "system",
@@ -597,6 +612,7 @@ var providerSpecRegistry = map[string]providerSpec{
 		RequiredHeader:      "",
 		RequiredHeaderValue: "",
 		SystemPlacement:     "MessageInArray",
+		ChatWireShape:       "",
 		RoleMappings: map[string]string{
 			"user": "user",
 		},
@@ -633,6 +649,7 @@ var providerSpecRegistry = map[string]providerSpec{
 		RequiredHeader:      "",
 		RequiredHeaderValue: "",
 		SystemPlacement:     "MessageInArray",
+		ChatWireShape:       "ChatOpenAI",
 		RoleMappings: map[string]string{
 			"assistant": "assistant",
 			"system":    "system",
@@ -672,6 +689,7 @@ var providerSpecRegistry = map[string]providerSpec{
 		RequiredHeader:      "",
 		RequiredHeaderValue: "",
 		SystemPlacement:     "MessageInArray",
+		ChatWireShape:       "ChatOpenAI",
 		RoleMappings: map[string]string{
 			"assistant": "assistant",
 			"system":    "system",
@@ -711,6 +729,7 @@ var providerSpecRegistry = map[string]providerSpec{
 		RequiredHeader:      "",
 		RequiredHeaderValue: "",
 		SystemPlacement:     "MessageInArray",
+		ChatWireShape:       "ChatOpenAI",
 		RoleMappings: map[string]string{
 			"assistant": "assistant",
 			"system":    "system",
@@ -750,6 +769,7 @@ var providerSpecRegistry = map[string]providerSpec{
 		RequiredHeader:      "",
 		RequiredHeaderValue: "",
 		SystemPlacement:     "MessageInArray",
+		ChatWireShape:       "ChatOpenAI",
 		RoleMappings: map[string]string{
 			"assistant": "assistant",
 			"system":    "system",
@@ -789,6 +809,7 @@ var providerSpecRegistry = map[string]providerSpec{
 		RequiredHeader:      "",
 		RequiredHeaderValue: "",
 		SystemPlacement:     "MessageInArray",
+		ChatWireShape:       "ChatOpenAI",
 		RoleMappings: map[string]string{
 			"assistant": "assistant",
 			"system":    "system",
@@ -828,6 +849,7 @@ var providerSpecRegistry = map[string]providerSpec{
 		RequiredHeader:      "",
 		RequiredHeaderValue: "",
 		SystemPlacement:     "MessageInArray",
+		ChatWireShape:       "ChatOpenAI",
 		RoleMappings: map[string]string{
 			"assistant": "assistant",
 			"system":    "system",
@@ -867,6 +889,7 @@ var providerSpecRegistry = map[string]providerSpec{
 		RequiredHeader:      "",
 		RequiredHeaderValue: "",
 		SystemPlacement:     "MessageInArray",
+		ChatWireShape:       "ChatOpenAI",
 		RoleMappings: map[string]string{
 			"assistant": "assistant",
 			"system":    "system",
@@ -906,6 +929,7 @@ var providerSpecRegistry = map[string]providerSpec{
 		RequiredHeader:      "",
 		RequiredHeaderValue: "",
 		SystemPlacement:     "MessageInArray",
+		ChatWireShape:       "ChatOpenAI",
 		RoleMappings: map[string]string{
 			"assistant": "assistant",
 			"system":    "system",
@@ -945,6 +969,7 @@ var providerSpecRegistry = map[string]providerSpec{
 		RequiredHeader:      "",
 		RequiredHeaderValue: "",
 		SystemPlacement:     "MessageInArray",
+		ChatWireShape:       "ChatOpenAI",
 		RoleMappings: map[string]string{
 			"assistant": "assistant",
 			"system":    "system",
@@ -984,6 +1009,7 @@ var providerSpecRegistry = map[string]providerSpec{
 		RequiredHeader:      "",
 		RequiredHeaderValue: "",
 		SystemPlacement:     "MessageInArray",
+		ChatWireShape:       "ChatOpenAI",
 		RoleMappings: map[string]string{
 			"assistant": "assistant",
 			"system":    "system",
@@ -1022,6 +1048,7 @@ var providerSpecRegistry = map[string]providerSpec{
 		RequiredHeader:      "",
 		RequiredHeaderValue: "",
 		SystemPlacement:     "MessageInArray",
+		ChatWireShape:       "",
 		RoleMappings: map[string]string{
 			"user": "user",
 		},
@@ -1058,6 +1085,7 @@ var providerSpecRegistry = map[string]providerSpec{
 		RequiredHeader:      "",
 		RequiredHeaderValue: "",
 		SystemPlacement:     "MessageInArray",
+		ChatWireShape:       "ChatOpenAI",
 		RoleMappings: map[string]string{
 			"assistant": "assistant",
 			"system":    "system",
@@ -1097,6 +1125,7 @@ var providerSpecRegistry = map[string]providerSpec{
 		RequiredHeader:      "",
 		RequiredHeaderValue: "",
 		SystemPlacement:     "MessageInArray",
+		ChatWireShape:       "",
 		RoleMappings: map[string]string{
 			"user": "user",
 		},
@@ -1133,6 +1162,7 @@ var providerSpecRegistry = map[string]providerSpec{
 		RequiredHeader:      "",
 		RequiredHeaderValue: "",
 		SystemPlacement:     "MessageInArray",
+		ChatWireShape:       "ChatOpenAI",
 		RoleMappings: map[string]string{
 			"assistant": "assistant",
 			"system":    "system",
@@ -1172,6 +1202,7 @@ var providerSpecRegistry = map[string]providerSpec{
 		RequiredHeader:      "",
 		RequiredHeaderValue: "",
 		SystemPlacement:     "MessageInArray",
+		ChatWireShape:       "ChatOpenAI",
 		RoleMappings: map[string]string{
 			"assistant": "assistant",
 			"system":    "system",
@@ -1211,6 +1242,7 @@ var providerSpecRegistry = map[string]providerSpec{
 		RequiredHeader:      "",
 		RequiredHeaderValue: "",
 		SystemPlacement:     "MessageInArray",
+		ChatWireShape:       "",
 		RoleMappings: map[string]string{
 			"user": "user",
 		},
@@ -1247,6 +1279,7 @@ var providerSpecRegistry = map[string]providerSpec{
 		RequiredHeader:      "",
 		RequiredHeaderValue: "",
 		SystemPlacement:     "MessageInArray",
+		ChatWireShape:       "",
 		RoleMappings: map[string]string{
 			"user": "user",
 		},
@@ -1283,6 +1316,7 @@ var providerSpecRegistry = map[string]providerSpec{
 		RequiredHeader:      "",
 		RequiredHeaderValue: "",
 		SystemPlacement:     "MessageInArray",
+		ChatWireShape:       "ChatOpenAI",
 		RoleMappings: map[string]string{
 			"assistant": "assistant",
 			"system":    "system",
@@ -1322,6 +1356,7 @@ var providerSpecRegistry = map[string]providerSpec{
 		RequiredHeader:      "",
 		RequiredHeaderValue: "",
 		SystemPlacement:     "MessageInArray",
+		ChatWireShape:       "ChatOpenAI",
 		RoleMappings: map[string]string{
 			"assistant": "assistant",
 			"system":    "system",
@@ -1361,6 +1396,7 @@ var providerSpecRegistry = map[string]providerSpec{
 		RequiredHeader:      "",
 		RequiredHeaderValue: "",
 		SystemPlacement:     "MessageInArray",
+		ChatWireShape:       "ChatOpenAI",
 		RoleMappings: map[string]string{
 			"assistant": "assistant",
 			"system":    "system",
@@ -1399,6 +1435,7 @@ var providerSpecRegistry = map[string]providerSpec{
 		RequiredHeader:      "",
 		RequiredHeaderValue: "",
 		SystemPlacement:     "MessageInArray",
+		ChatWireShape:       "ChatOpenAI",
 		RoleMappings: map[string]string{
 			"assistant": "assistant",
 			"system":    "system",
