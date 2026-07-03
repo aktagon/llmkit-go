@@ -20,12 +20,15 @@ import (
 //
 //
 //
+//
+//
+//
+//
 type Telemetry struct {
 	//
 	//
-	Endpoint string
 	//
-	Headers map[string]string
+	Export func([]byte)
 	//
 	//
 	//
@@ -56,13 +59,14 @@ func (c *Client) WithTelemetry(t Telemetry) *Client {
 //
 //
 //
+//
 func makeTelemetryMiddleware(t Telemetry) MiddlewareFn {
 	return func(ctx context.Context, e providers.Event) error {
-		if t.Endpoint == "" {
+		if t.Export == nil {
 			if e.Phase == providers.PhasePre {
 				return &ValidationError{
-					Field:   "telemetry.endpoint",
-					Message: "endpoint is required when telemetry is enabled",
+					Field:   "telemetry.export",
+					Message: "export is required when telemetry is enabled (use HTTPExport for a batteries POST)",
 				}
 			}
 			return nil
@@ -70,24 +74,16 @@ func makeTelemetryMiddleware(t Telemetry) MiddlewareFn {
 		if e.Phase != providers.PhasePost {
 			return nil
 		}
-		//
-		//
-		//
-		//
-		//
-		//
-		go exportTelemetry(context.Background(), t, e)
+		defer func() { _ = recover() }()
+		t.Export(buildTelemetryPayload(e))
 		return nil
 	}
 }
 
-var telemetryHTTPClient = &http.Client{Timeout: 5 * time.Second}
-
 //
 //
-func exportTelemetry(ctx context.Context, t Telemetry, e providers.Event) {
-	defer func() { _ = recover() }()
-
+//
+func buildTelemetryPayload(e providers.Event) []byte {
 	op, ok := providers.TelemetryOperationName[e.Op]
 	if !ok {
 		op = string(e.Op)
@@ -97,17 +93,31 @@ func exportTelemetry(ctx context.Context, t Telemetry, e providers.Event) {
 		errType = telemetryErrorType(e.Err)
 	}
 	now := strconv.FormatInt(time.Now().UnixNano(), 10)
-	payload := buildOTLPTraces(
+	return buildOTLPTraces(
 		op, e.Provider, e.Model, e.Usage.Input, e.Usage.Output, errType,
 		randHex(16), randHex(8), now, now,
 	)
+}
 
-	headers := map[string]string{"content-type": "application/json"}
-	for k, v := range t.Headers {
-		headers[k] = v
+var telemetryHTTPClient = &http.Client{Timeout: 5 * time.Second}
+
+//
+//
+//
+//
+//
+//
+//
+//
+func HTTPExport(endpoint string, headers map[string]string) func([]byte) {
+	url := strings.TrimRight(endpoint, "/") + providers.TelemetryTracesPath
+	return func(payload []byte) {
+		h := map[string]string{"content-type": "application/json"}
+		for k, v := range headers {
+			h[k] = v
+		}
+		_, _ = doPost(context.Background(), telemetryHTTPClient, url, payload, h)
 	}
-	url := strings.TrimRight(t.Endpoint, "/") + providers.TelemetryTracesPath
-	_, _ = doPost(ctx, telemetryHTTPClient, url, payload, headers)
 }
 
 //
