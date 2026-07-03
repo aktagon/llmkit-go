@@ -14,28 +14,31 @@ import (
 	"github.com/aktagon/llmkit-go/providers"
 )
 
-// Telemetry is the opt-in observability config (ADR-054). Attach it with
-// Client.WithTelemetry to export an OTEL GenAI-aligned span over OTLP/HTTP
-// (JSON) on every provider call — success and rejection. Off unless attached;
-// an empty Endpoint is a ValidationError (the honest-contract lineage, no
-// enabled-but-no-sink state). A sibling of the ADR-052 baseURL / custom-header
-// runtime overrides — a handwritten config value, not modelled in the ontology.
+// Telemetry is the opt-in observability config (ADR-059, superseding ADR-054's
+// transport half). Attach it with Client.WithTelemetry: on every provider call —
+// success and rejection — llmkit builds an OTEL GenAI-aligned OTLP span (proto3
+// JSON) and hands the finished bytes to Export. llmkit performs no telemetry
+// network I/O and spawns no goroutine; what Export does with the bytes (enqueue
+// into an OTEL SDK, POST, drop) and all batching/backpressure/shutdown is the
+// caller's concern. Off unless attached; a nil Export is a ValidationError (the
+// honest-contract lineage — no enabled-but-no-sink state). Use HTTPExport for a
+// batteries POST. A sibling of the ADR-052 baseURL / custom-header runtime
+// overrides — a handwritten config value, not modelled in the ontology.
 type Telemetry struct {
-	// Endpoint is the OTLP/HTTP collector base URL (mandatory). The exporter
-	// POSTs proto3-JSON to Endpoint + "/v1/traces".
-	Endpoint string
-	// Headers are added to every export POST (e.g. authorization).
-	Headers map[string]string
+	// Export receives the finished OTLP/HTTP proto3-JSON bytes for one span,
+	// called synchronously on the post phase. Mandatory. Use HTTPExport for the
+	// batteries POST, or supply your own to bridge into an existing OTEL stack.
+	Export func([]byte)
 	// CaptureContent gates tier-2 message payloads (default false for privacy).
 	// The middleware Event does not carry payloads yet, so this reserves the
 	// semantics; content-log emission is a deferred follow-up (ADR-054 tier 2).
 	CaptureContent bool
 }
 
-// WithTelemetry enables opt-in telemetry on this client. The exporter rides the
-// middleware seam, so every capability path that fires middleware emits one
-// OTEL span on the post phase. Empty Endpoint is fail-loud: the first call is
-// vetoed with a ValidationError naming the field (Go defers construction-time
+// WithTelemetry enables opt-in telemetry on this client. The builder rides the
+// middleware seam, so every capability path that fires middleware emits one OTEL
+// span on the post phase. A nil Export is fail-loud: the first call is vetoed
+// with a ValidationError naming the field (Go defers construction-time
 // validation to first use, the resolveModel idiom). Returns the same *Client
 // for chaining.
 func (c *Client) WithTelemetry(t Telemetry) *Client {
@@ -53,16 +56,17 @@ func (c *Client) WithTelemetry(t Telemetry) *Client {
 	return c
 }
 
-// makeTelemetryMiddleware builds the export hook. Empty endpoint -> pre-phase
-// veto (fail-loud). Otherwise the post phase exports fail-open: a telemetry
-// failure never propagates or blocks the call.
+// makeTelemetryMiddleware builds the export hook. Nil Export -> pre-phase veto
+// (fail-loud, TEL-017). Otherwise the post phase builds the OTLP payload and
+// calls Export SYNCHRONOUSLY — no goroutine, no thread (TEL-013/016). A panicking
+// callback is recovered so telemetry never surfaces to the caller (fail-open).
 func makeTelemetryMiddleware(t Telemetry) MiddlewareFn {
 	return func(ctx context.Context, e providers.Event) error {
-		if t.Endpoint == "" {
+		if t.Export == nil {
 			if e.Phase == providers.PhasePre {
 				return &ValidationError{
-					Field:   "telemetry.endpoint",
-					Message: "endpoint is required when telemetry is enabled",
+					Field:   "telemetry.export",
+					Message: "export is required when telemetry is enabled (use HTTPExport for a batteries POST)",
 				}
 			}
 			return nil
@@ -70,24 +74,16 @@ func makeTelemetryMiddleware(t Telemetry) MiddlewareFn {
 		if e.Phase != providers.PhasePost {
 			return nil
 		}
-		// Fire-and-forget on a detached context: a slow/hung collector must not
-		// add latency to the caller (up to the 5s client timeout). The request
-		// ctx is cancelled when the call returns, so use context.Background();
-		// e is passed by value and exportTelemetry has its own recover(). One
-		// goroutine per export; a shared worker + bounded channel is the FU-6
-		// upgrade.
-		go exportTelemetry(context.Background(), t, e)
+		defer func() { _ = recover() }()
+		t.Export(buildTelemetryPayload(e))
 		return nil
 	}
 }
 
-var telemetryHTTPClient = &http.Client{Timeout: 5 * time.Second}
-
-// exportTelemetry serializes the post-phase Event to an OTLP traces payload and
-// POSTs it. Fail-open: every error (bad endpoint, timeout, panic) is swallowed.
-func exportTelemetry(ctx context.Context, t Telemetry, e providers.Event) {
-	defer func() { _ = recover() }()
-
+// buildTelemetryPayload classifies the post-phase Event and renders it to the
+// OTLP traces bytes. Span identity + timing are stamped here (the pure builder
+// takes them as arguments so the parity goldens can inject fixed values).
+func buildTelemetryPayload(e providers.Event) []byte {
 	op, ok := providers.TelemetryOperationName[e.Op]
 	if !ok {
 		op = string(e.Op)
@@ -97,17 +93,31 @@ func exportTelemetry(ctx context.Context, t Telemetry, e providers.Event) {
 		errType = telemetryErrorType(e.Err)
 	}
 	now := strconv.FormatInt(time.Now().UnixNano(), 10)
-	payload := buildOTLPTraces(
+	return buildOTLPTraces(
 		op, e.Provider, e.Model, e.Usage.Input, e.Usage.Output, errType,
 		randHex(16), randHex(8), now, now,
 	)
+}
 
-	headers := map[string]string{"content-type": "application/json"}
-	for k, v := range t.Headers {
-		headers[k] = v
+var telemetryHTTPClient = &http.Client{Timeout: 5 * time.Second}
+
+// HTTPExport returns an Export callback that POSTs each OTLP payload to
+// endpoint + "/v1/traces" with a bounded timeout, fail-open (every network
+// error is swallowed). It spawns no background worker and needs no Close.
+//
+// Low-volume only: the POST is SYNCHRONOUS on the request path, so a slow or
+// hung collector adds up to the client timeout of latency to the call. For high
+// volume, hand your own Export callback that enqueues into your OTEL SDK's batch
+// processor instead.
+func HTTPExport(endpoint string, headers map[string]string) func([]byte) {
+	url := strings.TrimRight(endpoint, "/") + providers.TelemetryTracesPath
+	return func(payload []byte) {
+		h := map[string]string{"content-type": "application/json"}
+		for k, v := range headers {
+			h[k] = v
+		}
+		_, _ = doPost(context.Background(), telemetryHTTPClient, url, payload, h)
 	}
-	url := strings.TrimRight(t.Endpoint, "/") + providers.TelemetryTracesPath
-	_, _ = doPost(ctx, telemetryHTTPClient, url, payload, headers)
 }
 
 // telemetryErrorType maps an error to a stable OTEL error.type value.

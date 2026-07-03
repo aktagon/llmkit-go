@@ -9,9 +9,8 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"sync"
+	"runtime"
 	"testing"
-	"time"
 
 	"github.com/aktagon/llmkit-go/providers"
 )
@@ -75,32 +74,70 @@ func TestTelemetryWire_Rejection(t *testing.T) {
 	assertTelemetryWireGolden(t, "telemetry-rejection", payload)
 }
 
-// TestTelemetry_ExportsToMockCollector drives the exporter middleware through a
-// real firePost and asserts the mock OTLP collector received a well-formed POST
-// to /v1/traces carrying the gen_ai.* attributes.
-func TestTelemetry_ExportsToMockCollector(t *testing.T) {
+// TestTelemetry_ExportInvokedSynchronously asserts the post phase builds the
+// OTLP payload and hands it to Export exactly once, synchronously — no goroutine
+// is spawned (ADR-059 TEL-013/016). The pre phase never exports.
+func TestTelemetry_ExportInvokedSynchronously(t *testing.T) {
+	var got [][]byte
+	mw := makeTelemetryMiddleware(Telemetry{Export: func(b []byte) { got = append(got, b) }})
+
+	pre := providers.Event{Op: providers.OpLLMRequest, Phase: providers.PhasePre, Provider: "openai", Model: "gpt-4o"}
+	if err := mw(context.Background(), pre); err != nil {
+		t.Fatalf("pre phase with an Export must not veto: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("pre phase must not export, got %d payloads", len(got))
+	}
+
+	post := providers.Event{
+		Op:       providers.OpLLMRequest,
+		Phase:    providers.PhasePost,
+		Provider: "openai",
+		Model:    "gpt-4o",
+		Usage:    providers.Usage{Input: 10, Output: 20},
+	}
+	// Synchronous export must not grow the goroutine count across N calls.
+	before := runtime.NumGoroutine()
+	const n = 50
+	for i := 0; i < n; i++ {
+		if err := mw(context.Background(), post); err != nil {
+			t.Fatalf("post export must be fail-open, got: %v", err)
+		}
+	}
+	if after := runtime.NumGoroutine(); after > before {
+		t.Errorf("export must spawn no goroutine: goroutines before=%d after=%d", before, after)
+	}
+	if len(got) != n {
+		t.Fatalf("Export must be called once per post phase: got %d want %d", len(got), n)
+	}
+	var parsed map[string]any
+	if err := json.Unmarshal(got[0], &parsed); err != nil {
+		t.Fatalf("export payload not JSON: %v (%s)", err, got[0])
+	}
+	if _, ok := parsed["resourceSpans"]; !ok {
+		t.Errorf("export payload missing resourceSpans: %s", got[0])
+	}
+}
+
+// TestTelemetry_HTTPExportPostsToCollector asserts the batteries HTTPExport
+// convenience POSTs the OTLP payload to <endpoint>/v1/traces with caller headers.
+// The POST is synchronous, so the collector has received it by the time the
+// middleware returns.
+func TestTelemetry_HTTPExportPostsToCollector(t *testing.T) {
 	var (
-		mu     sync.Mutex
 		gotURL string
 		gotHdr string
 		body   []byte
 	)
-	// Export is now fire-and-forget on a goroutine (FU-2), so signal when the
-	// POST lands rather than reading the captured fields racily.
-	done := make(chan struct{})
 	collector := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		b, _ := io.ReadAll(r.Body)
-		mu.Lock()
+		body, _ = io.ReadAll(r.Body)
 		gotURL = r.URL.Path
 		gotHdr = r.Header.Get("authorization")
-		body = b
-		mu.Unlock()
 		w.WriteHeader(200)
-		close(done)
 	}))
 	defer collector.Close()
 
-	tel := Telemetry{Endpoint: collector.URL, Headers: map[string]string{"authorization": "Bearer secret"}}
+	tel := Telemetry{Export: HTTPExport(collector.URL, map[string]string{"authorization": "Bearer secret"})}
 	mw := makeTelemetryMiddleware(tel)
 
 	ev := providers.Event{
@@ -114,14 +151,6 @@ func TestTelemetry_ExportsToMockCollector(t *testing.T) {
 		t.Fatalf("post middleware returned error (should be fail-open): %v", err)
 	}
 
-	select {
-	case <-done:
-	case <-time.After(2 * time.Second):
-		t.Fatal("collector did not receive export within 2s")
-	}
-
-	mu.Lock()
-	defer mu.Unlock()
 	if gotURL != "/v1/traces" {
 		t.Errorf("collector path: got %q want /v1/traces", gotURL)
 	}
@@ -137,20 +166,21 @@ func TestTelemetry_ExportsToMockCollector(t *testing.T) {
 	}
 }
 
-// TestTelemetry_EmptyEndpointFailsLoud asserts the honest-contract lineage:
-// an empty endpoint vetoes the call (pre phase) with a ValidationError.
-func TestTelemetry_EmptyEndpointFailsLoud(t *testing.T) {
-	mw := makeTelemetryMiddleware(Telemetry{Endpoint: ""})
+// TestTelemetry_NilExportFailsLoud asserts the honest-contract lineage (TEL-017):
+// a telemetry config with no Export callback vetoes the call (pre phase) with a
+// ValidationError naming the field.
+func TestTelemetry_NilExportFailsLoud(t *testing.T) {
+	mw := makeTelemetryMiddleware(Telemetry{Export: nil})
 	err := mw(context.Background(), providers.Event{Phase: providers.PhasePre, Op: providers.OpLLMRequest})
 	if err == nil {
-		t.Fatal("expected ValidationError for empty endpoint, got nil")
+		t.Fatal("expected ValidationError for nil Export, got nil")
 	}
 	var ve *ValidationError
 	if !errors.As(err, &ve) {
 		t.Fatalf("expected *ValidationError, got %T: %v", err, err)
 	}
-	if ve.Field != "telemetry.endpoint" {
-		t.Errorf("field: got %q want telemetry.endpoint", ve.Field)
+	if ve.Field != "telemetry.export" {
+		t.Errorf("field: got %q want telemetry.export", ve.Field)
 	}
 }
 
@@ -159,7 +189,7 @@ func TestTelemetry_EmptyEndpointFailsLoud(t *testing.T) {
 func TestTelemetry_WithTelemetryInjects(t *testing.T) {
 	c := Openai("k")
 	before := len(c.Text.middleware)
-	got := c.WithTelemetry(Telemetry{Endpoint: "https://collector.example:4318"})
+	got := c.WithTelemetry(Telemetry{Export: func([]byte) {}})
 	if got != c {
 		t.Fatal("WithTelemetry should return the same *Client for chaining")
 	}
@@ -177,9 +207,10 @@ func TestTelemetry_WithTelemetryInjects(t *testing.T) {
 	}
 }
 
-// TestTelemetry_FailOpenOnBadEndpoint asserts a broken endpoint never surfaces.
-func TestTelemetry_FailOpenOnBadEndpoint(t *testing.T) {
-	mw := makeTelemetryMiddleware(Telemetry{Endpoint: "http://127.0.0.1:1"})
+// TestTelemetry_HTTPExportFailsOpen asserts the batteries POST swallows a dead
+// endpoint: the middleware never surfaces a telemetry transport error.
+func TestTelemetry_HTTPExportFailsOpen(t *testing.T) {
+	mw := makeTelemetryMiddleware(Telemetry{Export: HTTPExport("http://127.0.0.1:1", nil)})
 	ev := providers.Event{Op: providers.OpLLMRequest, Phase: providers.PhasePost, Provider: "openai", Model: "gpt-4o"}
 	if err := mw(context.Background(), ev); err != nil {
 		t.Errorf("bad endpoint must fail-open, got: %v", err)
