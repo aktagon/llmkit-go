@@ -15,7 +15,7 @@ import (
 )
 
 // Telemetry is the opt-in observability config (ADR-059, superseding ADR-054's
-// transport half). Attach it with Client.WithTelemetry: on every provider call —
+// transport half). Attach it with Client.AddTelemetry: on every provider call —
 // success and rejection — llmkit builds an OTEL GenAI-aligned OTLP span (proto3
 // JSON) and hands the finished bytes to Export. llmkit performs no telemetry
 // network I/O and spawns no goroutine; what Export does with the bytes (enqueue
@@ -35,13 +35,13 @@ type Telemetry struct {
 	CaptureContent bool
 }
 
-// WithTelemetry enables opt-in telemetry on this client. The builder rides the
+// AddTelemetry enables opt-in telemetry on this client. The builder rides the
 // middleware seam, so every capability path that fires middleware emits one OTEL
 // span on the post phase. A nil Export is fail-loud: the first call is vetoed
 // with a ValidationError naming the field (Go defers construction-time
 // validation to first use, the resolveModel idiom). Returns the same *Client
 // for chaining.
-func (c *Client) WithTelemetry(t Telemetry) *Client {
+func (c *Client) AddTelemetry(t Telemetry) *Client {
 	mw := makeTelemetryMiddleware(t)
 	// Inject into every builder prototype that carries a middleware seam.
 	// Chain clones copy the prototype's slice, so this reaches every call.

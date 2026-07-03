@@ -508,6 +508,37 @@ request, one post-phase after the stream closes. `Event.Usage`
 reflects the accumulated usage at stream close. Per-chunk observation
 stays on the `*TextStream.Chunks()` range loop.
 
+## Telemetry
+
+Opt-in OpenTelemetry. Attach a `Telemetry` and every call — success and
+rejection alike — produces one OTEL GenAI span (operation, provider, model,
+token usage, and `error.type` on failure) as standards-compliant OTLP/JSON
+bytes. llmkit builds the span; you decide where the bytes go. Off unless
+attached.
+
+```go
+import "github.com/aktagon/llmkit-go"
+
+// Batteries: POST every span to an OTLP collector.
+c := llmkit.New("openai", os.Getenv("OPENAI_API_KEY")).
+    AddTelemetry(llmkit.Telemetry{
+        Export: llmkit.HTTPExport("https://collector:4318", nil),
+    })
+
+// Or bring your own transport — hand the bytes to your OTEL SDK:
+c.AddTelemetry(llmkit.Telemetry{
+    Export: func(b []byte) { batchProcessor.Enqueue(b) },
+})
+
+resp, err := c.Text.Prompt(context.Background(), "Hello")
+```
+
+`HTTPExport` is a synchronous, fail-open POST — convenient for low volume; for
+high volume hand your own callback into your OTEL SDK's batch processor. The
+same OTLP span shape is emitted byte-for-byte across all four SDKs, so one
+collector serves a polyglot fleet. A `Telemetry` with no `Export` is a
+`ValidationError`.
+
 ## CLI
 
 ```bash
