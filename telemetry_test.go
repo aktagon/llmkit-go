@@ -184,14 +184,14 @@ func TestTelemetry_NilExportFailsLoud(t *testing.T) {
 	}
 }
 
-// TestTelemetry_WithTelemetryInjects asserts WithTelemetry attaches the exporter
+// TestTelemetry_AddTelemetryInjects asserts AddTelemetry attaches the exporter
 // to every builder prototype that carries a middleware seam, so calls emit.
-func TestTelemetry_WithTelemetryInjects(t *testing.T) {
+func TestTelemetry_AddTelemetryInjects(t *testing.T) {
 	c := Openai("k")
 	before := len(c.Text.middleware)
-	got := c.WithTelemetry(Telemetry{Export: func([]byte) {}})
+	got := c.AddTelemetry(Telemetry{Export: func([]byte) {}})
 	if got != c {
-		t.Fatal("WithTelemetry should return the same *Client for chaining")
+		t.Fatal("AddTelemetry should return the same *Client for chaining")
 	}
 	for name, n := range map[string]int{
 		"Text":   len(c.Text.middleware),
@@ -202,7 +202,7 @@ func TestTelemetry_WithTelemetryInjects(t *testing.T) {
 		"Upload": len(c.Upload.middleware),
 	} {
 		if n != before+1 {
-			t.Errorf("%s builder: expected %d middleware after WithTelemetry, got %d", name, before+1, n)
+			t.Errorf("%s builder: expected %d middleware after AddTelemetry, got %d", name, before+1, n)
 		}
 	}
 }
