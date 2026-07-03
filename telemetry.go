@@ -41,7 +41,7 @@ type Telemetry struct {
 //
 //
 //
-func (c *Client) WithTelemetry(t Telemetry) *Client {
+func (c *Client) AddTelemetry(t Telemetry) *Client {
 	mw := makeTelemetryMiddleware(t)
 	//
 	//
