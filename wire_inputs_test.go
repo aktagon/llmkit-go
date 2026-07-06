@@ -7,6 +7,10 @@ package llmkit
 // conformance drivers; codegen/lint_wire_witness.py derives witness
 // coverage from the same facts.
 const (
+	wireAnthropicSchemaDocumentModel            = "claude-opus-4-8"
+	wireAnthropicSchemaDocumentPrompt           = "Summarize the attached document as structured data."
+	wireAnthropicSchemaDocumentSchema           = "{\"type\":\"object\",\"properties\":{\"summary\":{\"type\":\"string\"}},\"additionalProperties\":false}"
+	wireAnthropicSchemaDocumentFileId           = "file_011CMZq8h5VnVe8jL3qK7p2R"
 	wireAnthropicTextDocumentModel              = "claude-opus-4-8"
 	wireAnthropicTextDocumentPrompt             = "Summarize the attached document in three sentences."
 	wireAnthropicTextDocumentFileId             = "file_011CMZq8h5VnVe8jL3qK7p2R"
