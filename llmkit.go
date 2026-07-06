@@ -605,6 +605,15 @@ func buildRequest(p Provider, req Request, msgs []msg, o *options, cfg providerS
 		addStructuredOutput(body, headers, req.Schema, p.Name, cfg)
 	}
 
+	// Files API beta (BUG-017): a document/source:file block referencing an
+	// uploaded file requires the same anthropic-beta the upload used. Compose
+	// with any existing value (e.g. structured output) rather than overwrite.
+	if len(req.Files) > 0 {
+		if fu := providers.FileUploadConfig(p.Name); fu != nil && fu.BetaHeader != "" {
+			headers["anthropic-beta"] = appendBeta(headers["anthropic-beta"], fu.BetaHeader)
+		}
+	}
+
 	// Auth headers
 	switch cfg.AuthScheme {
 	case providers.AuthBearerToken:
@@ -751,6 +760,24 @@ func mergeIntoParent(target map[string]any, path string, extras map[string]any) 
 	for k, v := range extras {
 		cur[k] = v
 	}
+}
+
+// appendBeta composes a comma-separated anthropic-beta header value so multiple
+// features that each require a beta (structured output, Files API) coexist
+// instead of clobbering one another. Idempotent on repeats.
+func appendBeta(existing, add string) string {
+	if add == "" {
+		return existing
+	}
+	if existing == "" {
+		return add
+	}
+	for _, v := range strings.Split(existing, ",") {
+		if strings.TrimSpace(v) == add {
+			return existing
+		}
+	}
+	return existing + "," + add
 }
 
 // addStructuredOutput adds schema-based output format to the request.
