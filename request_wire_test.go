@@ -447,7 +447,7 @@ func TestRequestWire_OptionsAnthropicPlain(t *testing.T) {
 // single-turn user content array (BUG-014). NOT live-anchored — parity held by
 // the cross-SDK comparator + mock body, like the keyless providers.
 func TestRequestWire_AnthropicTextDocument(t *testing.T) {
-	body, _ := captureBody(t, providers.Anthropic, func(c *Client) {
+	body, headers := captureBody(t, providers.Anthropic, func(c *Client) {
 		_, err := c.Text.Model(wireAnthropicTextDocumentModel).
 			File(wireAnthropicTextDocumentFileId).
 			Prompt(context.Background(), wireAnthropicTextDocumentPrompt)
@@ -456,6 +456,12 @@ func TestRequestWire_AnthropicTextDocument(t *testing.T) {
 		}
 	})
 	assertRequestWireGolden(t, "anthropic-text-document", body)
+	// BUG-017: referencing an uploaded file requires the Files API beta on the
+	// Messages request, not only on the upload. The body-only golden is blind to
+	// this, so assert the header here.
+	if got, want := headers.Get("anthropic-beta"), "files-api-2025-04-14"; got != want {
+		t.Errorf("anthropic-beta header: got %q, want %q", got, want)
+	}
 }
 
 // TestRequestWire_OpenAITextDocument is the OpenAI-style sibling — the file id
