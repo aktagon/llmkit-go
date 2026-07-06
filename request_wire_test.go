@@ -472,6 +472,79 @@ func TestRequestWire_OpenAITextDocument(t *testing.T) {
 	assertRequestWireGolden(t, "openai-text-document", body)
 }
 
+// === ADR-060: inline image on the text path across the four chat wire shapes ===
+//
+// c.Text.Image(mime, bytes).Prompt(...) sends a native image block ahead of the
+// prompt text on the single-turn user content array. The per-provider block is
+// selected by chatWireShape (Anthropic base64 image, OpenAI image_url data URI,
+// Google inline_data, Bedrock Converse image/source/bytes), never provider name.
+// NOT live-anchored — parity held by the cross-SDK comparator + mock body, like
+// the text-document fixtures. Resolves ADR-008 OQ-2 for the image modality.
+
+func TestRequestWire_AnthropicTextImage(t *testing.T) {
+	png, err := base64.StdEncoding.DecodeString(wireAnthropicTextImageImageBase64)
+	if err != nil {
+		t.Fatalf("decode tiny PNG constant: %v", err)
+	}
+	body, _ := captureBody(t, providers.Anthropic, func(c *Client) {
+		_, err := c.Text.Model(wireAnthropicTextImageModel).
+			Image(wireAnthropicTextImageImageMime, png).
+			Prompt(context.Background(), wireAnthropicTextImagePrompt)
+		if err != nil {
+			t.Fatalf("anthropic text image call: %v", err)
+		}
+	})
+	assertRequestWireGolden(t, "anthropic-text-image", body)
+}
+
+func TestRequestWire_OpenAITextImage(t *testing.T) {
+	png, err := base64.StdEncoding.DecodeString(wireOpenaiTextImageImageBase64)
+	if err != nil {
+		t.Fatalf("decode tiny PNG constant: %v", err)
+	}
+	body, _ := captureBody(t, providers.OpenAI, func(c *Client) {
+		_, err := c.Text.Model(wireOpenaiTextImageModel).
+			Image(wireOpenaiTextImageImageMime, png).
+			Prompt(context.Background(), wireOpenaiTextImagePrompt)
+		if err != nil {
+			t.Fatalf("openai text image call: %v", err)
+		}
+	})
+	assertRequestWireGolden(t, "openai-text-image", body)
+}
+
+func TestRequestWire_GoogleTextImage(t *testing.T) {
+	png, err := base64.StdEncoding.DecodeString(wireGoogleTextImageImageBase64)
+	if err != nil {
+		t.Fatalf("decode tiny PNG constant: %v", err)
+	}
+	body, _ := captureBody(t, providers.Google, func(c *Client) {
+		_, err := c.Text.Model(wireGoogleTextImageModel).
+			Image(wireGoogleTextImageImageMime, png).
+			Prompt(context.Background(), wireGoogleTextImagePrompt)
+		if err != nil {
+			t.Fatalf("google text image call: %v", err)
+		}
+	})
+	assertRequestWireGolden(t, "google-text-image", body)
+}
+
+func TestRequestWire_BedrockTextImage(t *testing.T) {
+	png, err := base64.StdEncoding.DecodeString(wireBedrockTextImageImageBase64)
+	if err != nil {
+		t.Fatalf("decode tiny PNG constant: %v", err)
+	}
+	body, _ := captureBody(t, providers.Bedrock, func(c *Client) {
+		_, err := c.Text.Model(wireBedrockTextImageModel).
+			Image(wireBedrockTextImageImageMime, png).
+			Prompt(context.Background(), wireBedrockTextImagePrompt)
+		if err != nil {
+			t.Fatalf("bedrock text image call: %v", err)
+		}
+	})
+	assertRequestWireGolden(t, "bedrock-text-image", body)
+}
+
 // === TASK-002: tool-definition fixtures across the four chat wire families ===
 //
 // The tool-def selectors (selectToolDefTransform et al.) had NO cross-SDK
