@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/aktagon/llmkit-go/providers"
@@ -77,6 +78,33 @@ func assertRequestWireGolden(t *testing.T, fixture string, body []byte) {
 		gotPretty, _ := json.MarshalIndent(got, "", "  ")
 		wantPretty, _ := json.MarshalIndent(want, "", "  ")
 		t.Errorf("Go %s body differs from golden\n got: %s\nwant: %s", fixture, gotPretty, wantPretty)
+	}
+}
+
+// assertRequestWireHeaders drops the per-SDK request-header artifact (lowercased
+// keys) for the cross-SDK comparator's opt-in header subset-match (HANDOFF-028).
+// A fixture with a companion
+// codegen/testdata/wire/request/v1/<fixture>.headers.json golden has each named
+// header asserted value-equal across all four SDKs — closing BUG-017's deferred
+// golden-header lock (previously header parity was per-SDK in-driver only).
+func assertRequestWireHeaders(t *testing.T, fixture string, headers http.Header) {
+	t.Helper()
+	repoRoot := mustRepoRoot(t)
+
+	artifactDir := filepath.Join(repoRoot, "target", "wire", "request", fixture)
+	if err := os.MkdirAll(artifactDir, 0o755); err != nil {
+		t.Fatalf("mkdir artifact dir: %v", err)
+	}
+	flat := make(map[string]string, len(headers))
+	for k, v := range headers {
+		flat[strings.ToLower(k)] = strings.Join(v, ",")
+	}
+	out, err := json.MarshalIndent(flat, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal headers: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(artifactDir, "go.headers.json"), append(out, '\n'), 0o644); err != nil {
+		t.Fatalf("write header artifact: %v", err)
 	}
 }
 
@@ -195,6 +223,7 @@ func TestRequestWire_StructuredOutputAnthropic(t *testing.T) {
 		t.Errorf("anthropic-beta header: got %q, want %q", got, want)
 	}
 	assertRequestWireGolden(t, "structured-output-anthropic", body)
+	assertRequestWireHeaders(t, "structured-output-anthropic", headers)
 }
 
 // === Plan 039: nested-schema fixtures (the witness lint's first catch) ===
@@ -458,10 +487,13 @@ func TestRequestWire_AnthropicTextDocument(t *testing.T) {
 	assertRequestWireGolden(t, "anthropic-text-document", body)
 	// BUG-017: referencing an uploaded file requires the Files API beta on the
 	// Messages request, not only on the upload. The body-only golden is blind to
-	// this, so assert the header here.
+	// this, so the header is golden-locked across all four SDKs (HANDOFF-028) via
+	// the companion anthropic-text-document.headers.json; the in-driver assert
+	// stays as a fast local check.
 	if got, want := headers.Get("anthropic-beta"), "files-api-2025-04-14"; got != want {
 		t.Errorf("anthropic-beta header: got %q, want %q", got, want)
 	}
+	assertRequestWireHeaders(t, "anthropic-text-document", headers)
 }
 
 // TestRequestWire_OpenAITextDocument is the OpenAI-style sibling — the file id
