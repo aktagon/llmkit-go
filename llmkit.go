@@ -606,6 +606,15 @@ func buildRequest(p Provider, req Request, msgs []msg, o *options, cfg providerS
 	}
 
 	//
+	//
+	//
+	if len(req.Files) > 0 {
+		if fu := providers.FileUploadConfig(p.Name); fu != nil && fu.BetaHeader != "" {
+			headers["anthropic-beta"] = appendBeta(headers["anthropic-beta"], fu.BetaHeader)
+		}
+	}
+
+	//
 	switch cfg.AuthScheme {
 	case providers.AuthBearerToken:
 		headers[cfg.AuthHeader] = cfg.AuthPrefix + " " + p.APIKey
@@ -751,6 +760,24 @@ func mergeIntoParent(target map[string]any, path string, extras map[string]any) 
 	for k, v := range extras {
 		cur[k] = v
 	}
+}
+
+//
+//
+//
+func appendBeta(existing, add string) string {
+	if add == "" {
+		return existing
+	}
+	if existing == "" {
+		return add
+	}
+	for _, v := range strings.Split(existing, ",") {
+		if strings.TrimSpace(v) == add {
+			return existing
+		}
+	}
+	return existing + "," + add
 }
 
 //
