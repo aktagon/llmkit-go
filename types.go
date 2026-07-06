@@ -62,6 +62,7 @@ type MiddlewareFn = providers.MiddlewareFn
 //
 //
 //
+//
 type InputImage struct {
 	URL      string // URL or base64 data URI
 	MimeType string

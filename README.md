@@ -182,6 +182,18 @@ file, err := c.Upload.
     Run(ctx)
 ```
 
+### Image input (vision)
+
+Attach an image to a text prompt with `*Text.Image(mime, bytes)`; it is sent
+as the provider's native image block (works on Anthropic, OpenAI, Google, and
+Bedrock). Bytes-based, so no filesystem is required:
+
+```go
+resp, err := c.Text.
+    Image("image/png", screenshotBytes).
+    Prompt(ctx, "Describe this screenshot in one sentence.")
+```
+
 ### Image — text-to-image and edit
 
 Generate images from text, optionally conditioned on reference images for
