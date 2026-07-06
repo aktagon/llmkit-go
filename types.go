@@ -58,10 +58,11 @@ type Usage = providers.Usage
 type MiddlewareFn = providers.MiddlewareFn
 
 // InputImage references an image attached to a text-generation request
-// (vision input). Distinct from Part's Image() constructor used for
-// image-generation calls; the two concepts target different capabilities
-// and the migration to a unified Part-based vocabulary for text generation
-// is tracked separately (see ADR-008 OQ-2).
+// (vision input). The Text builder's Image(mime, bytes) part lowers into this
+// carrier as a base64 data URI and reaches the wire as the provider's native
+// image block (ADR-060). Distinct from Part's Image() constructor used for
+// image-generation calls; unifying text-gen input onto Part vocabulary
+// wholesale remains future work.
 type InputImage struct {
 	URL      string // URL or base64 data URI
 	MimeType string

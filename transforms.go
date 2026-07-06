@@ -643,12 +643,48 @@ func transformBedrockConverse(body map[string]any, msgs []msg, req Request, cfg 
 			}
 		}
 	} else if req.User != "" {
+		var content []map[string]any
+		if len(req.Images) > 0 {
+			content = buildBedrockContentParts(req)
+		} else {
+			content = []map[string]any{{"text": req.User}}
+		}
 		out = append(out, map[string]any{
 			"role":    mapRole("user", cfg.RoleMappings),
-			"content": []map[string]any{{"text": req.User}},
+			"content": content,
 		})
 	}
 	body["messages"] = out
+}
+
+// buildBedrockContentParts builds a Converse content array with image blocks
+// (ADR-060). Each image emits {image:{format,source:{bytes}}}; the prompt text
+// follows as a trailing {text} block, preserving caller order among images.
+func buildBedrockContentParts(req Request) []map[string]any {
+	parts := []map[string]any{}
+	for _, img := range req.Images {
+		mimeType, data := parseDataURI(img.URL)
+		if mimeType == "" {
+			mimeType = img.MimeType
+		}
+		parts = append(parts, map[string]any{
+			"image": map[string]any{
+				"format": bedrockImageFormat(mimeType),
+				"source": map[string]any{"bytes": data},
+			},
+		})
+	}
+	parts = append(parts, map[string]any{"text": req.User})
+	return parts
+}
+
+// bedrockImageFormat derives the Converse `format` token from a MIME type
+// (image/png -> "png"). Converse accepts png/jpeg/gif/webp.
+func bedrockImageFormat(mimeType string) string {
+	if i := strings.LastIndex(mimeType, "/"); i >= 0 {
+		return mimeType[i+1:]
+	}
+	return mimeType
 }
 
 func transformBedrockToolDefs(body map[string]any, tools []Tool) {
