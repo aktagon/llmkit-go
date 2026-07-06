@@ -29,12 +29,16 @@ func TestInfoAnthropic(t *testing.T) {
 	}
 }
 
-// ADR-035: browserCallable is the coarse per-provider CORS fact — true only for
+// ADR-035: browserCallable is the coarse per-provider CORS fact — true for
 // providers whose host serves Access-Control-Allow-Origin for direct browser
-// calls (google today), false (needs-proxy) otherwise.
+// calls (google + openai, CORS-preflight verified), false (needs-proxy)
+// otherwise.
 func TestBrowserCallableCORSFact(t *testing.T) {
 	if !Info(Google).BrowserCallable {
 		t.Error("google BrowserCallable = false, want true")
+	}
+	if !Info(OpenAI).BrowserCallable {
+		t.Error("openai BrowserCallable = false, want true")
 	}
 	if Info(Grok).BrowserCallable {
 		t.Error("grok BrowserCallable = true, want false")
