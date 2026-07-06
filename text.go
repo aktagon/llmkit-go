@@ -128,8 +128,8 @@ func (b *Text) Prompt(ctx context.Context, finalText string) (Response, error) {
 //   - History -> req.Messages
 //   - Schema  -> req.Schema
 //   - parts   -> req.User (concatenated Text parts, joined by spaces)
-//   - req.Images for image Parts. Phase 4 collapses
-//     this onto a Part-based request shape (ADR-008 OQ-2).
+//   - image Parts -> req.Images (base64 data URIs; ADR-060). A future
+//     slice may collapse User+Images onto a single Part-based request shape.
 //   - files   -> req.Files
 //
 // Any chain method whose option maps to a functional option (MaxTokens,
