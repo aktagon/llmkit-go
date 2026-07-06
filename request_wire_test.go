@@ -226,6 +226,28 @@ func TestRequestWire_StructuredOutputAnthropic(t *testing.T) {
 	assertRequestWireHeaders(t, "structured-output-anthropic", headers)
 }
 
+// TestRequestWire_AnthropicSchemaDocument asserts the compose path (BUG-017 /
+// HANDOFF-028): one Anthropic request carrying BOTH a schema and an uploaded
+// file composes the structured-output beta and the files-api beta into a single
+// comma-joined anthropic-beta header. The composed value is golden-locked in
+// anthropic-schema-document.headers.json and asserted byte-identically across
+// all four SDKs — the compose path otherwise exercised only per-SDK. NOT
+// live-anchored — parity held by the comparator + mock body.
+func TestRequestWire_AnthropicSchemaDocument(t *testing.T) {
+	body, headers := captureBody(t, providers.Anthropic, func(c *Client) {
+		_, err := c.Text.
+			Model(wireAnthropicSchemaDocumentModel).
+			Schema(wireAnthropicSchemaDocumentSchema).
+			File(wireAnthropicSchemaDocumentFileId).
+			Prompt(context.Background(), wireAnthropicSchemaDocumentPrompt)
+		if err != nil {
+			t.Fatalf("anthropic schema+document call: %v", err)
+		}
+	})
+	assertRequestWireGolden(t, "anthropic-schema-document", body)
+	assertRequestWireHeaders(t, "anthropic-schema-document", headers)
+}
+
 // === Plan 039: nested-schema fixtures (the witness lint's first catch) ===
 //
 // setAdditionalPropertiesFalse and removeAdditionalProperties recurse through
