@@ -385,7 +385,7 @@ func generateImage(ctx context.Context, p Provider, req ImageRequest, opts ...Im
 		return ImageResponse{}, err
 	}
 
-	resp, parseErr := parseImageResponse(p.Name, respBody)
+	resp, parseErr := parseImageResponse(imgCfg, p.Name, respBody)
 	if o.raw && parseErr == nil {
 		resp.Raw = append(json.RawMessage(nil), respBody...)
 	}
@@ -896,44 +896,35 @@ func imageAuthHeaders(p Provider, cfg providerSpec) map[string]string {
 }
 
 // parseImageResponse decodes inline image parts and concatenates text parts.
-// Dispatches by provider — each provider's image-gen response shape diverges
-// enough (Google's candidates-array vs. OpenAI/xAI's data-array, different
-// usage paths) that a switch is clearer than a generic walker.
-func parseImageResponse(provider string, body []byte) (ImageResponse, error) {
+// The response parser is selected by the config's response wire family
+// (imgCfg.ResponseShape), never by provider name (BUG-024). imgCfg's
+// UsageInputPath/UsageOutputPath are dotted-from-root and empty when the
+// endpoint reports no usage. provider is still used for the Google-only
+// finish-signal paths in the GoogleParts branch.
+func parseImageResponse(imgCfg *providers.ImageGenDef, provider string, body []byte) (ImageResponse, error) {
 	var raw map[string]any
 	if err := json.Unmarshal(body, &raw); err != nil {
 		return ImageResponse{}, fmt.Errorf("unmarshal image response: %w", err)
 	}
 
-	switch providers.ProviderName(provider) {
-	case providers.OpenAI:
-		return parseImageResponseDataArray(raw, "usage.input_tokens", "usage.output_tokens"), nil
-	case providers.Grok:
-		// xAI reports cost in `usage.cost_in_usd_ticks` rather than token
-		// counts; passing empty paths yields zero tokens (correct, no fake
-		// values). The cost field is reachable via extra-data parsing if
-		// callers need it (future enhancement).
-		return parseImageResponseDataArray(raw, "", ""), nil
-	case providers.Recraft:
-		// Recraft returns the same data[].b64_json shape as OpenAI/xAI (the
-		// SDK forces response_format=b64_json). Recraft's generations
-		// response carries no usage object, so token paths are empty (zero
-		// tokens — honest, no fabricated values). SVG bytes (vector models)
-		// are sniffed to image/svg+xml inside parseImageResponseDataArray.
-		return parseImageResponseDataArray(raw, "", ""), nil
-	case providers.Vertex:
+	switch imgCfg.ResponseShape {
+	case "DataArrayB64Json":
+		// OpenAI/xAI/Recraft data[].b64_json shape. SVG bytes (Recraft vector
+		// models) are sniffed to image/svg+xml inside parseImageResponseDataArray.
+		return parseImageResponseDataArray(raw, imgCfg.UsageInputPath, imgCfg.UsageOutputPath), nil
+	case "VertexPredictions":
 		return parseVertexImageResponse(raw), nil
 	}
 
+	// GoogleParts: candidates[].content.parts inline data.
 	images, text := extractGoogleImageParts(raw)
-	inputPath, outputPath := providers.UsagePaths(provider)
 	finishReason, finishMessage := extractFinishSignal(raw, provider)
 	return ImageResponse{
 		Images: images,
 		Text:   text,
 		Usage: Usage{
-			Input:  extractIntPath(raw, inputPath),
-			Output: extractIntPath(raw, outputPath),
+			Input:  extractIntPath(raw, imgCfg.UsageInputPath),
+			Output: extractIntPath(raw, imgCfg.UsageOutputPath),
 		},
 		FinishReason:  finishReason,
 		FinishMessage: finishMessage,
