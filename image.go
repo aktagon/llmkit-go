@@ -385,7 +385,7 @@ func generateImage(ctx context.Context, p Provider, req ImageRequest, opts ...Im
 		return ImageResponse{}, err
 	}
 
-	resp, parseErr := parseImageResponse(p.Name, respBody)
+	resp, parseErr := parseImageResponse(imgCfg, p.Name, respBody)
 	if o.raw && parseErr == nil {
 		resp.Raw = append(json.RawMessage(nil), respBody...)
 	}
@@ -899,41 +899,32 @@ func imageAuthHeaders(p Provider, cfg providerSpec) map[string]string {
 //
 //
 //
-func parseImageResponse(provider string, body []byte) (ImageResponse, error) {
+//
+//
+func parseImageResponse(imgCfg *providers.ImageGenDef, provider string, body []byte) (ImageResponse, error) {
 	var raw map[string]any
 	if err := json.Unmarshal(body, &raw); err != nil {
 		return ImageResponse{}, fmt.Errorf("unmarshal image response: %w", err)
 	}
 
-	switch providers.ProviderName(provider) {
-	case providers.OpenAI:
-		return parseImageResponseDataArray(raw, "usage.input_tokens", "usage.output_tokens"), nil
-	case providers.Grok:
+	switch imgCfg.ResponseShape {
+	case "DataArrayB64Json":
 		//
 		//
-		//
-		//
-		return parseImageResponseDataArray(raw, "", ""), nil
-	case providers.Recraft:
-		//
-		//
-		//
-		//
-		//
-		return parseImageResponseDataArray(raw, "", ""), nil
-	case providers.Vertex:
+		return parseImageResponseDataArray(raw, imgCfg.UsageInputPath, imgCfg.UsageOutputPath), nil
+	case "VertexPredictions":
 		return parseVertexImageResponse(raw), nil
 	}
 
+	//
 	images, text := extractGoogleImageParts(raw)
-	inputPath, outputPath := providers.UsagePaths(provider)
 	finishReason, finishMessage := extractFinishSignal(raw, provider)
 	return ImageResponse{
 		Images: images,
 		Text:   text,
 		Usage: Usage{
-			Input:  extractIntPath(raw, inputPath),
-			Output: extractIntPath(raw, outputPath),
+			Input:  extractIntPath(raw, imgCfg.UsageInputPath),
+			Output: extractIntPath(raw, imgCfg.UsageOutputPath),
 		},
 		FinishReason:  finishReason,
 		FinishMessage: finishMessage,
