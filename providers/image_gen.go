@@ -31,12 +31,15 @@ type ImageModelDef struct {
 // GenEndpoint and EditEndpoint are forward-compat overrides; empty means
 // reuse the provider's main endpoint template (Google).
 type ImageGenDef struct {
-	InputMode     string // ImageInputInlineParts | ImageInputMultipartForm | ImageInputJSONInlineRefs | ImageInputJSONPredict | ImageInputJSONGenerations
-	OutputMode    string // ImageOutputBase64Inline | ImageOutputURLOrBase64
-	MaxInputCount int    // max reference images per request
-	GenEndpoint   string // override; empty = use provider main endpoint
-	EditEndpoint  string // override; empty = use GenEndpoint
-	Models        []ImageModelDef
+	InputMode       string // ImageInputInlineParts | ImageInputMultipartForm | ImageInputJSONInlineRefs | ImageInputJSONPredict | ImageInputJSONGenerations
+	OutputMode      string // ImageOutputBase64Inline | ImageOutputURLOrBase64
+	ResponseShape   string // GoogleParts | DataArrayB64Json | VertexPredictions (BUG-024)
+	UsageInputPath  string // dotted-from-root usage-token path; empty when unreported
+	UsageOutputPath string
+	MaxInputCount   int    // max reference images per request
+	GenEndpoint     string // override; empty = use provider main endpoint
+	EditEndpoint    string // override; empty = use GenEndpoint
+	Models          []ImageModelDef
 }
 
 // ImageGenConfig returns the image-generation config for a provider, or nil
@@ -45,11 +48,14 @@ func ImageGenConfig(provider string) *ImageGenDef {
 	switch ProviderName(provider) {
 	case Google:
 		return &ImageGenDef{
-			InputMode:     "InlineParts",
-			OutputMode:    "Base64Inline",
-			MaxInputCount: 14,
-			GenEndpoint:   "",
-			EditEndpoint:  "",
+			InputMode:       "InlineParts",
+			OutputMode:      "Base64Inline",
+			ResponseShape:   "GoogleParts",
+			UsageInputPath:  "usageMetadata.promptTokenCount",
+			UsageOutputPath: "usageMetadata.candidatesTokenCount",
+			MaxInputCount:   14,
+			GenEndpoint:     "",
+			EditEndpoint:    "",
 			Models: []ImageModelDef{
 				{
 					ModelID:        "gemini-3-pro-image-preview",
@@ -69,11 +75,14 @@ func ImageGenConfig(provider string) *ImageGenDef {
 		}
 	case Grok:
 		return &ImageGenDef{
-			InputMode:     "JSONInlineRefs",
-			OutputMode:    "Base64Inline",
-			MaxInputCount: 16,
-			GenEndpoint:   "/v1/images/generations",
-			EditEndpoint:  "/v1/images/edits",
+			InputMode:       "JSONInlineRefs",
+			OutputMode:      "Base64Inline",
+			ResponseShape:   "DataArrayB64Json",
+			UsageInputPath:  "",
+			UsageOutputPath: "",
+			MaxInputCount:   16,
+			GenEndpoint:     "/v1/images/generations",
+			EditEndpoint:    "/v1/images/edits",
 			Models: []ImageModelDef{
 				{
 					ModelID:        "grok-imagine-image-quality",
@@ -86,11 +95,14 @@ func ImageGenConfig(provider string) *ImageGenDef {
 		}
 	case OpenAI:
 		return &ImageGenDef{
-			InputMode:     "MultipartForm",
-			OutputMode:    "Base64Inline",
-			MaxInputCount: 16,
-			GenEndpoint:   "/v1/images/generations",
-			EditEndpoint:  "/v1/images/edits",
+			InputMode:       "MultipartForm",
+			OutputMode:      "Base64Inline",
+			ResponseShape:   "DataArrayB64Json",
+			UsageInputPath:  "usage.input_tokens",
+			UsageOutputPath: "usage.output_tokens",
+			MaxInputCount:   16,
+			GenEndpoint:     "/v1/images/generations",
+			EditEndpoint:    "/v1/images/edits",
 			Models: []ImageModelDef{
 				{
 					ModelID:        "gpt-image-1",
@@ -124,11 +136,14 @@ func ImageGenConfig(provider string) *ImageGenDef {
 		}
 	case Recraft:
 		return &ImageGenDef{
-			InputMode:     "JSONGenerations",
-			OutputMode:    "Base64Inline",
-			MaxInputCount: 0,
-			GenEndpoint:   "/v1/images/generations",
-			EditEndpoint:  "",
+			InputMode:       "JSONGenerations",
+			OutputMode:      "Base64Inline",
+			ResponseShape:   "DataArrayB64Json",
+			UsageInputPath:  "",
+			UsageOutputPath: "",
+			MaxInputCount:   0,
+			GenEndpoint:     "/v1/images/generations",
+			EditEndpoint:    "",
 			Models: []ImageModelDef{
 				{
 					ModelID:        "recraftv3",
@@ -148,11 +163,14 @@ func ImageGenConfig(provider string) *ImageGenDef {
 		}
 	case Vertex:
 		return &ImageGenDef{
-			InputMode:     "JSONPredict",
-			OutputMode:    "Base64Inline",
-			MaxInputCount: 1,
-			GenEndpoint:   "",
-			EditEndpoint:  "",
+			InputMode:       "JSONPredict",
+			OutputMode:      "Base64Inline",
+			ResponseShape:   "VertexPredictions",
+			UsageInputPath:  "",
+			UsageOutputPath: "",
+			MaxInputCount:   1,
+			GenEndpoint:     "",
+			EditEndpoint:    "",
 			Models: []ImageModelDef{
 				{
 					ModelID:        "imagen-3.0-fast-generate-001",
