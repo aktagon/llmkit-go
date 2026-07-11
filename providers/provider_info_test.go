@@ -29,16 +29,18 @@ func TestInfoAnthropic(t *testing.T) {
 	}
 }
 
-// ADR-035: browserCallable is the coarse per-provider CORS fact — true for
-// providers whose host serves Access-Control-Allow-Origin for direct browser
-// calls (google + openai, CORS-preflight verified), false (needs-proxy)
-// otherwise.
+// ADR-035: browserCallable is the coarse per-provider CORS fact — true only for
+// providers whose actual GET/POST method response carries
+// Access-Control-Allow-Origin (google, response-level verified), false
+// (needs-proxy) otherwise. BUG-027: openai passes the OPTIONS preflight but
+// omits ACAO on the actual response, so it is false, not true — the fact is
+// keyed off the method response, not the preflight.
 func TestBrowserCallableCORSFact(t *testing.T) {
 	if !Info(Google).BrowserCallable {
 		t.Error("google BrowserCallable = false, want true")
 	}
-	if !Info(OpenAI).BrowserCallable {
-		t.Error("openai BrowserCallable = false, want true")
+	if Info(OpenAI).BrowserCallable {
+		t.Error("openai BrowserCallable = true, want false (BUG-027: ACAO absent on the actual response)")
 	}
 	if Info(Grok).BrowserCallable {
 		t.Error("grok BrowserCallable = true, want false")
