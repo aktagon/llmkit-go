@@ -217,7 +217,7 @@ var providerInfoTable = map[ProviderName]ProviderInfo{
 		EnvVar:          "OPENAI_API_KEY",
 		DefaultModel:    "gpt-4o-2024-08-06",
 		BaseURL:         "https://api.openai.com",
-		BrowserCallable: true,
+		BrowserCallable: false,
 	},
 	Openrouter: {
 		ID:              Openrouter,
