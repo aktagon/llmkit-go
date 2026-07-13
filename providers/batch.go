@@ -75,6 +75,7 @@ func BatchConfig(provider string) *BatchDef {
 				PollingEndpoint:     "",
 				PollingStatusPath:   "status",
 				PollingDoneValue:    "completed",
+				PollingErrorValues:  []string{"failed", "expired", "cancelled"},
 				ResultEndpoint:      "",
 				ResultResponsePath:  "",
 				ResultFileIdPath:    "output_file_id",
