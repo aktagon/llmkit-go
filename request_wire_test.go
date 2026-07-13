@@ -372,6 +372,36 @@ func TestRequestWire_CachingBatchAnthropic(t *testing.T) {
 	assertRequestWireGolden(t, "caching-batch-anthropic", body)
 }
 
+// TestRequestWire_BatchMultimodalAnthropic witnesses the input modalities
+// api:Image + api:File on the BATCH send path (batch-modality witness family):
+// batch is a ChatCompletion execution mode (ADR-064) that re-serializes the chat
+// body under Anthropic's {custom_id, params} envelope, so the image block AND the
+// document block must both survive the batch wrap. One fixture carries both. NOT
+// live-anchored — parity held by the cross-SDK comparator + mock body.
+func TestRequestWire_BatchMultimodalAnthropic(t *testing.T) {
+	png, err := base64.StdEncoding.DecodeString(wireBatchMultimodalAnthropicImageBase64)
+	if err != nil {
+		t.Fatalf("decode tiny PNG constant: %v", err)
+	}
+	body, headers := captureBody(t, providers.Anthropic, func(c *Client) {
+		_, err := c.Text.Model(wireBatchMultimodalAnthropicModel).
+			Image(wireBatchMultimodalAnthropicImageMime, png).
+			File(wireBatchMultimodalAnthropicFileId).
+			Batch(context.Background(), wireBatchMultimodalAnthropicPrompt)
+		if err != nil {
+			t.Fatalf("batch multimodal submit: %v", err)
+		}
+	})
+	assertRequestWireGolden(t, "batch-multimodal-anthropic", body)
+	// Referencing an uploaded file id in a batch item requires the files-api beta
+	// on the batch CREATE request (batch-modality witness). Golden-locked across
+	// all four SDKs via the companion batch-multimodal-anthropic.headers.json.
+	if got, want := headers.Get("anthropic-beta"), "files-api-2025-04-14"; got != want {
+		t.Errorf("anthropic-beta header: got %q, want %q", got, want)
+	}
+	assertRequestWireHeaders(t, "batch-multimodal-anthropic", headers)
+}
+
 // === M2: options fixtures (ADR-028), one per model family ===
 //
 // Each canonical call sets every option the model family accepts live, so the
