@@ -132,6 +132,7 @@ type options struct {
 	middleware        []providers.MiddlewareFn
 	safetySettings    []SafetySetting
 	raw               bool
+	pollTimeout       time.Duration
 }
 
 func defaultOptions() *options {
@@ -152,6 +153,16 @@ func resolveOptions(opts []Option) *options {
 // WithHTTPClient sets a custom HTTP client.
 func WithHTTPClient(c *http.Client) Option {
 	return func(o *options) { o.httpClient = c }
+}
+
+// WithPollTimeout overrides the overall wall-clock backstop for a blocking
+// batch Wait (ADR-062 OQ-1). The default is ~10 minutes — a sane ceiling for a
+// request/serverless thread. Raise it (up to the provider's batch window, e.g.
+// OpenAI's 24h) for a caller that legitimately blocks on a long batch; the
+// caller ctx deadline still bounds Wait first. This is the OVERALL loop
+// deadline, not a per-request HTTP timeout (that is WithHTTPClient's transport).
+func WithPollTimeout(d time.Duration) Option {
+	return func(o *options) { o.pollTimeout = d }
 }
 
 // WithTemperature sets the sampling temperature (0.0-2.0).

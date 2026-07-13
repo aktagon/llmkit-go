@@ -129,18 +129,83 @@ func submitBatch(ctx context.Context, p Provider, reqs []Request, opts ...Option
 	return BatchHandle{ID: batchID, Provider: p}, nil
 }
 
+// Batch poll cadence (ADR-062 OQ-1). Package vars (not consts) so tests can
+// shrink them. PollTimeout is the OVERALL wall-clock backstop for the poll LOOP
+// — the drift this slice closes: Go/TS/Python batch loops were unbounded, Rust
+// already bounded at 600s, so all four converge on ~10 min. The caller ctx
+// still bounds Wait first; the backstop only fires on an unbounded ctx. Per-call
+// override up to the provider's 24h window via WithPollTimeout.
+var (
+	batchPollInterval = 2 * time.Second
+	batchPollTimeout  = 10 * time.Minute
+)
+
+// waitBatch polls the batch lifecycle until a terminal state and returns the
+// ordered responses. It is now a thin delegation to the shared job engine
+// (ADR-062 §(b)) — pollJob owns the loop, deadline, and state machine; the
+// batchAdapter carries the batch-specific seams. Signature byte-unchanged.
 func waitBatch(ctx context.Context, handle BatchHandle, opts ...Option) ([]Response, error) {
 	o := resolveOptions(opts)
-	p := handle.Provider
+	a, err := newBatchAdapter(handle, o)
+	if err != nil {
+		return nil, err
+	}
+	return pollJob[[]Response](ctx, a)
+}
 
+// batchAdapter binds the batch capability to the job engine's four seams. It
+// closes over the resolved options (http client, raw flag) + provider config so
+// result can perform batch's two-hop (output_file_id → GET /content).
+type batchAdapter struct {
+	lc         LifecycleConfig
+	o          *options
+	handle     BatchHandle
+	base       string
+	bc         *providers.BatchDef
+	cfg        providerSpec
+	headers    map[string]string
+	pollURLStr string
+}
+
+func (a batchAdapter) config() LifecycleConfig { return a.lc }
+
+func (a batchAdapter) poll(ctx context.Context) (pollBody, error) {
+	respBody, err := doGet(ctx, a.o.httpClient, a.pollURLStr, a.headers)
+	if err != nil {
+		return pollBody{}, fmt.Errorf("batch poll: %w", err)
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(respBody, &raw); err != nil {
+		return pollBody{}, fmt.Errorf("unmarshal batch poll response: %w", err)
+	}
+	return pollBody{raw: raw}, nil
+}
+
+func (a batchAdapter) classify(raw pollBody) (classification, error) {
+	return classifyByConfig(a.lc, raw), nil
+}
+
+func (a batchAdapter) result(ctx context.Context, raw pollBody) ([]Response, error) {
+	// The poll body is already decoded — hand it to fetchBatchResults so the
+	// two-hop provider (OpenAI: output_file_id lives in this same status body)
+	// skips a redundant status GET.
+	return fetchBatchResults(ctx, a.o, a.handle, a.base, a.bc, a.cfg, a.headers, a.o.raw, raw.raw)
+}
+
+// newBatchAdapter assembles the batch adapter + its LifecycleConfig from the
+// batch facts. ErrorValues comes from the provider's llm:pollingErrorValues fact
+// (OpenAI: failed/expired/cancelled); when absent (Anthropic — failures are
+// per-request, batch "ended" is done) it is empty and a stuck batch terminates
+// at the deadline backstop rather than mislabelling a Failed terminal.
+func newBatchAdapter(handle BatchHandle, o *options) (batchAdapter, error) {
+	p := handle.Provider
 	cfg, ok := providerSpecs()[p.Name]
 	if !ok {
-		return nil, &ValidationError{Field: "provider", Message: "unknown: " + p.Name}
+		return batchAdapter{}, &ValidationError{Field: "provider", Message: "unknown: " + p.Name}
 	}
-
 	bc := providers.BatchConfig(p.Name)
 	if bc == nil || bc.Lifecycle == nil {
-		return nil, fmt.Errorf("batch polling not available for %s", p.Name)
+		return batchAdapter{}, fmt.Errorf("batch polling not available for %s", p.Name)
 	}
 
 	base := p.BaseURL
@@ -149,36 +214,26 @@ func waitBatch(ctx context.Context, handle BatchHandle, opts ...Option) ([]Respo
 	}
 	headers := buildAuthHeaders(p, cfg)
 
-	// Poll until done
 	pollURL := base + bc.Lifecycle.CreateEndpoint + "/" + handle.ID
 	if bc.Lifecycle.PollingEndpoint != "" {
 		pollURL = base + strings.ReplaceAll(bc.Lifecycle.PollingEndpoint, "{id}", handle.ID)
 	}
 
-	for {
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		default:
-		}
-
-		respBody, err := doGet(ctx, o.httpClient, pollURL, headers)
-		if err != nil {
-			return nil, fmt.Errorf("batch poll: %w", err)
-		}
-
-		var raw map[string]any
-		if err := json.Unmarshal(respBody, &raw); err != nil {
-			return nil, fmt.Errorf("unmarshal batch poll response: %w", err)
-		}
-
-		status := extractPath(raw, bc.Lifecycle.PollingStatusPath)
-		if status == bc.Lifecycle.PollingDoneValue {
-			return fetchBatchResults(ctx, o, handle, base, bc, cfg, headers, o.raw)
-		}
-
-		time.Sleep(2 * time.Second)
+	timeout := batchPollTimeout
+	if o.pollTimeout > 0 {
+		timeout = o.pollTimeout
 	}
+
+	lc := LifecycleConfig{
+		Noun:         "batch",
+		StatusPath:   bc.Lifecycle.PollingStatusPath,
+		DoneValues:   nonEmptyValues(bc.Lifecycle.PollingDoneValue),
+		ErrorValues:  bc.Lifecycle.PollingErrorValues,
+		PollInterval: batchPollInterval,
+		PollTimeout:  timeout,
+	}
+	a := batchAdapter{lc: lc, o: o, handle: handle, base: base, bc: bc, cfg: cfg, headers: headers, pollURLStr: pollURL}
+	return a, nil
 }
 
 // buildBatchBody constructs the provider-specific inline batch request body.
@@ -277,20 +332,25 @@ func uploadBatchFile(ctx context.Context, client *http.Client, base string, json
 // Supports two patterns:
 //   - Direct result endpoint (Anthropic): GET ResultEndpoint/{id}
 //   - File-based results (OpenAI): extract output_file_id from poll response, download file content
-func fetchBatchResults(ctx context.Context, o *options, handle BatchHandle, base string, bc *providers.BatchDef, cfg providerSpec, headers map[string]string, raw bool) ([]Response, error) {
+//
+// statusRaw is the already-decoded poll body when the caller has it (the poll
+// engine does); the two-hop result fetch reads output_file_id from it instead
+// of re-GETting the status. When nil (no prior poll), the status is fetched.
+func fetchBatchResults(ctx context.Context, o *options, handle BatchHandle, base string, bc *providers.BatchDef, cfg providerSpec, headers map[string]string, raw bool, statusRaw map[string]any) ([]Response, error) {
 	var respBody []byte
 	var err error
 
 	if bc.Lifecycle.ResultFileIdPath != "" {
-		// Two-hop: get batch status to find output file ID, then download file
-		pollURL := base + bc.Lifecycle.CreateEndpoint + "/" + handle.ID
-		statusBody, err := doGet(ctx, o.httpClient, pollURL, headers)
-		if err != nil {
-			return nil, fmt.Errorf("batch status: %w", err)
-		}
-		var statusRaw map[string]any
-		if err := json.Unmarshal(statusBody, &statusRaw); err != nil {
-			return nil, fmt.Errorf("unmarshal batch status: %w", err)
+		// Two-hop: read output file ID from the poll body, then download file.
+		if statusRaw == nil {
+			pollURL := base + bc.Lifecycle.CreateEndpoint + "/" + handle.ID
+			statusBody, gerr := doGet(ctx, o.httpClient, pollURL, headers)
+			if gerr != nil {
+				return nil, fmt.Errorf("batch status: %w", gerr)
+			}
+			if err := json.Unmarshal(statusBody, &statusRaw); err != nil {
+				return nil, fmt.Errorf("unmarshal batch status: %w", err)
+			}
 		}
 		fileID := extractPath(statusRaw, bc.Lifecycle.ResultFileIdPath)
 		if fileID == "" {
