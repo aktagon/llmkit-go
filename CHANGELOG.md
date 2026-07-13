@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Breaking
+
+- Clean async-job API (ADR-064). Batch is now a single async terminal on the `Text` builder — `c.Text.<chain>.Batch(ctx, "q3", "q4")` returns a `BatchHandle` (batch is a text execution mode, parallel to `Stream`), and `handle.Wait(ctx)` blocks for the ordered results. The old two-terminal surface is collapsed: the blocking `c.Text.Batch(...)` (which returned `[]Response`) and `c.Text.SubmitBatch(...)` are both gone — `Batch` now returns the handle, and the blocking one-liner is the compose `h, _ := c.Text.<chain>.Batch(ctx, ...); h.Wait(ctx)` (no `run()` sugar). `BatchHandle.Wait`/`Poll` are unchanged. Migration: `c.Text.<chain>.SubmitBatch(ctx, ...)` → `c.Text.<chain>.Batch(ctx, ...)`; the old blocking `c.Text.<chain>.Batch(ctx, ...)` → `h := c.Text.<chain>.Batch(ctx, ...); h.Wait(ctx)`.
+
 ### Added
 
 - Inline image input on the text/prompt path (ADR-060). `c.Text.Image(mime, bytes).Prompt(...)` now sends the image as the provider's native vision block on all four chat wire shapes (Anthropic, OpenAI, Google, Bedrock). Bytes-based, so it works with no filesystem. Resolves ADR-008 OQ-2 for the image modality; additive. This `feat:` cuts the next minor.

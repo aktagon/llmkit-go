@@ -1039,7 +1039,11 @@ func TestPromptBatch(t *testing.T) {
 
 	c := New(providers.Anthropic, "key")
 	c.provider.baseURL = server.URL
-	results, err := c.Text.System("Be brief").Batch(context.Background(), "Hello", "World")
+	h, err := c.Text.System("Be brief").Batch(context.Background(), "Hello", "World")
+	if err != nil {
+		t.Fatal(err)
+	}
+	results, err := h.Wait(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1087,7 +1091,7 @@ func TestBatch_PropagatesChainSamplingOptions(t *testing.T) {
 	c := New(providers.Anthropic, "key")
 	c.provider.baseURL = server.URL
 	stops := []string{"END"}
-	_, err := c.Text.
+	h, err := c.Text.
 		System("be terse").
 		MaxTokens(64).
 		Temperature(0.3).
@@ -1095,6 +1099,9 @@ func TestBatch_PropagatesChainSamplingOptions(t *testing.T) {
 		StopSequences(stops...).
 		Batch(context.Background(), "ping")
 	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.Wait(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	items := captured["requests"].([]any)
@@ -1230,7 +1237,11 @@ func TestPromptBatchOpenAI(t *testing.T) {
 
 	c := New(providers.OpenAI, "test-key")
 	c.provider.baseURL = server.URL
-	results, err := c.Text.System("Reply with only the word pong").Batch(context.Background(), "ping", "ping again")
+	h, err := c.Text.System("Reply with only the word pong").Batch(context.Background(), "ping", "ping again")
+	if err != nil {
+		t.Fatal(err)
+	}
+	results, err := h.Wait(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
