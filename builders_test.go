@@ -399,7 +399,7 @@ func TestBatch_Coverage(t *testing.T) {
 	}
 }
 
-func TestSubmitBatch_Coverage(t *testing.T) {
+func TestTextBatch_Coverage(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	_, _ = Anthropic("k").Text.System("x").Batch(ctx, "p1")
