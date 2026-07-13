@@ -17,6 +17,7 @@ type ResourceLifecycleDef struct {
 	PollingEndpoint     string
 	PollingStatusPath   string
 	PollingDoneValue    string
+	PollingErrorValues  []string // status values that mean terminal failure (batch)
 	ResultEndpoint      string
 	ResultResponsePath  string
 	ResultFileIdPath    string // JSON path to output file ID in poll response (OpenAI batch)
