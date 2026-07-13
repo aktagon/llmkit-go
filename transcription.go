@@ -147,15 +147,76 @@ func submitTranscription(ctx context.Context, p Provider, req TranscriptionReque
 // process boundaries.
 func (h TranscriptionHandle) Wait(ctx context.Context, opts ...TranscriptionOption) (TranscriptionResponse, error) {
 	o := resolveTranscriptionOptions(opts)
-	p := h.Provider
+	a, err := newTranscriptionAdapter(h, o)
+	if err != nil {
+		return TranscriptionResponse{}, err
+	}
+	return pollJob[TranscriptionResponse](ctx, a)
+}
 
+// Poll performs exactly ONE provider round-trip and returns the normalized
+// JobStatus (ADR-063 POLL-001) — the non-blocking primitive for callers driving
+// their own poll loop. On a completed job JobStatus.Result carries the finished
+// TranscriptionResponse; a failed job populates JobStatus.Cause (the provider
+// error surfaces in Cause.Message, preserving the Wait error surface). Safe on a
+// reconstituted handle (ADR-014 cross-process resume; POLL-005).
+func (h TranscriptionHandle) Poll(ctx context.Context, opts ...TranscriptionOption) (JobStatus[TranscriptionResponse], error) {
+	o := resolveTranscriptionOptions(opts)
+	a, err := newTranscriptionAdapter(h, o)
+	if err != nil {
+		return JobStatus[TranscriptionResponse]{}, err
+	}
+	return pollOnce[TranscriptionResponse](ctx, a)
+}
+
+// transcriptionAdapter binds async transcription to the job engine's four seams.
+// classify uses the config-backed default (status vs DoneStatus / ErrorStatus);
+// result decodes the finished transcript per wire shape (no second hop).
+type transcriptionAdapter struct {
+	lc         LifecycleConfig
+	client     *http.Client
+	headers    map[string]string
+	pollURLStr string
+	tcCfg      *providers.TranscriptionDef
+}
+
+func (a transcriptionAdapter) config() LifecycleConfig { return a.lc }
+
+func (a transcriptionAdapter) poll(ctx context.Context) (pollBody, error) {
+	respBody, err := doGet(ctx, a.client, a.pollURLStr, a.headers)
+	if err != nil {
+		return pollBody{}, fmt.Errorf("transcription poll: %w", err)
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(respBody, &raw); err != nil {
+		return pollBody{}, fmt.Errorf("unmarshal transcription poll response: %w", err)
+	}
+	return pollBody{raw: raw}, nil
+}
+
+func (a transcriptionAdapter) classify(raw pollBody) (classification, error) {
+	return classifyByConfig(a.lc, raw), nil
+}
+
+func (a transcriptionAdapter) result(ctx context.Context, raw pollBody) (TranscriptionResponse, error) {
+	return transcriptionResult(a.tcCfg, raw.raw)
+}
+
+// newTranscriptionAdapter assembles the transcription adapter + its
+// LifecycleConfig from today's transcription facts. The status-to-terminal
+// mapping stays config (StatusPath / DoneStatus / ErrorStatus, STT-005); the
+// provider error message rides on cfg.ErrorMessagePath so Wait still surfaces
+// it (S02). Cadence/timeout come from the existing package vars so tests keep
+// their fast override.
+func newTranscriptionAdapter(h TranscriptionHandle, o *transcriptionOptions) (transcriptionAdapter, error) {
+	p := h.Provider
 	cfg, ok := providerSpecs()[p.Name]
 	if !ok {
-		return TranscriptionResponse{}, &ValidationError{Field: "provider", Message: "unknown: " + p.Name}
+		return transcriptionAdapter{}, &ValidationError{Field: "provider", Message: "unknown: " + p.Name}
 	}
 	tcCfg := providers.TranscriptionConfig(p.Name)
 	if tcCfg == nil {
-		return TranscriptionResponse{}, &ValidationError{Field: "provider", Message: p.Name + " does not support transcription"}
+		return transcriptionAdapter{}, &ValidationError{Field: "provider", Message: p.Name + " does not support transcription"}
 	}
 
 	client := o.httpClient
@@ -166,40 +227,17 @@ func (h TranscriptionHandle) Wait(ctx context.Context, opts ...TranscriptionOpti
 	headers := buildAuthHeaders(p, cfg)
 	pollURL := base + strings.Replace(tcCfg.PollEndpoint, "{id}", h.ID, 1)
 
-	deadline := time.Now().Add(transcriptionPollTimeout)
-	for {
-		select {
-		case <-ctx.Done():
-			return TranscriptionResponse{}, ctx.Err()
-		default:
-		}
-		if time.Now().After(deadline) {
-			return TranscriptionResponse{}, fmt.Errorf("transcription poll: timed out after %s waiting for %s", transcriptionPollTimeout, h.ID)
-		}
-
-		respBody, err := doGet(ctx, client, pollURL, headers)
-		if err != nil {
-			return TranscriptionResponse{}, fmt.Errorf("transcription poll: %w", err)
-		}
-		var raw map[string]any
-		if err := json.Unmarshal(respBody, &raw); err != nil {
-			return TranscriptionResponse{}, fmt.Errorf("unmarshal transcription poll response: %w", err)
-		}
-
-		status := lookupHandleField(raw, tcCfg.StatusPath)
-		switch status {
-		case tcCfg.DoneStatus:
-			return transcriptionResult(tcCfg, raw)
-		case tcCfg.ErrorStatus:
-			msg := lookupHandleField(raw, cfg.ErrorMessagePath)
-			if msg == "" {
-				msg = "transcription failed"
-			}
-			return TranscriptionResponse{}, fmt.Errorf("transcription failed: %s", msg)
-		default: // queued, processing (or any non-terminal status)
-		}
-		time.Sleep(transcriptionPollInterval)
+	lc := LifecycleConfig{
+		Noun:             "transcription",
+		StatusPath:       tcCfg.StatusPath,
+		DoneValues:       nonEmptyValues(tcCfg.DoneStatus),
+		ErrorValues:      nonEmptyValues(tcCfg.ErrorStatus),
+		ErrorMessagePath: cfg.ErrorMessagePath,
+		PollInterval:     transcriptionPollInterval,
+		PollTimeout:      transcriptionPollTimeout,
 	}
+	a := transcriptionAdapter{lc: lc, client: client, headers: headers, pollURLStr: pollURL, tcCfg: tcCfg}
+	return a, nil
 }
 
 // transcribeSync runs a synchronous speech-to-text request (ADR-051): one
