@@ -91,9 +91,17 @@ func submitBatch(ctx context.Context, p Provider, reqs []Request, opts ...Option
 			return BatchHandle{}, postWith(fmt.Errorf("marshal batch request: %w", err))
 		}
 	default:
-		body, err := buildBatchBody(ctx, reqs, o, p, cfg, bc)
+		body, betaHeaders, err := buildBatchBody(ctx, reqs, o, p, cfg, bc)
 		if err != nil {
 			return BatchHandle{}, postWith(err)
+		}
+		// Contract-bearing anthropic-beta the per-request bodies require (files-api
+		// / structured-output) must ride the batch CREATE request: buildRequest
+		// computes it from the request content, but the batch submit otherwise
+		// sends only auth headers, silently dropping the beta a file-referencing
+		// batch item needs (batch-modality witness family).
+		for k, v := range betaHeaders {
+			headers[k] = appendBeta(headers[k], v)
 		}
 		jsonBody, err = json.Marshal(body)
 		if err != nil {
@@ -232,20 +240,28 @@ func newBatchAdapter(handle BatchHandle, o *options) (batchAdapter, error) {
 // When ItemBodyField is set (e.g., Anthropic: "params"), each item is wrapped
 // as {"custom_id": "req-N", <ItemBodyField>: body}. When empty, the item is
 // the body directly.
-func buildBatchBody(ctx context.Context, reqs []Request, o *options, p Provider, cfg providerSpec, bc *providers.BatchDef) (map[string]any, error) {
+// The second return value carries the contract-bearing anthropic-beta values the
+// per-request bodies require (files-api / structured output), composed across
+// items, so the caller can attach them to the batch CREATE request (buildRequest
+// returns them per request, but the batch submit sends only auth headers).
+func buildBatchBody(ctx context.Context, reqs []Request, o *options, p Provider, cfg providerSpec, bc *providers.BatchDef) (map[string]any, map[string]string, error) {
 	body := map[string]any{}
+	betaHeaders := map[string]string{}
 	var items []map[string]any
 	for i, req := range reqs {
 		msgs, err := toInternal(req.Messages)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		reqBody, _ := buildRequest(p, req, msgs, o, cfg, nil)
+		reqBody, reqHeaders := buildRequest(p, req, msgs, o, cfg, nil)
+		if v := reqHeaders["anthropic-beta"]; v != "" {
+			betaHeaders["anthropic-beta"] = appendBeta(betaHeaders["anthropic-beta"], v)
+		}
 		// Caching is a shared request-construction step (ADR-026), applied on
 		// the batch path like Text/Agent — matching the TS/Python batch paths.
 		if o.caching {
 			if err := applyCaching(ctx, reqBody, p, o, cfg); err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 		}
 		var item map[string]any
@@ -264,7 +280,7 @@ func buildBatchBody(ctx context.Context, reqs []Request, o *options, p Provider,
 	} else {
 		body["requests"] = items
 	}
-	return body, nil
+	return body, betaHeaders, nil
 }
 
 // buildBatchJSONL serializes requests as JSONL for file-reference batch input.
