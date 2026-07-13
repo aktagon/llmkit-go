@@ -16,7 +16,7 @@ import (
 // the legacy free-functions below operate on the same struct.
 
 // submitBatch / waitBatch are internal implementations.
-// Public surface: (*Batch).Submit (ADR-064) / BatchHandle.Wait / BatchHandle.Poll
+// Public surface: (*Text).Batch (ADR-064) / BatchHandle.Wait / BatchHandle.Poll
 // in batch_builder.go.
 func submitBatch(ctx context.Context, p Provider, reqs []Request, opts ...Option) (BatchHandle, error) {
 	o := resolveOptions(opts)

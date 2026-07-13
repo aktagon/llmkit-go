@@ -121,7 +121,7 @@ func (b *Text) Prompt(ctx context.Context, finalText string) (Response, error) {
 
 // buildRequest converts the chained config into the legacy
 // Request + functional-option pair. Exported via lowercase so
-// (*Text).Stream / Batch / SubmitBatch can reuse it when they land.
+// (*Text).Prompt / Stream / Batch reuse the one builder.
 //
 // The Request mapping:
 //   - System  -> req.System
