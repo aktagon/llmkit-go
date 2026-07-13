@@ -68,3 +68,24 @@ func (h BatchHandle) Wait(ctx context.Context, opts ...Option) ([]Response, erro
 	}
 	return waitBatch(ctx, BatchHandle{ID: h.ID, Provider: h.Provider}, opts...)
 }
+
+// Poll performs exactly ONE provider round-trip and returns the normalized
+// JobStatus (ADR-063 POLL-001) — the enterprise seam for callers that drive the
+// poll loop from their own orchestrator (Temporal, a queue, cron) instead of
+// blocking on Wait. When the batch has completed, JobStatus.Result carries the
+// ordered responses (the two-hop result fetch is performed inline); a
+// provider-reported terminal failure (llm:pollingErrorValues) yields State
+// JobFailed with the status on JobStatus.Cause; otherwise Result is nil and
+// State is JobRunning. Honors h.Raw like Wait, and is safe to call on a
+// reconstituted handle (ADR-014 cross-process resume; POLL-005).
+func (h BatchHandle) Poll(ctx context.Context, opts ...Option) (JobStatus[[]Response], error) {
+	if h.Raw {
+		opts = append(opts, withRaw())
+	}
+	o := resolveOptions(opts)
+	a, err := newBatchAdapter(BatchHandle{ID: h.ID, Provider: h.Provider}, o)
+	if err != nil {
+		return JobStatus[[]Response]{}, err
+	}
+	return pollOnce[[]Response](ctx, a)
+}
