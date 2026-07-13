@@ -18,14 +18,6 @@ import (
 //
 //
 //
-func promptBatch(ctx context.Context, p Provider, reqs []Request, opts ...Option) ([]Response, error) {
-	handle, err := submitBatch(ctx, p, reqs, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return waitBatch(ctx, handle, opts...)
-}
-
 func submitBatch(ctx context.Context, p Provider, reqs []Request, opts ...Option) (BatchHandle, error) {
 	o := resolveOptions(opts)
 

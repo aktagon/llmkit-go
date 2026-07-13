@@ -6,6 +6,7 @@
 //
 //
 //
+//
 package main
 
 import (
@@ -24,12 +25,16 @@ func main() {
 	}
 	c := llmkit.Anthropic(key)
 
-	responses, err := c.Text.
+	handle, err := c.Text.
 		System("Be brief").
 		Batch(context.Background(),
 			"Translate hello to French",
 			"Translate hello to Spanish",
 			"Translate hello to German")
+	if err != nil {
+		log.Fatal(err)
+	}
+	responses, err := handle.Wait(context.Background())
 	if err != nil {
 		log.Fatal(err)
 	}
