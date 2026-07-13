@@ -68,3 +68,24 @@ func (h BatchHandle) Wait(ctx context.Context, opts ...Option) ([]Response, erro
 	}
 	return waitBatch(ctx, BatchHandle{ID: h.ID, Provider: h.Provider}, opts...)
 }
+
+//
+//
+//
+//
+//
+//
+//
+//
+//
+func (h BatchHandle) Poll(ctx context.Context, opts ...Option) (JobStatus[[]Response], error) {
+	if h.Raw {
+		opts = append(opts, withRaw())
+	}
+	o := resolveOptions(opts)
+	a, err := newBatchAdapter(BatchHandle{ID: h.ID, Provider: h.Provider}, o)
+	if err != nil {
+		return JobStatus[[]Response]{}, err
+	}
+	return pollOnce[[]Response](ctx, a)
+}

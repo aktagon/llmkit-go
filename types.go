@@ -132,6 +132,7 @@ type options struct {
 	middleware        []providers.MiddlewareFn
 	safetySettings    []SafetySetting
 	raw               bool
+	pollTimeout       time.Duration
 }
 
 func defaultOptions() *options {
@@ -152,6 +153,16 @@ func resolveOptions(opts []Option) *options {
 //
 func WithHTTPClient(c *http.Client) Option {
 	return func(o *options) { o.httpClient = c }
+}
+
+//
+//
+//
+//
+//
+//
+func WithPollTimeout(d time.Duration) Option {
+	return func(o *options) { o.pollTimeout = d }
 }
 
 //
