@@ -15,17 +15,9 @@ import (
 // BatchHandle is defined in builders.go (typed-builder API surface);
 // the legacy free-functions below operate on the same struct.
 
-// promptBatch / submitBatch / waitBatch are internal implementations.
-// Public surface: (*Text).Batch / (*Text).SubmitBatch / BatchHandle.Wait
-// in batch_builder.go (plan-018 D1.3e).
-func promptBatch(ctx context.Context, p Provider, reqs []Request, opts ...Option) ([]Response, error) {
-	handle, err := submitBatch(ctx, p, reqs, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return waitBatch(ctx, handle, opts...)
-}
-
+// submitBatch / waitBatch are internal implementations.
+// Public surface: (*Batch).Submit (ADR-064) / BatchHandle.Wait / BatchHandle.Poll
+// in batch_builder.go.
 func submitBatch(ctx context.Context, p Provider, reqs []Request, opts ...Option) (BatchHandle, error) {
 	o := resolveOptions(opts)
 
