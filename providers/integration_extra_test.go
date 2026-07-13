@@ -92,7 +92,7 @@ func TestIntegrationSubmitBatchAnthropic(t *testing.T) {
 	}
 
 	c := llmkit.New(providers.Anthropic, key)
-	handle, err := c.Text.System("Reply with only the word pong").SubmitBatch(context.Background(), "ping", "ping")
+	handle, err := c.Text.System("Reply with only the word pong").Batch(context.Background(), "ping", "ping")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,7 +115,7 @@ func TestIntegrationSubmitWaitBatchAnthropic(t *testing.T) {
 	}
 
 	c := llmkit.New(providers.Anthropic, key)
-	handle, err := c.Text.System("Reply with only the word pong").SubmitBatch(context.Background(), "ping", "ping")
+	handle, err := c.Text.System("Reply with only the word pong").Batch(context.Background(), "ping", "ping")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -146,7 +146,7 @@ func TestIntegrationSubmitBatchOpenAI(t *testing.T) {
 	}
 
 	c := llmkit.New(providers.OpenAI, key)
-	handle, err := c.Text.System("Reply with only the word pong").SubmitBatch(context.Background(), "ping", "ping")
+	handle, err := c.Text.System("Reply with only the word pong").Batch(context.Background(), "ping", "ping")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -170,7 +170,11 @@ func TestIntegrationPromptBatchOpenAI(t *testing.T) {
 	}
 
 	c := llmkit.New(providers.OpenAI, key)
-	results, err := c.Text.System("Reply with only the word pong").Batch(context.Background(), "ping", "ping")
+	handle, err := c.Text.System("Reply with only the word pong").Batch(context.Background(), "ping", "ping")
+	if err != nil {
+		t.Fatal(err)
+	}
+	results, err := handle.Wait(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -198,7 +202,7 @@ func TestIntegrationSubmitWaitBatchOpenAI(t *testing.T) {
 	}
 
 	c := llmkit.New(providers.OpenAI, key)
-	handle, err := c.Text.System("Reply with only the word pong").SubmitBatch(context.Background(), "ping", "ping")
+	handle, err := c.Text.System("Reply with only the word pong").Batch(context.Background(), "ping", "ping")
 	if err != nil {
 		t.Fatal(err)
 	}

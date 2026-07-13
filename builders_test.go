@@ -361,15 +361,48 @@ func TestAgent_Prompt_Coverage(t *testing.T) {
 // context + obviously-invalid inputs so the function-level coverage
 // gate is satisfied without reaching the network.
 func TestBatch_Coverage(t *testing.T) {
+	// ADR-064: batch is a *Text execution mode (parallel to Stream).
+	// Exercise a full Text chain then the blocking one-liner
+	// Batch(...).Wait(...) compose against a cancelled context.
+	b := Anthropic("k").Text.
+		Caching().
+		File("file-id").
+		FrequencyPenalty(0.1).
+		History(Message{Role: "user", Content: "earlier"}).
+		Image("image/png", []byte{0xff}).
+		MaxTokens(42).
+		AddMiddleware(noopMiddleware).
+		Model("text-model").
+		PresencePenalty(0.2).
+		Raw().
+		ReasoningEffort("high").
+		SafetySettings([]SafetySetting{{Category: "HARM_CATEGORY_HARASSMENT", Threshold: "BLOCK_NONE"}}).
+		Schema(`{"type":"object"}`).
+		Seed(1234).
+		StopSequences("END", "STOP").
+		System("you are a tutor").
+		Temperature(0.7).
+		Text("hello").
+		ThinkingBudget(1024).
+		TopK(40).
+		TopP(0.9)
+
+	if b.model != "text-model" || b.system != "you are a tutor" || !b.caching || !b.raw {
+		t.Errorf("batch chain not accumulated: %+v", b)
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	_, _ = Anthropic("k").Text.System("x").Batch(ctx, "p1", "p2")
+	h, err := b.Batch(ctx, "p1", "p2")
+	if err == nil {
+		_, _ = h.Wait(ctx)
+	}
 }
 
 func TestSubmitBatch_Coverage(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	_, _ = Anthropic("k").Text.System("x").SubmitBatch(ctx, "p1")
+	_, _ = Anthropic("k").Text.System("x").Batch(ctx, "p1")
 }
 
 func TestWait_Coverage(t *testing.T) {

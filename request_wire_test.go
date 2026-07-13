@@ -364,7 +364,7 @@ func TestRequestWire_CachingTextAnthropic(t *testing.T) {
 // end-to-end).
 func TestRequestWire_CachingBatchAnthropic(t *testing.T) {
 	body, _ := captureBody(t, providers.Anthropic, func(c *Client) {
-		_, err := c.Text.System(wireCachingSystem).Caching().SubmitBatch(context.Background(), wireCachingPrompt)
+		_, err := c.Text.System(wireCachingSystem).Caching().Batch(context.Background(), wireCachingPrompt)
 		if err != nil {
 			t.Fatalf("batch caching submit: %v", err)
 		}
