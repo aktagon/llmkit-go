@@ -18,6 +18,11 @@ const (
 	wireAnthropicTextImagePrompt                = "Describe the attached image in one sentence."
 	wireAnthropicTextImageImageMime             = "image/png"
 	wireAnthropicTextImageImageBase64           = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGM4YWQEAALyAS2saifrAAAAAElFTkSuQmCC"
+	wireBatchMultimodalAnthropicModel           = "claude-sonnet-4-6"
+	wireBatchMultimodalAnthropicPrompt          = "Summarize the attached document and describe the image in one sentence."
+	wireBatchMultimodalAnthropicImageMime       = "image/png"
+	wireBatchMultimodalAnthropicImageBase64     = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGM4YWQEAALyAS2saifrAAAAAElFTkSuQmCC"
+	wireBatchMultimodalAnthropicFileId          = "file_011CMZq8h5VnVe8jL3qK7p2R"
 	wireBedrockChatPrompt                       = "Name the capital of Finland in one word, then write END_OF_ANSWER."
 	wireBedrockChatMaxTokens                    = 256
 	wireBedrockChatStopSequences                = "END_OF_ANSWER"
