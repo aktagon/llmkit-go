@@ -89,6 +89,38 @@ func responseArtifactFrom(resp Response) responseArtifact {
 	}
 }
 
+// imageArtifactFrom projects an ImageResponse to the shared artifact. For media
+// the Content discriminant is {kind,mimeType,byteLen,count} (RWR-004): the four
+// SDKs must agree the same provider body decodes to the same number of images
+// with the same mime and decoded byte length — the batch×image parse-drift
+// class (BUG-024) lands here. mimeType/byteLen read the first decoded image.
+func imageArtifactFrom(resp ImageResponse) responseArtifact {
+	mime := ""
+	byteLen := 0
+	if len(resp.Images) > 0 {
+		mime = resp.Images[0].MimeType
+		byteLen = len(resp.Images[0].Bytes)
+	}
+	return responseArtifact{
+		Usage: responseUsage{
+			Input:      resp.Usage.Input,
+			Output:     resp.Usage.Output,
+			CacheRead:  resp.Usage.CacheRead,
+			CacheWrite: resp.Usage.CacheWrite,
+			Reasoning:  resp.Usage.Reasoning,
+			Cost:       resp.Usage.Cost,
+		},
+		FinishReason: resp.FinishReason,
+		Content: map[string]any{
+			"kind":     "image",
+			"mimeType": mime,
+			"byteLen":  byteLen,
+			"count":    len(resp.Images),
+		},
+		Error: nil,
+	}
+}
+
 func assertResponseGolden(t *testing.T, fixture string, art responseArtifact) {
 	t.Helper()
 	repoRoot := mustRepoRoot(t)
@@ -163,4 +195,48 @@ func TestResponse_ChatGoogle(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertResponseGolden(t, "chat-google", responseArtifactFrom(resp))
+}
+
+// --- Phase 2: media response shapes (ADR-065 B2) -----------------------------
+// Image response dispatch is by config (llm:imageResponseShape), never provider
+// name (BUG-024). The three shapes each have a distinct parser; this suite
+// proves the four SDKs agree on the decoded image for each.
+
+func TestResponse_ImageGoogle(t *testing.T) {
+	server := responseMockServer(t, responseBody(t, "image-google"))
+	defer server.Close()
+
+	c := Google("k")
+	c.provider.baseURL = server.URL
+	resp, err := c.Image.Model("gemini-3.1-flash-image-preview").Generate(context.Background(), "a cat")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResponseGolden(t, "image-google", imageArtifactFrom(resp))
+}
+
+func TestResponse_ImageOpenAI(t *testing.T) {
+	server := responseMockServer(t, responseBody(t, "image-openai"))
+	defer server.Close()
+
+	c := Openai("k")
+	c.provider.baseURL = server.URL
+	resp, err := c.Image.Model("gpt-image-1").Generate(context.Background(), "a cat")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResponseGolden(t, "image-openai", imageArtifactFrom(resp))
+}
+
+func TestResponse_ImageVertex(t *testing.T) {
+	server := responseMockServer(t, responseBody(t, "image-vertex"))
+	defer server.Close()
+
+	c := Vertex("k")
+	c.provider.baseURL = server.URL
+	resp, err := c.Image.Model("imagen-3.0-generate-002").Generate(context.Background(), "a cat")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResponseGolden(t, "image-vertex", imageArtifactFrom(resp))
 }
