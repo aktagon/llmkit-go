@@ -73,6 +73,30 @@ func responseMockServer(t *testing.T, body []byte) *httptest.Server {
 	}))
 }
 
+// streamBody reads the anchored SSE event sequence fed to the stream parser. It
+// lives beside the JSON bodies but carries a .sse extension because it is a raw
+// text/event-stream, not a JSON document.
+func streamBody(t *testing.T, shape string) []byte {
+	t.Helper()
+	p := filepath.Join(mustRepoRoot(t), "codegen", "testdata", "wire", "response", "v1", "bodies", shape+".sse")
+	b, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatalf("read stream body %s: %v", p, err)
+	}
+	return b
+}
+
+// streamMockServer serves the anchored SSE bytes verbatim with an event-stream
+// content type. The scanner-based parser reads to EOF, so the whole body served
+// at once (no per-event flush) is sufficient for a single-hop test.
+func streamMockServer(t *testing.T, body []byte) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write(body)
+	}))
+}
+
 func responseArtifactFrom(resp Response) responseArtifact {
 	return responseArtifact{
 		Usage: responseUsage{
@@ -320,4 +344,46 @@ func TestResponse_TranscriptionOpenAI(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertResponseGolden(t, "transcription-openai", transcriptArtifactFrom(resp))
+}
+
+// --- B-stream: streaming (SSE) response shapes (ADR-065 OQ-4) -----------------
+// Streaming is a distinct parse path: SSE deltas assembled into the same final
+// Response (text + Usage + finish reason) the sync path yields. The projection
+// is therefore identical to the sync chat artifact; only the input shape (an
+// ordered event sequence) and the drive path (Stream + trailing handle) differ.
+// Data-only SSE only (OpenAI / Google); Anthropic's event-typed stream is
+// deferred — see PROVENANCE.md.
+
+// driveStream drives the real public streaming path against the SSE mock, drains
+// the chunk iterator, and projects the trailing handle's accumulated Response.
+func driveStream(t *testing.T, shape string, c *Client) responseArtifact {
+	t.Helper()
+	server := streamMockServer(t, streamBody(t, shape))
+	defer server.Close()
+	c.provider.baseURL = server.URL
+	stream := c.Text.Stream(context.Background(), "ping")
+	for _, err := range stream.Chunks() {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := stream.Err(); err != nil {
+		t.Fatal(err)
+	}
+	return responseArtifactFrom(stream.Response())
+}
+
+// OpenAI data-only SSE: text deltas at choices[0].delta.content, finish at
+// choices[0].finish_reason, [DONE] sentinel. llmkit does NOT request
+// stream_options.include_usage, so a real stream carries no usage frame and the
+// token counts are a provider-honest 0 (a documented gap, PROVENANCE.md).
+func TestResponse_StreamOpenAI(t *testing.T) {
+	assertResponseGolden(t, "stream-openai", driveStream(t, "stream-openai", Openai("k")))
+}
+
+// Google data-only SSE: text at candidates[0].content.parts[0].text, finish at
+// candidates[0].finishReason (STOP), usage in usageMetadata on the final chunk —
+// Google streams native usage, so these counts are real.
+func TestResponse_StreamGoogle(t *testing.T) {
+	assertResponseGolden(t, "stream-google", driveStream(t, "stream-google", Google("k")))
 }
