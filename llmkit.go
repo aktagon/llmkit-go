@@ -103,6 +103,10 @@ func promptStream(ctx context.Context, p Provider, req Request, callback StreamC
 	if streamCfg.Param != "" {
 		body[streamCfg.Param] = true
 	}
+	// BUG-028: opt into a streamed usage frame where the provider requires it.
+	if streamCfg.UsageOptIn {
+		body["stream_options"] = map[string]any{"include_usage": true}
+	}
 
 	jsonBody, err := json.Marshal(body)
 	if err != nil {
