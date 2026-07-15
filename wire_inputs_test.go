@@ -128,6 +128,8 @@ const (
 	wireSpeechOpenaiModel                       = "gpt-4o-mini-tts"
 	wireSpeechOpenaiPrompt                      = "Hello from llmkit."
 	wireSpeechOpenaiVoice                       = "alloy"
+	wireStreamOpenaiModel                       = "gpt-4o-mini"
+	wireStreamOpenaiPrompt                      = "Say hello."
 	wireStructuredOutputPrompt                  = "What color is a clear daytime sky?"
 	wireStructuredOutputSchema                  = "{\"type\":\"object\",\"properties\":{\"color\":{\"type\":\"string\"}},\"additionalProperties\":false}"
 	wireStructuredOutputNestedPrompt            = "Name a coastal city in Finland where a harbor pilot might reside. Reply as structured data."

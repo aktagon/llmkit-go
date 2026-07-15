@@ -472,6 +472,21 @@ func TestRequestWire_OptionsOpenAIGPT4o(t *testing.T) {
 	assertRequestWireGolden(t, "options-openai-gpt4o", body)
 }
 
+// TestRequestWire_StreamOpenAI witnesses the BUG-028 stream_options.include_usage
+// field on the OpenAI streaming request body (llm:streamUsageOptIn). The stream
+// path POSTs the body (captured here) then parses the canned response as SSE —
+// no data: frames means zero chunks, which is fine for a body-only assertion.
+func TestRequestWire_StreamOpenAI(t *testing.T) {
+	body, _ := captureBody(t, providers.OpenAI, func(c *Client) {
+		for _, err := range c.Text.Model(wireStreamOpenaiModel).Stream(context.Background(), wireStreamOpenaiPrompt).Chunks() {
+			if err != nil {
+				t.Fatalf("stream call: %v", err)
+			}
+		}
+	})
+	assertRequestWireGolden(t, "stream-openai", body)
+}
+
 // TestRequestWire_OptionsAnthropic witnesses the thinking_budget dotted-path
 // nesting ({thinking:{budget_tokens,type:"enabled"}} via setNestedField +
 // mergeIntoParent) plus stop_sequences. Temperature is omitted: thinking pins
