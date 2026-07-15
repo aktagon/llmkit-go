@@ -415,6 +415,55 @@ func TestPromptStreamOpenAI(t *testing.T) {
 	}
 }
 
+// BUG-028: OpenAI only emits streamed usage when the request opts in with
+// stream_options.include_usage. Assert llmkit sends it for OpenAI (usageOptIn
+// true) and NOT for a compat-fleet provider that has not been verified (Grok).
+func TestStreamUsageOptIn(t *testing.T) {
+	cases := []struct {
+		name     string
+		provider providers.ProviderName
+		wantOpts bool
+	}{
+		{"OpenAI", providers.OpenAI, true},
+		{"Grok", providers.Grok, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var body map[string]any
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				raw, _ := io.ReadAll(r.Body)
+				_ = json.Unmarshal(raw, &body)
+				w.Header().Set("Content-Type", "text/event-stream")
+				w.WriteHeader(200)
+				fmt.Fprintln(w, `data: [DONE]`)
+				fmt.Fprintln(w)
+			}))
+			defer server.Close()
+
+			c := New(tc.provider, "key")
+			c.provider.baseURL = server.URL
+			for _, err := range c.Text.Model("m").Stream(context.Background(), "Hi").Chunks() {
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			opts, present := body["stream_options"]
+			if tc.wantOpts {
+				if !present {
+					t.Fatalf("expected stream_options in body, got %v", body)
+				}
+				m, ok := opts.(map[string]any)
+				if !ok || m["include_usage"] != true {
+					t.Errorf("expected stream_options.include_usage=true, got %v", opts)
+				}
+			} else if present {
+				t.Errorf("expected no stream_options for %s, got %v", tc.name, opts)
+			}
+		})
+	}
+}
+
 func TestPromptStreamAnthropic(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
