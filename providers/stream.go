@@ -15,6 +15,7 @@ type StreamDef struct {
 	UsageEvent      string // SSE event type for usage data
 	UsageInputPath  string
 	UsageOutputPath string
+	UsageOptIn      bool // BUG-028: send stream_options.include_usage to elicit a usage frame
 }
 
 // StreamConfig returns the streaming config for a provider.
@@ -33,6 +34,7 @@ func StreamConfig(provider string) *StreamDef {
 			UsageEvent:      "",
 			UsageInputPath:  "usage.prompt_tokens",
 			UsageOutputPath: "usage.completion_tokens",
+			UsageOptIn:      false,
 		}
 	case Anthropic:
 		return &StreamDef{
@@ -47,6 +49,7 @@ func StreamConfig(provider string) *StreamDef {
 			UsageEvent:      "message_delta",
 			UsageInputPath:  "usage.input_tokens",
 			UsageOutputPath: "usage.output_tokens",
+			UsageOptIn:      false,
 		}
 	case Azure:
 		return &StreamDef{
@@ -61,6 +64,7 @@ func StreamConfig(provider string) *StreamDef {
 			UsageEvent:      "",
 			UsageInputPath:  "usage.prompt_tokens",
 			UsageOutputPath: "usage.completion_tokens",
+			UsageOptIn:      false,
 		}
 	case Cerebras:
 		return &StreamDef{
@@ -75,6 +79,7 @@ func StreamConfig(provider string) *StreamDef {
 			UsageEvent:      "",
 			UsageInputPath:  "usage.prompt_tokens",
 			UsageOutputPath: "usage.completion_tokens",
+			UsageOptIn:      false,
 		}
 	case Cohere:
 		return &StreamDef{
@@ -89,6 +94,7 @@ func StreamConfig(provider string) *StreamDef {
 			UsageEvent:      "",
 			UsageInputPath:  "usage.prompt_tokens",
 			UsageOutputPath: "usage.completion_tokens",
+			UsageOptIn:      false,
 		}
 	case Deepseek:
 		return &StreamDef{
@@ -103,6 +109,7 @@ func StreamConfig(provider string) *StreamDef {
 			UsageEvent:      "",
 			UsageInputPath:  "usage.prompt_tokens",
 			UsageOutputPath: "usage.completion_tokens",
+			UsageOptIn:      false,
 		}
 	case Doubao:
 		return &StreamDef{
@@ -117,6 +124,7 @@ func StreamConfig(provider string) *StreamDef {
 			UsageEvent:      "",
 			UsageInputPath:  "usage.prompt_tokens",
 			UsageOutputPath: "usage.completion_tokens",
+			UsageOptIn:      false,
 		}
 	case Ernie:
 		return &StreamDef{
@@ -131,6 +139,7 @@ func StreamConfig(provider string) *StreamDef {
 			UsageEvent:      "",
 			UsageInputPath:  "usage.prompt_tokens",
 			UsageOutputPath: "usage.completion_tokens",
+			UsageOptIn:      false,
 		}
 	case Fireworks:
 		return &StreamDef{
@@ -145,6 +154,7 @@ func StreamConfig(provider string) *StreamDef {
 			UsageEvent:      "",
 			UsageInputPath:  "usage.prompt_tokens",
 			UsageOutputPath: "usage.completion_tokens",
+			UsageOptIn:      false,
 		}
 	case Google:
 		return &StreamDef{
@@ -159,6 +169,7 @@ func StreamConfig(provider string) *StreamDef {
 			UsageEvent:      "",
 			UsageInputPath:  "usageMetadata.promptTokenCount",
 			UsageOutputPath: "usageMetadata.candidatesTokenCount",
+			UsageOptIn:      false,
 		}
 	case Grok:
 		return &StreamDef{
@@ -173,6 +184,7 @@ func StreamConfig(provider string) *StreamDef {
 			UsageEvent:      "",
 			UsageInputPath:  "usage.prompt_tokens",
 			UsageOutputPath: "usage.completion_tokens",
+			UsageOptIn:      false,
 		}
 	case Groq:
 		return &StreamDef{
@@ -187,6 +199,7 @@ func StreamConfig(provider string) *StreamDef {
 			UsageEvent:      "",
 			UsageInputPath:  "usage.prompt_tokens",
 			UsageOutputPath: "usage.completion_tokens",
+			UsageOptIn:      false,
 		}
 	case Jan:
 		return &StreamDef{
@@ -201,6 +214,7 @@ func StreamConfig(provider string) *StreamDef {
 			UsageEvent:      "",
 			UsageInputPath:  "usage.prompt_tokens",
 			UsageOutputPath: "usage.completion_tokens",
+			UsageOptIn:      false,
 		}
 	case Llamacpp:
 		return &StreamDef{
@@ -215,6 +229,7 @@ func StreamConfig(provider string) *StreamDef {
 			UsageEvent:      "",
 			UsageInputPath:  "usage.prompt_tokens",
 			UsageOutputPath: "usage.completion_tokens",
+			UsageOptIn:      false,
 		}
 	case Lmstudio:
 		return &StreamDef{
@@ -229,6 +244,7 @@ func StreamConfig(provider string) *StreamDef {
 			UsageEvent:      "",
 			UsageInputPath:  "usage.prompt_tokens",
 			UsageOutputPath: "usage.completion_tokens",
+			UsageOptIn:      false,
 		}
 	case Minimax:
 		return &StreamDef{
@@ -243,6 +259,7 @@ func StreamConfig(provider string) *StreamDef {
 			UsageEvent:      "",
 			UsageInputPath:  "usage.prompt_tokens",
 			UsageOutputPath: "usage.completion_tokens",
+			UsageOptIn:      false,
 		}
 	case Mistral:
 		return &StreamDef{
@@ -257,6 +274,7 @@ func StreamConfig(provider string) *StreamDef {
 			UsageEvent:      "",
 			UsageInputPath:  "usage.prompt_tokens",
 			UsageOutputPath: "usage.completion_tokens",
+			UsageOptIn:      false,
 		}
 	case Moonshot:
 		return &StreamDef{
@@ -271,6 +289,7 @@ func StreamConfig(provider string) *StreamDef {
 			UsageEvent:      "",
 			UsageInputPath:  "usage.prompt_tokens",
 			UsageOutputPath: "usage.completion_tokens",
+			UsageOptIn:      false,
 		}
 	case Ollama:
 		return &StreamDef{
@@ -285,6 +304,7 @@ func StreamConfig(provider string) *StreamDef {
 			UsageEvent:      "",
 			UsageInputPath:  "usage.prompt_tokens",
 			UsageOutputPath: "usage.completion_tokens",
+			UsageOptIn:      false,
 		}
 	case OpenAI:
 		return &StreamDef{
@@ -299,6 +319,7 @@ func StreamConfig(provider string) *StreamDef {
 			UsageEvent:      "",
 			UsageInputPath:  "usage.prompt_tokens",
 			UsageOutputPath: "usage.completion_tokens",
+			UsageOptIn:      true,
 		}
 	case Openrouter:
 		return &StreamDef{
@@ -313,6 +334,7 @@ func StreamConfig(provider string) *StreamDef {
 			UsageEvent:      "",
 			UsageInputPath:  "usage.prompt_tokens",
 			UsageOutputPath: "usage.completion_tokens",
+			UsageOptIn:      false,
 		}
 	case Perplexity:
 		return &StreamDef{
@@ -327,6 +349,7 @@ func StreamConfig(provider string) *StreamDef {
 			UsageEvent:      "",
 			UsageInputPath:  "usage.prompt_tokens",
 			UsageOutputPath: "usage.completion_tokens",
+			UsageOptIn:      false,
 		}
 	case Qwen:
 		return &StreamDef{
@@ -341,6 +364,7 @@ func StreamConfig(provider string) *StreamDef {
 			UsageEvent:      "",
 			UsageInputPath:  "usage.prompt_tokens",
 			UsageOutputPath: "usage.completion_tokens",
+			UsageOptIn:      false,
 		}
 	case Sambanova:
 		return &StreamDef{
@@ -355,6 +379,7 @@ func StreamConfig(provider string) *StreamDef {
 			UsageEvent:      "",
 			UsageInputPath:  "usage.prompt_tokens",
 			UsageOutputPath: "usage.completion_tokens",
+			UsageOptIn:      false,
 		}
 	case Together:
 		return &StreamDef{
@@ -369,6 +394,7 @@ func StreamConfig(provider string) *StreamDef {
 			UsageEvent:      "",
 			UsageInputPath:  "usage.prompt_tokens",
 			UsageOutputPath: "usage.completion_tokens",
+			UsageOptIn:      false,
 		}
 	case Vllm:
 		return &StreamDef{
@@ -383,6 +409,7 @@ func StreamConfig(provider string) *StreamDef {
 			UsageEvent:      "",
 			UsageInputPath:  "usage.prompt_tokens",
 			UsageOutputPath: "usage.completion_tokens",
+			UsageOptIn:      false,
 		}
 	case Workersai:
 		return &StreamDef{
@@ -397,6 +424,7 @@ func StreamConfig(provider string) *StreamDef {
 			UsageEvent:      "",
 			UsageInputPath:  "usage.prompt_tokens",
 			UsageOutputPath: "usage.completion_tokens",
+			UsageOptIn:      false,
 		}
 	case Yi:
 		return &StreamDef{
@@ -411,6 +439,7 @@ func StreamConfig(provider string) *StreamDef {
 			UsageEvent:      "",
 			UsageInputPath:  "usage.prompt_tokens",
 			UsageOutputPath: "usage.completion_tokens",
+			UsageOptIn:      false,
 		}
 	case Zhipu:
 		return &StreamDef{
@@ -425,6 +454,7 @@ func StreamConfig(provider string) *StreamDef {
 			UsageEvent:      "",
 			UsageInputPath:  "usage.prompt_tokens",
 			UsageOutputPath: "usage.completion_tokens",
+			UsageOptIn:      false,
 		}
 	default:
 		return nil
