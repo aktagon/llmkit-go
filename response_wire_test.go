@@ -121,6 +121,52 @@ func imageArtifactFrom(resp ImageResponse) responseArtifact {
 	}
 }
 
+// speechArtifactFrom projects a SpeechResponse. Content is the media discriminant
+// {kind,mimeType,byteLen} — the four SDKs must agree the same body decodes to the
+// same audio (the ADR-018 bytes/mime accessor contract the README lint watches).
+func speechArtifactFrom(resp SpeechResponse) responseArtifact {
+	return responseArtifact{
+		Usage: responseUsage{
+			Input:      resp.Usage.Input,
+			Output:     resp.Usage.Output,
+			CacheRead:  resp.Usage.CacheRead,
+			CacheWrite: resp.Usage.CacheWrite,
+			Reasoning:  resp.Usage.Reasoning,
+			Cost:       resp.Usage.Cost,
+		},
+		FinishReason: "",
+		Content: map[string]any{
+			"kind":     "speech",
+			"mimeType": resp.Audio.MimeType,
+			"byteLen":  len(resp.Audio.Bytes),
+		},
+		Error: nil,
+	}
+}
+
+// transcriptArtifactFrom projects a TranscriptionResponse. Content is
+// {kind,text,segments} — the four SDKs must agree on the extracted transcript
+// text and the number of timed segments.
+func transcriptArtifactFrom(resp TranscriptionResponse) responseArtifact {
+	return responseArtifact{
+		Usage: responseUsage{
+			Input:      resp.Usage.Input,
+			Output:     resp.Usage.Output,
+			CacheRead:  resp.Usage.CacheRead,
+			CacheWrite: resp.Usage.CacheWrite,
+			Reasoning:  resp.Usage.Reasoning,
+			Cost:       resp.Usage.Cost,
+		},
+		FinishReason: "",
+		Content: map[string]any{
+			"kind":     "transcript",
+			"text":     resp.Text,
+			"segments": len(resp.Segments),
+		},
+		Error: nil,
+	}
+}
+
 func assertResponseGolden(t *testing.T, fixture string, art responseArtifact) {
 	t.Helper()
 	repoRoot := mustRepoRoot(t)
@@ -239,4 +285,39 @@ func TestResponse_ImageVertex(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertResponseGolden(t, "image-vertex", imageArtifactFrom(resp))
+}
+
+// Speech (TTS) response: base64 audio at audioContent -> AudioData{mime,bytes};
+// mime is the model's declared OutputMime (audio/wav), not sniffed. Single-hop.
+func TestResponse_SpeechInworld(t *testing.T) {
+	server := responseMockServer(t, responseBody(t, "speech-inworld"))
+	defer server.Close()
+
+	c := Inworld("k")
+	c.provider.baseURL = server.URL
+	resp, err := c.Speech.Model("inworld-tts-2").Voice("Dennis").Generate(context.Background(), "hello")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResponseGolden(t, "speech-inworld", speechArtifactFrom(resp))
+}
+
+// Transcription (STT) SYNC response: OpenAI verbose_json {text, segments[]} ->
+// TranscriptionResponse{Text, Segments}. The AssemblyAI async parse shares the
+// TranscriptionResponse struct; its distinct piece (poll classification) is held
+// by test-lifecycle-wire, so this single-hop sync golden covers the body parse.
+func TestResponse_TranscriptionOpenAI(t *testing.T) {
+	server := responseMockServer(t, responseBody(t, "transcription-openai"))
+	defer server.Close()
+
+	c := Openai("k")
+	c.provider.baseURL = server.URL
+	resp, err := c.Transcription.Model("whisper-1").Transcribe(
+		context.Background(),
+		Part{Audio: &MediaRef{MimeType: "audio/wav", Bytes: []byte("RIFFtestwav")}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResponseGolden(t, "transcription-openai", transcriptArtifactFrom(resp))
 }
