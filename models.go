@@ -218,7 +218,7 @@ func paginate(ctx context.Context, httpClient *http.Client, p Provider, pcfg pro
 	headers := buildCatalogueHeaders(p, pcfg)
 	for {
 		reqURL := buildCatalogueURL(p, pcfg, cfg.Endpoint)
-		reqURL = appendCursor(reqURL, cfg.Pagination, cursor)
+		reqURL = appendCursor(reqURL, cfg.CursorParam, cursor)
 		body, status, herr := doGetRaw(ctx, httpClient, reqURL, headers)
 		if mapped := mapCatalogueHTTPErr(status, body, herr); mapped != nil {
 			return nil, mapped
@@ -239,22 +239,17 @@ func paginate(ctx context.Context, httpClient *http.Client, p Provider, pcfg pro
 //
 //
 //
-func appendCursor(rawURL, pagination, cursor string) string {
-	if cursor == "" {
+//
+//
+func appendCursor(rawURL, cursorParam, cursor string) string {
+	if cursor == "" || cursorParam == "" {
 		return rawURL
 	}
 	sep := "?"
 	if strings.Contains(rawURL, "?") {
 		sep = "&"
 	}
-	switch pagination {
-	case "CursorByLastID":
-		return rawURL + sep + "after_id=" + url.QueryEscape(cursor)
-	case "CursorOpaqueToken":
-		return rawURL + sep + "pageToken=" + url.QueryEscape(cursor)
-	default:
-		return rawURL
-	}
+	return rawURL + sep + cursorParam + "=" + url.QueryEscape(cursor)
 }
 
 //
