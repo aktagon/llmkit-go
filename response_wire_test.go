@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/aktagon/llmkit-go/providers"
 )
 
 // Cross-SDK RESPONSE-body conformance (ADR-065 / prompt 045 Track B).
@@ -386,4 +388,96 @@ func TestResponse_StreamOpenAI(t *testing.T) {
 // Google streams native usage, so these counts are real.
 func TestResponse_StreamGoogle(t *testing.T) {
 	assertResponseGolden(t, "stream-google", driveStream(t, "stream-google", Google("k")))
+}
+
+// --- Catalogue (/models) response shape (ADR-067 Fix B) ----------------------
+// Unlike the generation shapes, the catalogue parse seam is driven DIRECTLY (no
+// HTTP path): the anchored /models body is fed to the handwritten parser and the
+// resulting ParsedModelsPage is projected to the catalogue discriminant
+// {kind:"models", count, firstId, lastId, nextCursor, first{...}} — the same body
+// must decode to the same model list + pagination cursor across all five SDKs.
+// No usage / finishReason: a catalogue is not a generation response.
+
+// assertModelsGolden mirrors assertResponseGolden's write+compare idiom for the
+// catalogue projection (a map, not a responseArtifact — no usage/finishReason).
+func assertModelsGolden(t *testing.T, fixture string, art map[string]any) {
+	t.Helper()
+	repoRoot := mustRepoRoot(t)
+
+	body, err := json.Marshal(art)
+	if err != nil {
+		t.Fatalf("marshal artifact: %v", err)
+	}
+
+	artifactDir := filepath.Join(repoRoot, "target", "wire", "response", fixture)
+	if err := os.MkdirAll(artifactDir, 0o755); err != nil {
+		t.Fatalf("mkdir artifact dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(artifactDir, "go.json"), body, 0o644); err != nil {
+		t.Fatalf("write artifact: %v", err)
+	}
+
+	goldenPath := filepath.Join(repoRoot, "codegen", "testdata", "wire", "response", "v1", fixture+".json")
+	goldenBytes, err := os.ReadFile(goldenPath)
+	if err != nil {
+		t.Fatalf("read golden %s: %v", goldenPath, err)
+	}
+
+	var got, want any
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatalf("unmarshal artifact: %v", err)
+	}
+	if err := json.Unmarshal(goldenBytes, &want); err != nil {
+		t.Fatalf("unmarshal golden: %v", err)
+	}
+	gotN, _ := json.Marshal(got)
+	wantN, _ := json.Marshal(want)
+	if string(gotN) != string(wantN) {
+		t.Errorf("response %s drift:\n got: %s\nwant: %s", fixture, gotN, wantN)
+	}
+}
+
+// driveModels feeds the anchored /models body to the handwritten parser and
+// projects the ParsedModelsPage to the catalogue discriminant.
+func driveModels(t *testing.T, shape string, parse func([]byte) (providers.ParsedModelsPage, error)) {
+	t.Helper()
+	page, err := parse(responseBody(t, shape))
+	if err != nil {
+		t.Fatalf("parse %s: %v", shape, err)
+	}
+	first := providers.ParsedModelRecord{}
+	firstID := ""
+	lastID := ""
+	if len(page.Records) > 0 {
+		first = page.Records[0]
+		firstID = page.Records[0].ID
+		lastID = page.Records[len(page.Records)-1].ID
+	}
+	assertModelsGolden(t, shape, map[string]any{
+		"content": map[string]any{
+			"count": len(page.Records),
+			"first": map[string]any{
+				"contextWindow": first.ContextWindow,
+				"displayName":   first.DisplayName,
+				"maxOutput":     first.MaxOutput,
+			},
+			"firstId":    firstID,
+			"kind":       "models",
+			"lastId":     lastID,
+			"nextCursor": page.NextCursor,
+		},
+		"error": nil,
+	})
+}
+
+func TestResponse_ModelsAnthropic(t *testing.T) {
+	driveModels(t, "models-anthropic", providers.ParseAnthropicModelsResponse)
+}
+
+func TestResponse_ModelsOpenAI(t *testing.T) {
+	driveModels(t, "models-openai", providers.ParseOpenAICohortModelsResponse)
+}
+
+func TestResponse_ModelsGoogle(t *testing.T) {
+	driveModels(t, "models-google", providers.ParseGoogleModelsResponse)
 }
