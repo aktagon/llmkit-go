@@ -69,30 +69,31 @@ var ontologyCapabilities = map[string]map[string][]Capability{
 // catalogueByProvider; *ScopedModels.List(ctx) returns ErrModelsNotSupported
 // for those.
 type catalogueConfig struct {
-	Endpoint   string
-	Pagination string
-	ParserKind string
-	SpecURL    string
-	SpecFormat string
+	Endpoint    string
+	Pagination  string
+	CursorParam string
+	ParserKind  string
+	SpecURL     string
+	SpecFormat  string
 }
 
 var catalogueByProvider = map[string]catalogueConfig{
-	"anthropic":  {Endpoint: "/v1/models", Pagination: "CursorByLastID", ParserKind: "ParseAnthropicModels", SpecURL: "https://github.com/anthropics/anthropic-sdk-typescript/blob/main/api.md", SpecFormat: "OpenAPI3"},
-	"cerebras":   {Endpoint: "/v1/models", Pagination: "PaginationNone", ParserKind: "ParseOpenAICohortModels"},
-	"deepseek":   {Endpoint: "/v1/models", Pagination: "PaginationNone", ParserKind: "ParseOpenAICohortModels"},
-	"fireworks":  {Endpoint: "/v1/models", Pagination: "PaginationNone", ParserKind: "ParseOpenAICohortModels"},
-	"google":     {Endpoint: "/v1beta/models", Pagination: "CursorOpaqueToken", ParserKind: "ParseGoogleModels", SpecURL: "https://generativelanguage.googleapis.com/$discovery/rest?version=v1beta", SpecFormat: "GoogleDiscovery"},
-	"grok":       {Endpoint: "/v1/models", Pagination: "PaginationNone", ParserKind: "ParseOpenAICohortModels"},
-	"groq":       {Endpoint: "/v1/models", Pagination: "PaginationNone", ParserKind: "ParseOpenAICohortModels"},
-	"jan":        {Endpoint: "/v1/models", Pagination: "PaginationNone", ParserKind: "ParseOpenAICohortModels"},
-	"llamacpp":   {Endpoint: "/v1/models", Pagination: "PaginationNone", ParserKind: "ParseOpenAICohortModels"},
-	"lmstudio":   {Endpoint: "/v1/models", Pagination: "PaginationNone", ParserKind: "ParseOpenAICohortModels"},
-	"mistral":    {Endpoint: "/v1/models", Pagination: "PaginationNone", ParserKind: "ParseOpenAICohortModels", SpecURL: "https://raw.githubusercontent.com/mistralai/platform-docs-public/main/openapi.yaml", SpecFormat: "OpenAPI3"},
-	"moonshot":   {Endpoint: "/v1/models", Pagination: "PaginationNone", ParserKind: "ParseOpenAICohortModels"},
-	"ollama":     {Endpoint: "/v1/models", Pagination: "PaginationNone", ParserKind: "ParseOpenAICohortModels", SpecURL: "https://raw.githubusercontent.com/ollama/ollama/main/docs/openapi.yaml", SpecFormat: "OpenAPI3"},
-	"openai":     {Endpoint: "/v1/models", Pagination: "PaginationNone", ParserKind: "ParseOpenAICohortModels", SpecURL: "https://github.com/openai/openai-openapi/blob/master/openapi.yaml", SpecFormat: "OpenAPI3"},
-	"openrouter": {Endpoint: "/v1/models", Pagination: "PaginationNone", ParserKind: "ParseOpenAICohortModels", SpecURL: "https://openrouter.ai/openapi.json", SpecFormat: "OpenAPI3"},
-	"qwen":       {Endpoint: "/v1/models", Pagination: "PaginationNone", ParserKind: "ParseOpenAICohortModels"},
-	"together":   {Endpoint: "/v1/models", Pagination: "PaginationNone", ParserKind: "ParseOpenAICohortModels", SpecURL: "https://raw.githubusercontent.com/togethercomputer/openapi/main/openapi.yaml", SpecFormat: "OpenAPI3"},
-	"vllm":       {Endpoint: "/v1/models", Pagination: "PaginationNone", ParserKind: "ParseOpenAICohortModels"},
+	"anthropic":  {Endpoint: "/v1/models", Pagination: "CursorByLastID", CursorParam: "after_id", ParserKind: "ParseAnthropicModels", SpecURL: "https://github.com/anthropics/anthropic-sdk-typescript/blob/main/api.md", SpecFormat: "OpenAPI3"},
+	"cerebras":   {Endpoint: "/v1/models", Pagination: "PaginationNone", CursorParam: "", ParserKind: "ParseOpenAICohortModels"},
+	"deepseek":   {Endpoint: "/v1/models", Pagination: "PaginationNone", CursorParam: "", ParserKind: "ParseOpenAICohortModels"},
+	"fireworks":  {Endpoint: "/v1/models", Pagination: "PaginationNone", CursorParam: "", ParserKind: "ParseOpenAICohortModels"},
+	"google":     {Endpoint: "/v1beta/models", Pagination: "CursorOpaqueToken", CursorParam: "pageToken", ParserKind: "ParseGoogleModels", SpecURL: "https://generativelanguage.googleapis.com/$discovery/rest?version=v1beta", SpecFormat: "GoogleDiscovery"},
+	"grok":       {Endpoint: "/v1/models", Pagination: "PaginationNone", CursorParam: "", ParserKind: "ParseOpenAICohortModels"},
+	"groq":       {Endpoint: "/v1/models", Pagination: "PaginationNone", CursorParam: "", ParserKind: "ParseOpenAICohortModels"},
+	"jan":        {Endpoint: "/v1/models", Pagination: "PaginationNone", CursorParam: "", ParserKind: "ParseOpenAICohortModels"},
+	"llamacpp":   {Endpoint: "/v1/models", Pagination: "PaginationNone", CursorParam: "", ParserKind: "ParseOpenAICohortModels"},
+	"lmstudio":   {Endpoint: "/v1/models", Pagination: "PaginationNone", CursorParam: "", ParserKind: "ParseOpenAICohortModels"},
+	"mistral":    {Endpoint: "/v1/models", Pagination: "PaginationNone", CursorParam: "", ParserKind: "ParseOpenAICohortModels", SpecURL: "https://raw.githubusercontent.com/mistralai/platform-docs-public/main/openapi.yaml", SpecFormat: "OpenAPI3"},
+	"moonshot":   {Endpoint: "/v1/models", Pagination: "PaginationNone", CursorParam: "", ParserKind: "ParseOpenAICohortModels"},
+	"ollama":     {Endpoint: "/v1/models", Pagination: "PaginationNone", CursorParam: "", ParserKind: "ParseOpenAICohortModels", SpecURL: "https://raw.githubusercontent.com/ollama/ollama/main/docs/openapi.yaml", SpecFormat: "OpenAPI3"},
+	"openai":     {Endpoint: "/v1/models", Pagination: "PaginationNone", CursorParam: "", ParserKind: "ParseOpenAICohortModels", SpecURL: "https://github.com/openai/openai-openapi/blob/master/openapi.yaml", SpecFormat: "OpenAPI3"},
+	"openrouter": {Endpoint: "/v1/models", Pagination: "PaginationNone", CursorParam: "", ParserKind: "ParseOpenAICohortModels", SpecURL: "https://openrouter.ai/openapi.json", SpecFormat: "OpenAPI3"},
+	"qwen":       {Endpoint: "/v1/models", Pagination: "PaginationNone", CursorParam: "", ParserKind: "ParseOpenAICohortModels"},
+	"together":   {Endpoint: "/v1/models", Pagination: "PaginationNone", CursorParam: "", ParserKind: "ParseOpenAICohortModels", SpecURL: "https://raw.githubusercontent.com/togethercomputer/openapi/main/openapi.yaml", SpecFormat: "OpenAPI3"},
+	"vllm":       {Endpoint: "/v1/models", Pagination: "PaginationNone", CursorParam: "", ParserKind: "ParseOpenAICohortModels"},
 }
