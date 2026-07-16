@@ -218,7 +218,7 @@ func paginate(ctx context.Context, httpClient *http.Client, p Provider, pcfg pro
 	headers := buildCatalogueHeaders(p, pcfg)
 	for {
 		reqURL := buildCatalogueURL(p, pcfg, cfg.Endpoint)
-		reqURL = appendCursor(reqURL, cfg.Pagination, cursor)
+		reqURL = appendCursor(reqURL, cfg.CursorParam, cursor)
 		body, status, herr := doGetRaw(ctx, httpClient, reqURL, headers)
 		if mapped := mapCatalogueHTTPErr(status, body, herr); mapped != nil {
 			return nil, mapped
@@ -235,26 +235,21 @@ func paginate(ctx context.Context, httpClient *http.Client, p Provider, pcfg pro
 	}
 }
 
-// appendCursor splices the pagination cursor into the URL per the
-// declared style. PaginationNone leaves the URL unchanged. The runtime
-// is responsible for opaque-token escaping so Google's nextPageToken
-// (which may contain padding/= characters) round-trips correctly.
-func appendCursor(rawURL, pagination, cursor string) string {
-	if cursor == "" {
+// appendCursor splices the pagination cursor into the URL using the
+// cursor query-param name carried by the generated catalogueConfig
+// (ADR-067 Fix A). An empty cursor or an empty cursorParam
+// (PaginationNone) leaves the URL unchanged. The runtime is responsible
+// for opaque-token escaping so Google's nextPageToken (which may contain
+// padding/= characters) round-trips correctly.
+func appendCursor(rawURL, cursorParam, cursor string) string {
+	if cursor == "" || cursorParam == "" {
 		return rawURL
 	}
 	sep := "?"
 	if strings.Contains(rawURL, "?") {
 		sep = "&"
 	}
-	switch pagination {
-	case "CursorByLastID":
-		return rawURL + sep + "after_id=" + url.QueryEscape(cursor)
-	case "CursorOpaqueToken":
-		return rawURL + sep + "pageToken=" + url.QueryEscape(cursor)
-	default:
-		return rawURL
-	}
+	return rawURL + sep + cursorParam + "=" + url.QueryEscape(cursor)
 }
 
 // dispatchParser routes the response bytes to the parser variant declared
