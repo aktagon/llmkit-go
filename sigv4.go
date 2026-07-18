@@ -12,8 +12,23 @@ import (
 )
 
 //
+//
+//
+type sigV4Signature struct {
+	canonicalRequest string
+	stringToSign     string
+	authorization    string
+}
+
+//
 func signSigV4(req *http.Request, body []byte, accessKey, secretKey, sessionToken, region, service string) {
-	now := time.Now().UTC()
+	signSigV4At(req, body, accessKey, secretKey, sessionToken, region, service, time.Now().UTC())
+}
+
+//
+//
+//
+func signSigV4At(req *http.Request, body []byte, accessKey, secretKey, sessionToken, region, service string, now time.Time) sigV4Signature {
 	datestamp := now.Format("20060102")
 	amzdate := now.Format("20060102T150405Z")
 
@@ -56,6 +71,12 @@ func signSigV4(req *http.Request, body []byte, accessKey, secretKey, sessionToke
 	auth := fmt.Sprintf("AWS4-HMAC-SHA256 Credential=%s/%s, SignedHeaders=%s, Signature=%s",
 		accessKey, credentialScope, signedHeaders, signature)
 	req.Header.Set("Authorization", auth)
+
+	return sigV4Signature{
+		canonicalRequest: canonicalRequest,
+		stringToSign:     stringToSign,
+		authorization:    auth,
+	}
 }
 
 func deriveSigningKey(secretKey, datestamp, region, service string) []byte {
