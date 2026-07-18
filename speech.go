@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/aktagon/llmkit-go/providers"
+	"github.com/aktagon/llmkit-go/v2/providers"
 )
 
 // SpeechRequest is the canonical text-to-speech request (ADR-049).
