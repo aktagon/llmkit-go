@@ -53,14 +53,16 @@ func classifyCatalogueErr(err error) string {
 //
 //
 //
-func filterCompiledModels(c Capability) []ModelInfo {
-	if c == "" {
-		out := make([]ModelInfo, len(compiledInModels))
-		copy(out, compiledInModels)
-		return out
-	}
-	out := make([]ModelInfo, 0, len(compiledInModels))
-	for _, m := range compiledInModels {
+//
+//
+//
+func filterByCapability(models []ModelInfo, c Capability) []ModelInfo {
+	out := make([]ModelInfo, 0, len(models))
+	for _, m := range models {
+		if c == "" {
+			out = append(out, m)
+			continue
+		}
 		for _, mc := range m.Capabilities {
 			if mc == c {
 				out = append(out, m)
@@ -69,6 +71,13 @@ func filterCompiledModels(c Capability) []ModelInfo {
 		}
 	}
 	return out
+}
+
+//
+//
+//
+func filterCompiledModels(c Capability) []ModelInfo {
+	return filterByCapability(compiledInModels, c)
 }
 
 //
@@ -105,18 +114,6 @@ func (b *Models) runLive(ctx context.Context) (LiveResult, error) {
 		}
 		all = append(all, models...)
 	}
-	if b.capFilter != "" {
-		filtered := all[:0]
-		for _, m := range all {
-			for _, mc := range m.Capabilities {
-				if mc == b.capFilter {
-					filtered = append(filtered, m)
-					break
-				}
-			}
-		}
-		all = filtered
-	}
 	sort.SliceStable(all, func(i, j int) bool {
 		if all[i].Provider.Name != all[j].Provider.Name {
 			return all[i].Provider.Name < all[j].Provider.Name
@@ -126,6 +123,8 @@ func (b *Models) runLive(ctx context.Context) (LiveResult, error) {
 	return LiveResult{Models: all, Errors: errs}, nil
 }
 
+//
+//
 //
 //
 //
@@ -163,7 +162,7 @@ func (b *ScopedModels) runList(ctx context.Context) ([]ModelInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	return b.enrich(out), nil
+	return filterByCapability(b.enrich(out), b.capFilter), nil
 }
 
 //
