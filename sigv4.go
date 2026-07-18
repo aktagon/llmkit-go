@@ -11,9 +11,24 @@ import (
 	"time"
 )
 
+// sigV4Signature carries the intermediate signing artifacts. Production
+// callers discard it; the wire-conformance driver (CR-002) asserts the
+// canonical request byte-identically against the shared golden.
+type sigV4Signature struct {
+	canonicalRequest string
+	stringToSign     string
+	authorization    string
+}
+
 // signSigV4 adds AWS Signature Version 4 headers to an HTTP request.
 func signSigV4(req *http.Request, body []byte, accessKey, secretKey, sessionToken, region, service string) {
-	now := time.Now().UTC()
+	signSigV4At(req, body, accessKey, secretKey, sessionToken, region, service, time.Now().UTC())
+}
+
+// signSigV4At is signSigV4 with an injected clock (CR-002): the timestamp is
+// the only non-deterministic signing input, so a fixed now makes the whole
+// signature chain reproducible for the cross-SDK golden.
+func signSigV4At(req *http.Request, body []byte, accessKey, secretKey, sessionToken, region, service string, now time.Time) sigV4Signature {
 	datestamp := now.Format("20060102")
 	amzdate := now.Format("20060102T150405Z")
 
@@ -56,6 +71,12 @@ func signSigV4(req *http.Request, body []byte, accessKey, secretKey, sessionToke
 	auth := fmt.Sprintf("AWS4-HMAC-SHA256 Credential=%s/%s, SignedHeaders=%s, Signature=%s",
 		accessKey, credentialScope, signedHeaders, signature)
 	req.Header.Set("Authorization", auth)
+
+	return sigV4Signature{
+		canonicalRequest: canonicalRequest,
+		stringToSign:     stringToSign,
+		authorization:    auth,
+	}
 }
 
 func deriveSigningKey(secretKey, datestamp, region, service string) []byte {
