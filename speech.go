@@ -73,7 +73,7 @@ func generateSpeech(ctx context.Context, p Provider, req SpeechRequest) (SpeechR
 		return SpeechResponse{}, err
 	}
 
-	return parseSpeechResponse(sgCfg.AudioEncoding, model.OutputMime, respBody)
+	return parseSpeechResponse(p.Name, sgCfg.AudioEncoding, model.OutputMime, respBody)
 }
 
 // dispatchSpeechHTTP picks a wire shape per provider config (never by provider
@@ -167,28 +167,34 @@ func voiceInCatalogue(cfg *providers.SpeechGenDef, voice string) bool {
 // parseSpeechResponse decodes the synthesized audio per the wire shape's audio
 // response encoding (ADR-051 OAA-002). "rawBody" (OpenAI) takes the response
 // body verbatim as the audio bytes; "base64Envelope" (Inworld) parses a JSON
-// envelope and base64-decodes the audio field.
-func parseSpeechResponse(audioEncoding, fallbackMime string, body []byte) (SpeechResponse, error) {
+// envelope and base64-decodes the audio field. A 2xx body that does not parse
+// to audio is a decoding error (HANDOFF-036 A5) — never a silent empty clip.
+func parseSpeechResponse(providerName, audioEncoding, fallbackMime string, body []byte) (SpeechResponse, error) {
 	switch audioEncoding {
 	case "rawBody":
 		return SpeechResponse{Audio: AudioData{MimeType: fallbackMime, Bytes: body}}, nil
 	default: // base64Envelope
 		var raw map[string]any
 		if err := json.Unmarshal(body, &raw); err != nil {
-			return SpeechResponse{}, fmt.Errorf("unmarshal speech response: %w", err)
+			return SpeechResponse{}, fmt.Errorf("%s speech response: unmarshal: %w", providerName, err)
 		}
-		return parseInworldSpeechResponse(raw, fallbackMime), nil
+		return parseInworldSpeechResponse(providerName, raw, fallbackMime)
 	}
 }
 
 // parseInworldSpeechResponse decodes Inworld /tts/v1/voice responses.
 // Shape: {"audioContent": "<base64>", "usage": {"processedCharactersCount": N}}.
-func parseInworldSpeechResponse(raw map[string]any, fallbackMime string) SpeechResponse {
-	var audio AudioData
-	if b64, ok := raw["audioContent"].(string); ok && b64 != "" {
-		if decoded, err := base64.StdEncoding.DecodeString(b64); err == nil {
-			audio = AudioData{MimeType: fallbackMime, Bytes: decoded}
-		}
+// A missing/empty audioContent or invalid base64 is a decoding error
+// (HANDOFF-036 A5): a success response always carries audio, so an
+// unparseable envelope must never masquerade as an empty clip.
+func parseInworldSpeechResponse(providerName string, raw map[string]any, fallbackMime string) (SpeechResponse, error) {
+	b64, ok := raw["audioContent"].(string)
+	if !ok || b64 == "" {
+		return SpeechResponse{}, fmt.Errorf("%s speech response: missing or empty audioContent", providerName)
 	}
-	return SpeechResponse{Audio: audio}
+	decoded, err := base64.StdEncoding.DecodeString(b64)
+	if err != nil {
+		return SpeechResponse{}, fmt.Errorf("%s speech response: invalid base64 in audioContent: %w", providerName, err)
+	}
+	return SpeechResponse{Audio: AudioData{MimeType: fallbackMime, Bytes: decoded}}, nil
 }
