@@ -14,8 +14,8 @@ import (
 	"os"
 	"sync"
 
-	"github.com/aktagon/llmkit-go"
-	"github.com/aktagon/llmkit-go/providers"
+	"github.com/aktagon/llmkit-go/v2"
+	"github.com/aktagon/llmkit-go/v2/providers"
 )
 
 //

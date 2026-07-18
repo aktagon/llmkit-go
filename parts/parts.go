@@ -18,7 +18,7 @@
 //
 package parts
 
-import llmkit "github.com/aktagon/llmkit-go"
+import llmkit "github.com/aktagon/llmkit-go/v2"
 
 //
 func Text(s string) llmkit.Part { return llmkit.Part{Text: s} }
