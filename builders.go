@@ -33,7 +33,11 @@ func (pc providerConfig) toProvider(model string) Provider {
 // this client; chain methods return new instances, the field stays
 // constant.
 type Client struct {
-	provider      providerConfig
+	provider providerConfig
+	// middleware is the client-scoped hook list (ADR-054): AddTelemetry
+	// appends here so paths without a per-builder middleware seam (the
+	// models/catalogue runtime, HANDOFF-036 A3) still fire client hooks.
+	middleware    []MiddlewareFn
 	Text          *Text
 	Image         *Image
 	Music         *Music

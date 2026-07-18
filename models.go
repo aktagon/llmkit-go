@@ -148,15 +148,18 @@ func (b *ScopedModels) runList(ctx context.Context) ([]ModelInfo, error) {
 		Op:       providers.OpModelsList,
 		Provider: b.target.Name,
 	}
+	// Client-scoped hooks (telemetry, ADR-054) observe catalogue calls too
+	// (HANDOFF-036 A3); the Swift seam is the reference.
+	mws := b.client.middleware
 	start := time.Now()
-	if err := firePre(ctx, nil, baseEvent); err != nil {
+	if err := firePre(ctx, mws, baseEvent); err != nil {
 		return nil, err
 	}
 	out, err := paginate(ctx, httpClient, provider, pcfg, cfg, "")
 	post := baseEvent
 	post.Err = err
 	post.Duration = time.Since(start)
-	firePost(ctx, nil, post)
+	firePost(ctx, mws, post)
 	if err != nil {
 		return nil, err
 	}
@@ -188,8 +191,10 @@ func (b *ScopedModels) runGet(ctx context.Context, id string) (ModelInfo, error)
 		Provider: b.target.Name,
 		Model:    id,
 	}
+	// Client-scoped hooks observe catalogue calls (HANDOFF-036 A3).
+	mws := b.client.middleware
 	start := time.Now()
-	if err := firePre(ctx, nil, baseEvent); err != nil {
+	if err := firePre(ctx, mws, baseEvent); err != nil {
 		return ModelInfo{}, err
 	}
 	body, status, herr := doGetRaw(ctx, httpClient, buildCatalogueURL(provider, pcfg, cfg.Endpoint+"/"+id), buildCatalogueHeaders(provider, pcfg))
@@ -197,7 +202,7 @@ func (b *ScopedModels) runGet(ctx context.Context, id string) (ModelInfo, error)
 	post := baseEvent
 	post.Err = mapped
 	post.Duration = time.Since(start)
-	firePost(ctx, nil, post)
+	firePost(ctx, mws, post)
 	if mapped != nil {
 		return ModelInfo{}, mapped
 	}
