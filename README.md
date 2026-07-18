@@ -547,7 +547,7 @@ resp, err := c.Text.Prompt(context.Background(), "Hello")
 
 `HTTPExport` is a synchronous, fail-open POST — convenient for low volume; for
 high volume hand your own callback into your OTEL SDK's batch processor. The
-same OTLP span shape is emitted byte-for-byte across all four SDKs, so one
+same OTLP span shape is emitted byte-for-byte across all six SDKs, so one
 collector serves a polyglot fleet. A `Telemetry` with no `Export` is a
 `ValidationError`.
 
