@@ -19,7 +19,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/aktagon/llmkit-go"
+	"github.com/aktagon/llmkit-go/v2"
 )
 
 const lyriaModel = "lyria-002"

@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aktagon/llmkit-go/providers"
+	"github.com/aktagon/llmkit-go/v2/providers"
 )
 
 // The job engine (ADR-062) is proven end-to-end by the migrated batch +

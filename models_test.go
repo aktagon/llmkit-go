@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aktagon/llmkit-go/providers"
+	"github.com/aktagon/llmkit-go/v2/providers"
 )
 
 // newCatalogueServer wires a stub server whose handler hands per-path

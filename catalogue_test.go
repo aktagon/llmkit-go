@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/aktagon/llmkit-go/providers"
+	"github.com/aktagon/llmkit-go/v2/providers"
 )
 
 func TestModels_List_ReturnsCompiledInCatalogue(t *testing.T) {

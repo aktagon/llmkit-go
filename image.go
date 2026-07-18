@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aktagon/llmkit-go/providers"
+	"github.com/aktagon/llmkit-go/v2/providers"
 )
 
 // ImageRequest is the canonical image-generation request.

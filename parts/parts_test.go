@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	llmkit "github.com/aktagon/llmkit-go"
+	llmkit "github.com/aktagon/llmkit-go/v2"
 )
 
 func TestText(t *testing.T) {

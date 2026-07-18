@@ -18,7 +18,7 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/aktagon/llmkit-go"
+	"github.com/aktagon/llmkit-go/v2"
 )
 
 const grokVideoModel = "grok-imagine-video"

@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aktagon/llmkit-go/providers"
+	"github.com/aktagon/llmkit-go/v2/providers"
 )
 
 // Behavioral coverage for the public Option setters and the small

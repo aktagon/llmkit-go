@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aktagon/llmkit-go/providers"
+	"github.com/aktagon/llmkit-go/v2/providers"
 )
 
 func TestPromptOpenAI(t *testing.T) {

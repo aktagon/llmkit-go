@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aktagon/llmkit-go/providers"
+	"github.com/aktagon/llmkit-go/v2/providers"
 )
 
 // ADR-055 Phase B: the Responses protocol response-parse + opt-in surface. The
