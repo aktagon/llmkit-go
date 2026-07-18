@@ -8,6 +8,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/aktagon/llmkit-go/providers"
@@ -183,5 +184,44 @@ func TestGenerateSpeechUnsupportedProviderRejected(t *testing.T) {
 	var verr *ValidationError
 	if !errors.As(err, &verr) || verr.Field != "provider" {
 		t.Fatalf("expected provider ValidationError, got %v", err)
+	}
+}
+
+// TestGenerateSpeechMalformed2xxIsDecodingError locks HANDOFF-036 A5: a 2xx
+// whose body does not parse to audio (missing audioContent, invalid base64,
+// non-JSON) is a decoding error naming the provider and field — never a
+// success response with silent empty audio.
+func TestGenerateSpeechMalformed2xxIsDecodingError(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+		want string
+	}{
+		{"missing audioContent", `{"usage":{"processedCharactersCount":8}}`, "missing or empty audioContent"},
+		{"empty audioContent", `{"audioContent":""}`, "missing or empty audioContent"},
+		{"invalid base64", `{"audioContent":"%%not-base64%%"}`, "invalid base64"},
+		{"non-JSON body", `<html>Bad Gateway</html>`, "unmarshal"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(tc.body))
+			}))
+			defer server.Close()
+
+			c := New(providers.Inworld, "test-token")
+			c.provider.baseURL = server.URL
+			_, err := c.Speech.Model(inworldTTS2).Voice("Dennis").Generate(context.Background(), "Hello from llmkit.")
+			if err == nil {
+				t.Fatalf("expected decoding error for %s, got nil", tc.name)
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("expected error containing %q, got %v", tc.want, err)
+			}
+			if !strings.Contains(err.Error(), "inworld") {
+				t.Fatalf("expected error to name the provider, got %v", err)
+			}
+		})
 	}
 }
