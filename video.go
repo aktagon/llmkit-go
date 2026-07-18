@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aktagon/llmkit-go/providers"
+	"github.com/aktagon/llmkit-go/v2/providers"
 )
 
 // VideoRequest is the canonical video-generation request (ADR-034).
