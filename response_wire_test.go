@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/aktagon/llmkit-go/providers"
@@ -468,6 +469,85 @@ func driveModels(t *testing.T, shape string, parse func([]byte) (providers.Parse
 		},
 		"error": nil,
 	})
+}
+
+// --- Batch results (HANDOFF-036 A1) ------------------------------------------
+// A completed batch's RESULTS file parse: one succeeded line + one errored line
+// (Anthropic result.type=errored carries no result.message at the configured
+// resultBodyPath). Every SDK must SKIP the errored line and return the
+// successful subset (count 1) — a throwing parser would destroy a completed,
+// potentially hours-long batch. Driven through the real public path:
+// BatchHandle.Poll against a two-hop scripted mock (Anthropic status "ended" ->
+// GET .../results serving the anchored JSONL verbatim). The parser INPUT is
+// bodies/batch-results-anthropic.jsonl (a JSONL results file, hence the
+// extension). Known shared assumption (recorded in PROVENANCE.md): no SDK
+// matches results by custom_id — all assume file line order.
+
+func batchResultsBody(t *testing.T) []byte {
+	t.Helper()
+	p := filepath.Join(mustRepoRoot(t), "codegen", "testdata", "wire", "response", "v1", "bodies", "batch-results-anthropic.jsonl")
+	b, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatalf("read batch results body %s: %v", p, err)
+	}
+	return b
+}
+
+// batchResultsArtifact projects the parsed results to the batch-results
+// discriminant {kind, count, first{finishReason, text, usage}}.
+func batchResultsArtifact(responses []Response) map[string]any {
+	first := map[string]any{}
+	if len(responses) > 0 {
+		first = map[string]any{
+			"finishReason": responses[0].FinishReason,
+			"text":         responses[0].Text,
+			"usage": map[string]any{
+				"input":      responses[0].Usage.Input,
+				"output":     responses[0].Usage.Output,
+				"cacheRead":  responses[0].Usage.CacheRead,
+				"cacheWrite": responses[0].Usage.CacheWrite,
+				"reasoning":  responses[0].Usage.Reasoning,
+				"cost":       responses[0].Usage.Cost,
+			},
+		}
+	}
+	return map[string]any{
+		"content": map[string]any{
+			"kind":  "batch_results",
+			"count": len(responses),
+			"first": first,
+		},
+		"error": nil,
+	}
+}
+
+func TestResponse_BatchResultsAnthropic(t *testing.T) {
+	body := batchResultsBody(t)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/results"):
+			_, _ = w.Write(body)
+		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/v1/messages/batches/"):
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": "batch_1", "processing_status": "ended"})
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			http.Error(w, "unexpected", http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	h := BatchHandle{
+		ID:       "batch_1",
+		Provider: Provider{Name: string(providers.Anthropic), APIKey: "test-key", BaseURL: server.URL},
+	}
+	st, err := h.Poll(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.Result == nil {
+		t.Fatalf("expected a succeeded result, got state %v", st.State)
+	}
+	assertModelsGolden(t, "batch-results-anthropic", batchResultsArtifact(*st.Result))
 }
 
 func TestResponse_ModelsAnthropic(t *testing.T) {
