@@ -53,6 +53,9 @@ func (c *Client) AddTelemetry(t Telemetry) *Client {
 	c.Video.middleware = append(c.Video.middleware, mw)
 	c.Agent.middleware = append(c.Agent.middleware, mw)
 	c.Upload.middleware = append(c.Upload.middleware, mw)
+	//
+	//
+	c.middleware = append(c.middleware, mw)
 	return c
 }
 

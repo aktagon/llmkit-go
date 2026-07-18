@@ -33,7 +33,11 @@ func (pc providerConfig) toProvider(model string) Provider {
 //
 //
 type Client struct {
-	provider      providerConfig
+	provider providerConfig
+	//
+	//
+	//
+	middleware    []MiddlewareFn
 	Text          *Text
 	Image         *Image
 	Music         *Music
