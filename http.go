@@ -13,7 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/aktagon/llmkit-go/providers"
+	"github.com/aktagon/llmkit-go/v2/providers"
 )
 
 // doPost sends a POST request and returns the response body.

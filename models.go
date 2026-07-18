@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aktagon/llmkit-go/providers"
+	"github.com/aktagon/llmkit-go/v2/providers"
 )
 
 // Catalogue error sentinels (ADR-019). Provider live calls map to:
