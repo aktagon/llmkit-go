@@ -2,6 +2,7 @@ package llmkit
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/aktagon/llmkit-go/providers"
@@ -45,9 +46,29 @@ func firePost(ctx context.Context, mws []providers.MiddlewareFn, base providers.
 	}
 	ev := base
 	ev.Phase = providers.PhasePost
+	if ev.Err != nil && ev.ErrType == "" {
+		ev.ErrType = eventErrType(ev.Err)
+	}
 	for _, m := range mws {
 		_ = m(ctx, ev)
 	}
+}
+
+//
+//
+//
+//
+//
+func eventErrType(err error) string {
+	var apiErr *APIError
+	if errors.As(err, &apiErr) {
+		return "api_error"
+	}
+	var ve *ValidationError
+	if errors.As(err, &ve) {
+		return "validation_error"
+	}
+	return "error"
 }
 
 //

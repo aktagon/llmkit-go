@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -86,20 +85,24 @@ func makeTelemetryMiddleware(t Telemetry) MiddlewareFn {
 //
 //
 //
-func buildTelemetryPayload(e providers.Event) []byte {
+//
+//
+func buildTelemetryPayloadAt(e providers.Event, traceID, spanID, startNano, endNano string) []byte {
 	op, ok := providers.TelemetryOperationName[e.Op]
 	if !ok {
 		op = string(e.Op)
 	}
-	errType := ""
-	if e.Err != nil {
-		errType = telemetryErrorType(e.Err)
-	}
-	now := strconv.FormatInt(time.Now().UnixNano(), 10)
 	return buildOTLPTraces(
-		op, e.Provider, e.Model, e.Usage.Input, e.Usage.Output, errType,
-		randHex(16), randHex(8), now, now,
+		op, e.Provider, e.Model, e.Usage.Input, e.Usage.Output, e.ErrType,
+		traceID, spanID, startNano, endNano,
 	)
+}
+
+//
+//
+func buildTelemetryPayload(e providers.Event) []byte {
+	now := strconv.FormatInt(time.Now().UnixNano(), 10)
+	return buildTelemetryPayloadAt(e, randHex(16), randHex(8), now, now)
 }
 
 var telemetryHTTPClient = &http.Client{Timeout: 5 * time.Second}
@@ -121,19 +124,6 @@ func HTTPExport(endpoint string, headers map[string]string) func([]byte) {
 		}
 		_, _ = doPost(context.Background(), telemetryHTTPClient, url, payload, h)
 	}
-}
-
-//
-func telemetryErrorType(err error) string {
-	var apiErr *APIError
-	if errors.As(err, &apiErr) {
-		return "api_error"
-	}
-	var ve *ValidationError
-	if errors.As(err, &ve) {
-		return "validation_error"
-	}
-	return "error"
 }
 
 func randHex(n int) string {
@@ -223,7 +213,7 @@ func buildOTLPTraces(operationName, provider, model string, inputTokens, outputT
 	}
 	var status *otlpStatus
 	if errorType != "" {
-		attrs = append(attrs, stringAttr(providers.OtelAttrErr, errorType))
+		attrs = append(attrs, stringAttr(providers.OtelAttrErrType, errorType))
 		status = &otlpStatus{Code: 2}
 	}
 	payload := otlpTraces{ResourceSpans: []otlpResourceSpans{{

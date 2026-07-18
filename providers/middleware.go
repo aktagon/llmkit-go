@@ -77,6 +77,8 @@ type Event struct {
 	//
 	Err error
 	//
+	ErrType string
+	//
 	Duration time.Duration
 }
 
