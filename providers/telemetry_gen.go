@@ -24,7 +24,7 @@ const (
 	OtelAttrOp       = "gen_ai.operation.name" // Event.Op
 	OtelAttrProvider = "gen_ai.system"         // Event.Provider
 	OtelAttrModel    = "gen_ai.request.model"  // Event.Model
-	OtelAttrErr      = "error.type"            // Event.Err
+	OtelAttrErrType  = "error.type"            // Event.ErrType
 )
 
 // OTEL GenAI usage attribute keys (llm:otelUsageAttribute).

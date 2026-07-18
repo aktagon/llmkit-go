@@ -74,8 +74,10 @@ type Event struct {
 	Result string
 	// Usage — Set for Op=llm_request, Phase=post. Expanded to gen_ai.usage.* via llm:otelUsageAttribute on each TokenDimension, not a single attribute.
 	Usage Usage
-	// Err — Set in Phase=post when the operation failed.
+	// Err — Set in Phase=post when the operation failed. Human-readable; telemetry never re-parses it (ADR-071).
 	Err error
+	// ErrType — Set in Phase=post when the operation failed: one of api_error | validation_error | error, stamped structurally from the typed error at the erasure seam (ADR-071). The OTLP builder reads this verbatim.
+	ErrType string
 	// Duration — Set in Phase=post. Internal-only (maps to span duration, not a gen_ai attribute).
 	Duration time.Duration
 }
