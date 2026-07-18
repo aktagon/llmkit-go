@@ -53,6 +53,9 @@ func (c *Client) AddTelemetry(t Telemetry) *Client {
 	c.Video.middleware = append(c.Video.middleware, mw)
 	c.Agent.middleware = append(c.Agent.middleware, mw)
 	c.Upload.middleware = append(c.Upload.middleware, mw)
+	// Client-scoped seam: the models/catalogue runtime has no per-builder
+	// middleware chain, so it fires the client list (HANDOFF-036 A3).
+	c.middleware = append(c.middleware, mw)
 	return c
 }
 
