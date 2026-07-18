@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -72,6 +73,52 @@ func TestTelemetryWire_Rejection(t *testing.T) {
 		telTraceID, telSpanID, telStartNano, telEndNano,
 	)
 	assertTelemetryWireGolden(t, "telemetry-rejection", payload)
+}
+
+// TestTelemetryWire_Error exercises classification end-to-end (ADR-071
+// ETY-004): a typed API error routes through the REAL firePost stamping seam,
+// and the stamped event renders to the shared telemetry-error golden via the
+// pure builder — no error.type is hand-fed anywhere.
+func TestTelemetryWire_Error(t *testing.T) {
+	base := providers.Event{
+		Op:       providers.OpLLMRequest,
+		Provider: "openai",
+		Model:    "gpt-4o",
+		Err:      &APIError{StatusCode: 429, Message: "rate limited", Retryable: true},
+	}
+	var captured providers.Event
+	firePost(context.Background(), []providers.MiddlewareFn{
+		func(ctx context.Context, e providers.Event) error {
+			captured = e
+			return nil
+		},
+	}, base)
+	if captured.ErrType != "api_error" {
+		t.Fatalf("firePost must stamp ErrType from the typed error: got %q want %q", captured.ErrType, "api_error")
+	}
+	payload := buildTelemetryPayloadAt(captured, telTraceID, telSpanID, telStartNano, telEndNano)
+	assertTelemetryWireGolden(t, "telemetry-error", payload)
+}
+
+// TestEventErrType pins the structural classification contract (ADR-071):
+// APIError-kind -> api_error, ValidationError-kind (including wrapped) ->
+// validation_error, everything else -> error.
+func TestEventErrType(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		want string
+	}{
+		{"api error", &APIError{Provider: "openai", StatusCode: 429, Message: "rate limited"}, "api_error"},
+		{"validation error", &ValidationError{Field: "model", Message: "no model chosen"}, "validation_error"},
+		{"wrapped validation error", fmt.Errorf("agent step 2: %w", &ValidationError{Field: "model", Message: "no model chosen"}), "validation_error"},
+		{"transport error", errors.New("connection reset by peer"), "error"},
+	}
+	for _, tc := range cases {
+		if got := eventErrType(tc.err); got != tc.want {
+			t.Errorf("%s: eventErrType = %q, want %q", tc.name, got, tc.want)
+		}
+	}
 }
 
 // TestTelemetry_ExportInvokedSynchronously asserts the post phase builds the
