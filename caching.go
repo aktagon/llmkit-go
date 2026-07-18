@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/aktagon/llmkit-go/providers"
+	"github.com/aktagon/llmkit-go/v2/providers"
 )
 
 // applyCaching mutates the request body to enable caching based on the provider's mode.

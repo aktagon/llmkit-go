@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/aktagon/llmkit-go/providers"
+	"github.com/aktagon/llmkit-go/v2/providers"
 )
 
 // Provider identifies an LLM provider with its API key and optional overrides.

@@ -16,7 +16,7 @@ Also available for TypeScript, Python, Rust, Swift, and Java.
 ## Install
 
 ```bash
-go get github.com/aktagon/llmkit-go
+go get github.com/aktagon/llmkit-go/v2
 ```
 
 ## Quick Start
@@ -367,7 +367,7 @@ generation, streaming, agents, and Gemini image generation. `SafetyFilter` appli
 to Vertex Imagen only.
 
 ```go
-import llmkit "github.com/aktagon/llmkit-go"
+import llmkit "github.com/aktagon/llmkit-go/v2"
 
 // Gemini text or agent
 resp, err := c.Text.
@@ -482,8 +482,8 @@ import (
     "context"
     "fmt"
 
-    "github.com/aktagon/llmkit-go"
-    "github.com/aktagon/llmkit-go/providers"
+    "github.com/aktagon/llmkit-go/v2"
+    "github.com/aktagon/llmkit-go/v2/providers"
 )
 
 // Observation: log token usage after every LLM request.
@@ -529,7 +529,7 @@ bytes. llmkit builds the span; you decide where the bytes go. Off unless
 attached.
 
 ```go
-import "github.com/aktagon/llmkit-go"
+import "github.com/aktagon/llmkit-go/v2"
 
 // Batteries: POST every span to an OTLP collector.
 c := llmkit.New("openai", os.Getenv("OPENAI_API_KEY")).
@@ -555,7 +555,7 @@ collector serves a polyglot fleet. A `Telemetry` with no `Export` is a
 
 ```bash
 # Install
-go install github.com/aktagon/llmkit-go/cmd/llmkit@latest
+go install github.com/aktagon/llmkit-go/v2/cmd/llmkit@latest
 
 # Usage
 llmkit -provider anthropic -system "You are helpful" -user "Hello"

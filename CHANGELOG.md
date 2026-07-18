@@ -7,13 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0] — 2026-07-19
+
 ### Breaking
 
+- Module import path is now `github.com/aktagon/llmkit-go/v2` (Go semantic import versioning for v2+). Update every import — `import llmkit "github.com/aktagon/llmkit-go/v2"`, `github.com/aktagon/llmkit-go/v2/providers`, `go get github.com/aktagon/llmkit-go/v2` — and the CLI install `go install github.com/aktagon/llmkit-go/v2/cmd/llmkit@latest`. No source changes beyond the path.
 - Clean async-job API (ADR-064). Batch is now a single async terminal on the `Text` builder — `c.Text.<chain>.Batch(ctx, "q3", "q4")` returns a `BatchHandle` (batch is a text execution mode, parallel to `Stream`), and `handle.Wait(ctx)` blocks for the ordered results. The old two-terminal surface is collapsed: the blocking `c.Text.Batch(...)` (which returned `[]Response`) and `c.Text.SubmitBatch(...)` are both gone — `Batch` now returns the handle, and the blocking one-liner is the compose `h, _ := c.Text.<chain>.Batch(ctx, ...); h.Wait(ctx)` (no `run()` sugar). `BatchHandle.Wait`/`Poll` are unchanged. Migration: `c.Text.<chain>.SubmitBatch(ctx, ...)` → `c.Text.<chain>.Batch(ctx, ...)`; the old blocking `c.Text.<chain>.Batch(ctx, ...)` → `h := c.Text.<chain>.Batch(ctx, ...); h.Wait(ctx)`.
 
 ### Added
 
-- Inline image input on the text/prompt path (ADR-060). `c.Text.Image(mime, bytes).Prompt(...)` now sends the image as the provider's native vision block on all four chat wire shapes (Anthropic, OpenAI, Google, Bedrock). Bytes-based, so it works with no filesystem. Resolves ADR-008 OQ-2 for the image modality; additive. This `feat:` cuts the next minor.
+- Typed telemetry error kind (ADR-071). The middleware `Event` carries a typed `ErrType` set structurally from the error, and the OTLP span's `error.type` attribute now derives from it rather than from string classification of the message. Additive.
+
+### Fixed
+
+- Streamed OpenAI usage is no longer `0`: the SDK opts into `stream_options.include_usage` per provider (OpenAI), so streamed calls report real input/output token counts (BUG-028).
+- A batch with an errored or unparseable result line now returns the successful subset instead of discarding the whole batch (HANDOFF-036 A1).
+- The `modelsList` middleware op now fires real client hooks (HANDOFF-036 A3).
+- `WithCapability(...)` now filters the scoped provider list (HANDOFF-036 A4).
+- A malformed 2xx speech-generation body is now a typed decoding error instead of silent empty audio (HANDOFF-036 A5).
+- Multipart field names and filenames are escaped in the file-upload request (HANDOFF-036 A2).
+- The per-request `anthropic-beta` header is sent on batch submit, so a file-referencing batch item no longer 400s.
 
 ## [1.1.0] — 2026-06-09
 

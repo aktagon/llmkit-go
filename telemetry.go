@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aktagon/llmkit-go/providers"
+	"github.com/aktagon/llmkit-go/v2/providers"
 )
 
 // Telemetry is the opt-in observability config (ADR-059, superseding ADR-054's
