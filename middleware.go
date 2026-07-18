@@ -2,6 +2,7 @@ package llmkit
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/aktagon/llmkit-go/providers"
@@ -45,9 +46,29 @@ func firePost(ctx context.Context, mws []providers.MiddlewareFn, base providers.
 	}
 	ev := base
 	ev.Phase = providers.PhasePost
+	if ev.Err != nil && ev.ErrType == "" {
+		ev.ErrType = eventErrType(ev.Err)
+	}
 	for _, m := range mws {
 		_ = m(ctx, ev)
 	}
+}
+
+// eventErrType maps a typed error to the stable OTEL error.type kind carried
+// on Event.ErrType (ADR-071). Classification is structural (errors.As) and
+// happens here, at the firePost seam — the one place the typed error still
+// exists — so consumers (the OTLP builder included) read the kind verbatim
+// and never re-parse a message string.
+func eventErrType(err error) string {
+	var apiErr *APIError
+	if errors.As(err, &apiErr) {
+		return "api_error"
+	}
+	var ve *ValidationError
+	if errors.As(err, &ve) {
+		return "validation_error"
+	}
+	return "error"
 }
 
 // resolveModel returns the caller-specified model or the provider's curated
