@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aktagon/llmkit-go/providers"
+	"github.com/aktagon/llmkit-go/v2/providers"
 )
 
 // TranscriptionRequest is the canonical speech-to-text request (ADR-048). It

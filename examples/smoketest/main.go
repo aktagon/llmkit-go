@@ -27,8 +27,8 @@ import (
 	"os"
 	"time"
 
-	llmkit "github.com/aktagon/llmkit-go"
-	"github.com/aktagon/llmkit-go/providers"
+	llmkit "github.com/aktagon/llmkit-go/v2"
+	"github.com/aktagon/llmkit-go/v2/providers"
 )
 
 const timeout = 30 * time.Second

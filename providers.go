@@ -1,7 +1,7 @@
 package llmkit
 
 import (
-	"github.com/aktagon/llmkit-go/providers"
+	"github.com/aktagon/llmkit-go/v2/providers"
 )
 
 // eligible returns the providers eligible for *Models.Live(ctx), carrying

@@ -20,8 +20,8 @@ import (
 	"log"
 	"os"
 
-	llmkit "github.com/aktagon/llmkit-go"
-	"github.com/aktagon/llmkit-go/providers"
+	llmkit "github.com/aktagon/llmkit-go/v2"
+	"github.com/aktagon/llmkit-go/v2/providers"
 )
 
 func main() {
