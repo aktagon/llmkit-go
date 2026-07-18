@@ -86,6 +86,15 @@ func doPostRaw(ctx context.Context, client *http.Client, url string, body []byte
 //
 //
 //
+var quoteEscaper = strings.NewReplacer("\\", "\\\\", `"`, "\\\"", "\r", "", "\n", "")
+
+func escapeQuotes(s string) string {
+	return quoteEscaper.Replace(s)
+}
+
+//
+//
+//
 func doMultipartPost(ctx context.Context, client *http.Client, url string,
 	fieldName, filename, mimeType string, data []byte, fields map[string]string, headers map[string]string) ([]byte, int, error) {
 
@@ -103,7 +112,7 @@ func doMultipartPost(ctx context.Context, client *http.Client, url string,
 		mimeType = detectMimeType(filename)
 	}
 	h := make(textproto.MIMEHeader)
-	h.Set("Content-Disposition", fmt.Sprintf(`form-data; name="%s"; filename="%s"`, fieldName, filename))
+	h.Set("Content-Disposition", fmt.Sprintf(`form-data; name="%s"; filename="%s"`, escapeQuotes(fieldName), escapeQuotes(filename)))
 	h.Set("Content-Type", mimeType)
 	fw, err := w.CreatePart(h)
 	if err != nil {
@@ -174,7 +183,7 @@ func doMultipartPostMulti(ctx context.Context, client *http.Client, url string,
 			mime = detectMimeType(f.filename)
 		}
 		h := make(textproto.MIMEHeader)
-		h.Set("Content-Disposition", fmt.Sprintf(`form-data; name="%s"; filename="%s"`, f.fieldName, f.filename))
+		h.Set("Content-Disposition", fmt.Sprintf(`form-data; name="%s"; filename="%s"`, escapeQuotes(f.fieldName), escapeQuotes(f.filename)))
 		h.Set("Content-Type", mime)
 		fw, err := w.CreatePart(h)
 		if err != nil {
