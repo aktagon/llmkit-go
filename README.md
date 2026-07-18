@@ -4,13 +4,13 @@ One Go API for Anthropic, OpenAI, Google, and 20+ other providers — including 
 
 Zero external dependencies. Stdlib only.
 
-Also available for TypeScript, Python, and Rust.
+Also available for TypeScript, Python, Rust, Swift, and Java.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/aktagon/llmkit-go/master/assets/logos/llmkit-languages.svg" alt="Go, TypeScript, Python, Rust" height="26">
+  <img src="https://raw.githubusercontent.com/aktagon/llmkit-go/master/assets/logos/llmkit-languages.svg" alt="Go, TypeScript, Python, Rust, Swift, Java" height="26">
 </p>
 <p align="center">
-  <img src="https://raw.githubusercontent.com/aktagon/llmkit-go/master/assets/logos/llmkit-providers.svg" alt="Anthropic, OpenAI, Google, and 20+ more providers" height="26">
+  <img src="https://raw.githubusercontent.com/aktagon/llmkit-go/master/assets/logos/llmkit-providers.svg" alt="Anthropic, OpenAI, Google, and 26 more providers" height="26">
 </p>
 
 ## Install
