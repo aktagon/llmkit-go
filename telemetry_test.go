@@ -13,7 +13,7 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/aktagon/llmkit-go/providers"
+	"github.com/aktagon/llmkit-go/v2/providers"
 )
 
 // Fixed span identity + timing for the deterministic parity fixtures (TEL-011).

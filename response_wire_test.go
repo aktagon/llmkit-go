@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aktagon/llmkit-go/providers"
+	"github.com/aktagon/llmkit-go/v2/providers"
 )
 
 // Cross-SDK RESPONSE-body conformance (ADR-065 / prompt 045 Track B).

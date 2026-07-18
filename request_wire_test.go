@@ -16,7 +16,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aktagon/llmkit-go/providers"
+	"github.com/aktagon/llmkit-go/v2/providers"
 )
 
 // Spike 036 (PIVOT wire-conformance): a request-byte conformance suite for the

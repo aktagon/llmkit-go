@@ -15,7 +15,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/aktagon/llmkit-go"
+	"github.com/aktagon/llmkit-go/v2"
 )
 
 const systemPrompt = `You are a meticulous technical editor reviewing documentation for a software library.

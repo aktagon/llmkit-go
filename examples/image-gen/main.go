@@ -13,8 +13,8 @@ import (
 	"log"
 	"os"
 
-	"github.com/aktagon/llmkit-go"
-	"github.com/aktagon/llmkit-go/providers"
+	"github.com/aktagon/llmkit-go/v2"
+	"github.com/aktagon/llmkit-go/v2/providers"
 )
 
 const flashModel = "gemini-3.1-flash-image-preview"

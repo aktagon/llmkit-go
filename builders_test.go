@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aktagon/llmkit-go/providers"
+	"github.com/aktagon/llmkit-go/v2/providers"
 )
 
 // TestSurface_Chains exercises every chain method on every builder
