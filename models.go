@@ -49,18 +49,20 @@ func classifyCatalogueErr(err error) string {
 	}
 }
 
-// filterCompiledModels walks the codegen-emitted compiledInModels slice
-// and returns the records whose Capabilities slice contains c. An empty
-// c means no filter — the full slice is returned by reference-copy of a
-// new []ModelInfo to keep callers from mutating the package-level slice.
-func filterCompiledModels(c Capability) []ModelInfo {
-	if c == "" {
-		out := make([]ModelInfo, len(compiledInModels))
-		copy(out, compiledInModels)
-		return out
-	}
-	out := make([]ModelInfo, 0, len(compiledInModels))
-	for _, m := range compiledInModels {
+// filterByCapability returns the records whose Capabilities slice
+// contains c; an empty c means no filter. Always returns a fresh slice
+// so callers cannot mutate the input. The single capability predicate
+// (HANDOFF-036 A4): shared by the compiled-in path
+// (filterCompiledModels), the scoped live list (runList), and — through
+// runList — the live aggregate (runLive). Get stays an unfiltered
+// point lookup by id.
+func filterByCapability(models []ModelInfo, c Capability) []ModelInfo {
+	out := make([]ModelInfo, 0, len(models))
+	for _, m := range models {
+		if c == "" {
+			out = append(out, m)
+			continue
+		}
 		for _, mc := range m.Capabilities {
 			if mc == c {
 				out = append(out, m)
@@ -69,6 +71,13 @@ func filterCompiledModels(c Capability) []ModelInfo {
 		}
 	}
 	return out
+}
+
+// filterCompiledModels walks the codegen-emitted compiledInModels slice
+// through the shared capability predicate. Always a fresh []ModelInfo
+// to keep callers from mutating the package-level slice.
+func filterCompiledModels(c Capability) []ModelInfo {
+	return filterByCapability(compiledInModels, c)
 }
 
 // lookupCompiledModel returns the compiled-in record for id, or zero +
@@ -88,7 +97,7 @@ func lookupCompiledModel(id string) (ModelInfo, bool) {
 // configured set is filtered through *Providers.eligible() — providers
 // with both credentials configured and llm:hasModelsEndpoint declared.
 // Errors land in result.Errors (typed ProviderError per Amendment 1);
-// successes are accumulated and post-filtered by capFilter when set.
+// capFilter is applied per-provider inside runList (HANDOFF-036 A4).
 func (b *Models) runLive(ctx context.Context) (LiveResult, error) {
 	configured := b.client.Providers.eligible()
 	var (
@@ -105,18 +114,6 @@ func (b *Models) runLive(ctx context.Context) (LiveResult, error) {
 		}
 		all = append(all, models...)
 	}
-	if b.capFilter != "" {
-		filtered := all[:0]
-		for _, m := range all {
-			for _, mc := range m.Capabilities {
-				if mc == b.capFilter {
-					filtered = append(filtered, m)
-					break
-				}
-			}
-		}
-		all = filtered
-	}
 	sort.SliceStable(all, func(i, j int) bool {
 		if all[i].Provider.Name != all[j].Provider.Name {
 			return all[i].Provider.Name < all[j].Provider.Name
@@ -129,9 +126,11 @@ func (b *Models) runLive(ctx context.Context) (LiveResult, error) {
 // runList performs the single-provider live HTTP call. Paginates per
 // the catalogue config until the parser reports no next cursor, then
 // enriches each record with the ontology-derived capability slice and
-// returns the typed []ModelInfo. Middleware fires once per call (not
-// once per page) — pre fires before the first request, post fires
-// after the final page (or first error).
+// returns the typed []ModelInfo filtered by the chain's capFilter
+// (WithCapability composes with Provider(p).List — HANDOFF-036 A4;
+// Get stays an unfiltered point lookup by id). Middleware fires once
+// per call (not once per page) — pre fires before the first request,
+// post fires after the final page (or first error).
 func (b *ScopedModels) runList(ctx context.Context) ([]ModelInfo, error) {
 	cfg, ok := catalogueByProvider[b.target.Name]
 	if !ok {
@@ -163,7 +162,7 @@ func (b *ScopedModels) runList(ctx context.Context) ([]ModelInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	return b.enrich(out), nil
+	return filterByCapability(b.enrich(out), b.capFilter), nil
 }
 
 // runGet performs the single-provider live model fetch. URL shapes pinned

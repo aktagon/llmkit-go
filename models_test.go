@@ -334,6 +334,42 @@ func modelIDs(models []ModelInfo) []string {
 	return out
 }
 
+// TestScopedModelsList_AppliesCapabilityFilter locks HANDOFF-036 A4:
+// WithCapability composes with Provider(p).List — the scoped live list
+// returns only models whose ontology-derived capabilities contain the
+// filter, while the unfiltered chain returns the full page.
+func TestScopedModelsList_AppliesCapabilityFilter(t *testing.T) {
+	body := `{"object":"list","data":[
+		{"id":"gpt-4o-mini","object":"model","created":1715367049,"owned_by":"system"},
+		{"id":"gpt-image-1","object":"model","created":1715367049,"owned_by":"system"}
+	]}`
+	srv, cleanup := newCatalogueServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(body))
+	})
+	defer cleanup()
+
+	c := Openai("test-key")
+	c.provider.baseURL = srv.URL
+	unfiltered, err := c.Models.Provider(Provider{Name: "openai"}).List(context.Background())
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if got, want := len(unfiltered), 2; got != want {
+		t.Fatalf("unfiltered scoped list: expected %d records, got %d (%v)", want, got, modelIDs(unfiltered))
+	}
+	filtered, err := c.Models.WithCapability(CapImageGeneration).Provider(Provider{Name: "openai"}).List(context.Background())
+	if err != nil {
+		t.Fatalf("filtered List: %v", err)
+	}
+	if got, want := len(filtered), 1; got != want {
+		t.Fatalf("filtered scoped list: expected %d record, got %d (%v)", want, got, modelIDs(filtered))
+	}
+	if filtered[0].ID != "gpt-image-1" {
+		t.Fatalf("expected gpt-image-1 (ImageGeneration), got %q", filtered[0].ID)
+	}
+}
+
 // TestScopedModelsList_FiresClientMiddleware locks HANDOFF-036 A3: client-
 // scoped hooks (the AddTelemetry seam) observe catalogue calls — pre fires
 // before the HTTP call, post fires after with a duration. The dead-site
