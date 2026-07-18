@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/aktagon/llmkit-go/providers"
 )
 
 // newCatalogueServer wires a stub server whose handler hands per-path
@@ -330,4 +332,40 @@ func modelIDs(models []ModelInfo) []string {
 		out[i] = m.ID
 	}
 	return out
+}
+
+// TestScopedModelsList_FiresClientMiddleware locks HANDOFF-036 A3: client-
+// scoped hooks (the AddTelemetry seam) observe catalogue calls — pre fires
+// before the HTTP call, post fires after with a duration. The dead-site
+// regression class is also held by complete.middleware-fire-empty-hooks.
+func TestScopedModelsList_FiresClientMiddleware(t *testing.T) {
+	body := `{"object":"list","data":[{"id":"gpt-5","object":"model","created":1715367049,"owned_by":"system"}]}`
+	srv, cleanup := newCatalogueServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(body))
+	})
+	defer cleanup()
+
+	var events []providers.Event
+	c := Openai("test-key")
+	c.provider.baseURL = srv.URL
+	c.middleware = append(c.middleware, func(ctx context.Context, e providers.Event) error {
+		events = append(events, e)
+		return nil
+	})
+	if _, err := c.Models.Provider(Provider{Name: "openai"}).List(context.Background()); err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(events) != 2 {
+		t.Fatalf("expected pre+post events, got %d", len(events))
+	}
+	if events[0].Phase != providers.PhasePre || events[1].Phase != providers.PhasePost {
+		t.Fatalf("expected pre then post, got %q then %q", events[0].Phase, events[1].Phase)
+	}
+	if events[0].Op != providers.OpModelsList || events[1].Op != providers.OpModelsList {
+		t.Fatalf("expected OpModelsList on both phases, got %q / %q", events[0].Op, events[1].Op)
+	}
+	if events[1].Duration <= 0 {
+		t.Fatalf("expected positive post duration, got %v", events[1].Duration)
+	}
 }
