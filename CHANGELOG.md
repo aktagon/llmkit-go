@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.1] — 2026-07-19
+
+### Security
+
+- Fixed: an API key could appear in error output. On a failed request to a query-parameter-authenticated provider (Google), transport errors embedded the full request URL — which carries the key as a `?key=` query parameter — so logging the error could leak the key. Errors now omit the URL.
+
 ## [2.0.0] — 2026-07-19
 
 ### Breaking
