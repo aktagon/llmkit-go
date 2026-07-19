@@ -5,16 +5,31 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime/multipart"
 	"net/http"
 	"net/textproto"
+	"net/url"
 	"path/filepath"
 	"strings"
 
 	"github.com/aktagon/llmkit-go/v2/providers"
 )
+
+// redactURLError strips the (key-bearing) URL from a *url.Error, keeping
+// only the underlying cause, so an API key spliced into the query string
+// (e.g. Google's QueryParamKey auth, ?key=<secret>) cannot leak into logs
+// via a transport failure (DNS, connection refused, TLS, timeout).
+// Non-url.Error values pass through unchanged.
+func redactURLError(err error) error {
+	var ue *url.Error
+	if errors.As(err, &ue) {
+		return fmt.Errorf("%s: %w", ue.Op, ue.Err) // drops ue.URL
+	}
+	return err
+}
 
 // doPost sends a POST request and returns the response body.
 // On 4xx/5xx, returns the body and an error so the caller can parse provider-specific errors.
@@ -40,14 +55,14 @@ func doPost(ctx context.Context, client *http.Client, url string, body []byte, h
 func doGetRaw(ctx context.Context, client *http.Client, url string, headers map[string]string) ([]byte, int, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, redactURLError(err)
 	}
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, redactURLError(err)
 	}
 	defer resp.Body.Close()
 	data, err := io.ReadAll(resp.Body)
@@ -61,7 +76,7 @@ func doGetRaw(ctx context.Context, client *http.Client, url string, headers map[
 func doPostRaw(ctx context.Context, client *http.Client, url string, body []byte, headers map[string]string) ([]byte, int, error) {
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, redactURLError(err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -71,7 +86,7 @@ func doPostRaw(ctx context.Context, client *http.Client, url string, body []byte
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, redactURLError(err)
 	}
 	defer resp.Body.Close()
 
@@ -128,7 +143,7 @@ func doMultipartPost(ctx context.Context, client *http.Client, url string,
 
 	req, err := http.NewRequestWithContext(ctx, "POST", url, &buf)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, redactURLError(err)
 	}
 
 	req.Header.Set("Content-Type", w.FormDataContentType())
@@ -138,7 +153,7 @@ func doMultipartPost(ctx context.Context, client *http.Client, url string,
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, redactURLError(err)
 	}
 	defer resp.Body.Close()
 
@@ -200,7 +215,7 @@ func doMultipartPostMulti(ctx context.Context, client *http.Client, url string,
 
 	req, err := http.NewRequestWithContext(ctx, "POST", url, &buf)
 	if err != nil {
-		return nil, err
+		return nil, redactURLError(err)
 	}
 	req.Header.Set("Content-Type", w.FormDataContentType())
 	for k, v := range headers {
@@ -209,7 +224,7 @@ func doMultipartPostMulti(ctx context.Context, client *http.Client, url string,
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, redactURLError(err)
 	}
 	defer resp.Body.Close()
 
@@ -233,7 +248,7 @@ func doSigV4Post(ctx context.Context, client *http.Client, url string, body []by
 
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
 	if err != nil {
-		return nil, err
+		return nil, redactURLError(err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
@@ -246,7 +261,7 @@ func doSigV4Post(ctx context.Context, client *http.Client, url string, body []by
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, redactURLError(err)
 	}
 	defer resp.Body.Close()
 
@@ -275,7 +290,7 @@ func doSigV4Get(ctx context.Context, client *http.Client, url string,
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		return nil, err
+		return nil, redactURLError(err)
 	}
 
 	signSigV4(req, nil, accessKey, secretKey, sessionToken, region, service)
@@ -287,7 +302,7 @@ func doSigV4Get(ctx context.Context, client *http.Client, url string,
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, redactURLError(err)
 	}
 	defer resp.Body.Close()
 
@@ -316,7 +331,7 @@ func doStreamPost(ctx context.Context, client *http.Client, url string, body []b
 
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
 	if err != nil {
-		return Usage{}, "", err
+		return Usage{}, "", redactURLError(err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -326,7 +341,7 @@ func doStreamPost(ctx context.Context, client *http.Client, url string, body []b
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return Usage{}, "", err
+		return Usage{}, "", redactURLError(err)
 	}
 	defer resp.Body.Close()
 
