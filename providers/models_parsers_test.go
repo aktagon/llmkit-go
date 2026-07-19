@@ -12,7 +12,7 @@ func loadFixture(t *testing.T, name string) []byte {
 	if err != nil {
 		t.Fatalf("getwd: %v", err)
 	}
-	// Walk up to repo root, then descend into codegen/fixtures/models.
+	//
 	for i := 0; i < 6; i++ {
 		candidate := filepath.Join(wd, "codegen", "fixtures", "models", name)
 		if _, err := os.Stat(candidate); err == nil {
@@ -37,14 +37,14 @@ func TestParseAnthropicModelsResponse(t *testing.T) {
 	if len(page.Records) != 9 {
 		t.Errorf("got %d records, want 9", len(page.Records))
 	}
-	// First record (sort order from API) should populate id + display_name.
+	//
 	if page.Records[0].ID == "" {
 		t.Error("first record has empty ID")
 	}
 	if page.Records[0].DisplayName == "" {
 		t.Error("first record has empty DisplayName")
 	}
-	// Anthropic publishes max_input_tokens and a separate max_output_tokens or max_tokens.
+	//
 	if page.Records[0].ContextWindow == 0 {
 		t.Error("expected ContextWindow populated from max_input_tokens")
 	}
@@ -82,7 +82,7 @@ func TestParseGoogleModelsResponse(t *testing.T) {
 	if len(page.Records) != 50 {
 		t.Errorf("got %d records, want 50", len(page.Records))
 	}
-	// "models/" prefix stripping
+	//
 	for _, r := range page.Records {
 		if r.ID == "" {
 			t.Error("record has empty ID")
@@ -91,7 +91,7 @@ func TestParseGoogleModelsResponse(t *testing.T) {
 			t.Errorf("ID %q still carries models/ prefix", r.ID)
 		}
 	}
-	// Google publishes inputTokenLimit + outputTokenLimit on most models.
+	//
 	hadContext := false
 	for _, r := range page.Records {
 		if r.ContextWindow > 0 {

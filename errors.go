@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// APIError represents a provider API error.
+//
 type APIError struct {
 	Provider   string
 	StatusCode int
@@ -22,7 +22,7 @@ func (e *APIError) Error() string {
 	return fmt.Sprintf("%s: %s (%d)", e.Provider, e.Message, e.StatusCode)
 }
 
-// ValidationError represents a request validation error.
+//
 type ValidationError struct {
 	Field   string
 	Message string
@@ -32,8 +32,8 @@ func (e *ValidationError) Error() string {
 	return fmt.Sprintf("validation: %s - %s", e.Field, e.Message)
 }
 
-// parseError parses provider-specific error responses into APIError.
-// Uses generated error paths from the ontology — no provider-name switches.
+//
+//
 func parseError(provider string, statusCode int, body []byte, headers http.Header) *APIError {
 	apiErr := &APIError{
 		Provider:   provider,
@@ -68,7 +68,7 @@ func parseError(provider string, statusCode int, body []byte, headers http.Heade
 	return apiErr
 }
 
-// extractRetryAfter parses the Retry-After header.
+//
 func extractRetryAfter(headers http.Header) time.Duration {
 	if headers == nil {
 		return 0

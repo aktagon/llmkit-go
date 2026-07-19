@@ -13,7 +13,7 @@ func TestSignSigV4(t *testing.T) {
 	body := []byte(`{"messages":[]}`)
 	signSigV4(req, body, "AKIAIOSFODNN7EXAMPLE", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", "", "us-east-1", "bedrock")
 
-	// Must have Authorization header with correct format
+	//
 	auth := req.Header.Get("Authorization")
 	if auth == "" {
 		t.Fatal("expected Authorization header")
@@ -31,12 +31,12 @@ func TestSignSigV4(t *testing.T) {
 		t.Error("expected Signature in auth")
 	}
 
-	// Must have X-Amz-Date
+	//
 	if req.Header.Get("X-Amz-Date") == "" {
 		t.Error("expected X-Amz-Date header")
 	}
 
-	// Must have X-Amz-Content-Sha256
+	//
 	if req.Header.Get("X-Amz-Content-Sha256") == "" {
 		t.Error("expected X-Amz-Content-Sha256 header")
 	}
@@ -56,7 +56,7 @@ func TestSignSigV4WithSessionToken(t *testing.T) {
 func TestDeriveSigningKey(t *testing.T) {
 	key := deriveSigningKey("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", "20130524", "us-east-1", "s3")
 	hex := sha256Hex(key)
-	// Known value from AWS SigV4 test suite
+	//
 	if len(hex) != 64 {
 		t.Errorf("expected 64 char hex, got %d", len(hex))
 	}
@@ -70,10 +70,10 @@ func TestCanonicalQueryString(t *testing.T) {
 	}
 }
 
-// TestCanonicalURIConversePathUnescaped pins the invariant the canonicalURI
-// EscapedPath() switch relies on: a Bedrock Converse path carrying a model id
-// with a ':' (the live-verified chat path) signs the ':' literally — EscapedPath
-// equals Path, so the switch does not regress chat signing.
+//
+//
+//
+//
 func TestCanonicalURIConversePathUnescaped(t *testing.T) {
 	req, _ := http.NewRequest("POST", "https://bedrock-runtime.us-east-1.amazonaws.com/model/anthropic.claude-sonnet-4-20250514-v1:0/converse", nil)
 	got := canonicalURI(req)

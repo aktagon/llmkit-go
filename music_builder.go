@@ -4,10 +4,10 @@ import (
 	"context"
 )
 
-// Generate executes the chained MusicGeneration request against the client's
-// provider. Chain state populates MusicRequest and the matching MusicOption
-// set; finalText, when non-empty, becomes a trailing text Part appended to
-// the chain's accumulated Parts (ADR-033).
+//
+//
+//
+//
 func (b *Music) Generate(ctx context.Context, finalText string) (MusicResponse, error) {
 	parts := b.parts
 	if finalText != "" {

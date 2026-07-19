@@ -18,11 +18,11 @@ import (
 	"github.com/aktagon/llmkit-go/v2/providers"
 )
 
-// redactURLError strips the (key-bearing) URL from a *url.Error, keeping
-// only the underlying cause, so an API key spliced into the query string
-// (e.g. Google's QueryParamKey auth, ?key=<secret>) cannot leak into logs
-// via a transport failure (DNS, connection refused, TLS, timeout).
-// Non-url.Error values pass through unchanged.
+//
+//
+//
+//
+//
 func redactURLError(err error) error {
 	var ue *url.Error
 	if errors.As(err, &ue) {
@@ -31,8 +31,8 @@ func redactURLError(err error) error {
 	return err
 }
 
-// doPost sends a POST request and returns the response body.
-// On 4xx/5xx, returns the body and an error so the caller can parse provider-specific errors.
+//
+//
 func doPost(ctx context.Context, client *http.Client, url string, body []byte, headers map[string]string) ([]byte, error) {
 	data, statusCode, err := doPostRaw(ctx, client, url, body, headers)
 	if err != nil {
@@ -48,10 +48,10 @@ func doPost(ctx context.Context, client *http.Client, url string, body []byte, h
 	return data, nil
 }
 
-// doGetRaw sends a GET request and returns body + status code without
-// wrapping non-2xx as APIError. Catalogue paths (ADR-019) use this so
-// the runtime can read provider error envelopes for scope-vs-unavailable
-// classification before deciding which sentinel to surface.
+//
+//
+//
+//
 func doGetRaw(ctx context.Context, client *http.Client, url string, headers map[string]string) ([]byte, int, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
@@ -72,7 +72,7 @@ func doGetRaw(ctx context.Context, client *http.Client, url string, headers map[
 	return data, resp.StatusCode, nil
 }
 
-// doPostRaw sends a POST request and returns status code and body without error handling.
+//
 func doPostRaw(ctx context.Context, client *http.Client, url string, body []byte, headers map[string]string) ([]byte, int, error) {
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
 	if err != nil {
@@ -98,25 +98,25 @@ func doPostRaw(ctx context.Context, client *http.Client, url string, body []byte
 	return data, resp.StatusCode, nil
 }
 
-// quoteEscaper mirrors mime/multipart's escapeQuotes and additionally strips
-// CR/LF: a quote or newline in a caller-controlled field name or filename must
-// not break out of the Content-Disposition part header (HANDOFF-036 A2).
+//
+//
+//
 var quoteEscaper = strings.NewReplacer("\\", "\\\\", `"`, "\\\"", "\r", "", "\n", "")
 
 func escapeQuotes(s string) string {
 	return quoteEscaper.Replace(s)
 }
 
-// doMultipartPost sends a multipart POST request for file uploads.
-// If mimeType is empty, Content-Type is derived from the filename
-// extension via detectMimeType.
+//
+//
+//
 func doMultipartPost(ctx context.Context, client *http.Client, url string,
 	fieldName, filename, mimeType string, data []byte, fields map[string]string, headers map[string]string) ([]byte, int, error) {
 
 	var buf bytes.Buffer
 	w := multipart.NewWriter(&buf)
 
-	// Add extra fields
+	//
 	for k, v := range fields {
 		if err := w.WriteField(k, v); err != nil {
 			return nil, 0, err
@@ -165,9 +165,9 @@ func doMultipartPost(ctx context.Context, client *http.Client, url string,
 	return respData, resp.StatusCode, nil
 }
 
-// multipartFile is one file part inside a multipart/form-data request.
-// fieldName is the form field name (use a trailing "[]" when the API
-// expects an array of files, e.g. OpenAI's "image[]").
+//
+//
+//
 type multipartFile struct {
 	fieldName string
 	filename  string
@@ -175,11 +175,11 @@ type multipartFile struct {
 	bytes     []byte
 }
 
-// doMultipartPostMulti sends a multipart POST with one or more file parts
-// and zero-or-more plain string fields. Mirrors doMultipartPost's wire
-// shape — extra fields written first, then files in the given order. On
-// non-2xx the body is returned alongside an *APIError so callers can hand
-// it to parseError.
+//
+//
+//
+//
+//
 func doMultipartPostMulti(ctx context.Context, client *http.Client, url string,
 	files []multipartFile, fields map[string]string, headers map[string]string) ([]byte, error) {
 
@@ -238,11 +238,11 @@ func doMultipartPostMulti(ctx context.Context, client *http.Client, url string,
 	return data, nil
 }
 
-// doSigV4Post sends a POST request signed with AWS SigV4. customHeaders are
-// caller-supplied custom headers (Client.AddHeader, ADR-052); they are added
-// AFTER signing so they ride alongside the request without altering the AWS
-// signature (extra unsigned headers are permitted, and a gateway in front of
-// Bedrock can read them).
+//
+//
+//
+//
+//
 func doSigV4Post(ctx context.Context, client *http.Client, url string, body []byte,
 	accessKey, secretKey, sessionToken, region, service string, customHeaders map[string]string) ([]byte, error) {
 
@@ -280,11 +280,11 @@ func doSigV4Post(ctx context.Context, client *http.Client, url string, body []by
 	return data, nil
 }
 
-// doSigV4Get sends a GET request signed with AWS SigV4. The body is empty, so
-// the payload hash is the SHA-256 of the empty string. Used by the Bedrock
-// video poll (GetAsyncInvoke), whose ARN is percent-encoded into the URL path
-// by the caller — signSigV4 signs the escaped path so the signature matches
-// the bytes on the wire.
+//
+//
+//
+//
+//
 func doSigV4Get(ctx context.Context, client *http.Client, url string,
 	accessKey, secretKey, sessionToken, region, service string, customHeaders map[string]string) ([]byte, error) {
 
@@ -321,11 +321,11 @@ func doSigV4Get(ctx context.Context, client *http.Client, url string,
 	return data, nil
 }
 
-// doStreamPost sends a POST request and processes SSE events via callback.
-// Returns accumulated usage and the stream-time finish-reason after the
-// stream ends. finishReasonPath uses ADR-013 form: `event_name:json.path`
-// (event-typed SSE — Anthropic message_stop) or bare `json.path`
-// (data-only SSE — OpenAI / Grok / Google). Empty disables capture.
+//
+//
+//
+//
+//
 func doStreamPost(ctx context.Context, client *http.Client, url string, body []byte, headers map[string]string,
 	streamCfg *providers.StreamDef, finishReasonPath string, callback func(string)) (Usage, string, error) {
 
@@ -360,49 +360,49 @@ func doStreamPost(ctx context.Context, client *http.Client, url string, body []b
 	var finishReason string
 	var currentEvent string
 	scanner := bufio.NewScanner(resp.Body)
-	// Default Scanner buffer is 64KB. SSE frames carrying large
-	// structured-output JSON or tool-call arguments routinely exceed
-	// that and would silently truncate (Scanner.Err returns
-	// bufio.ErrTooLong, partial data surfaces as final response). Bump
-	// to 10MB to match the largest event sizes in practice.
+	//
+	//
+	//
+	//
+	//
 	scanner.Buffer(make([]byte, 0, 64*1024), 10*1024*1024)
 
 	for scanner.Scan() {
 		line := scanner.Text()
 
-		// Parse event type
+		//
 		if strings.HasPrefix(line, "event: ") {
 			currentEvent = strings.TrimPrefix(line, "event: ")
 			continue
 		}
 
-		// Parse data
+		//
 		if !strings.HasPrefix(line, "data: ") {
 			continue
 		}
 		data := strings.TrimPrefix(line, "data: ")
 
-		// Check done signal (data-level, e.g., OpenAI's [DONE]).
-		// [DONE] is the literal sentinel string, not JSON — bail before parsing.
+		//
+		//
 		if streamCfg.DoneSignal != "" && data == streamCfg.DoneSignal {
 			break
 		}
 
-		// Parse the data frame BEFORE the event-level done break: providers
-		// like Anthropic carry finish_reason on the message_stop event's body,
-		// and dropping the parse here would discard that signal (ADR-013).
+		//
+		//
+		//
 		var parsed map[string]any
 		parseErr := json.Unmarshal([]byte(data), &parsed)
 
 		if parseErr == nil && finishJSONPath != "" {
 			if finishEvent == "" || finishEvent == currentEvent {
 				if pathPresent(parsed, finishJSONPath) {
-					// pathPresent already vetoes nil; the "<nil>" string
-					// check guards against extractPath's fmt.Sprint
-					// path that stringifies a present-but-nil value
-					// (OpenAI mid-stream `finish_reason: null`). The
-					// TS/Python/Rust parsers return "" for null and
-					// rely on truthiness — Go alone needs the literal.
+					//
+					//
+					//
+					//
+					//
+					//
 					if v := extractPath(parsed, finishJSONPath); v != "" && v != "<nil>" && v != "FINISH_REASON_UNSPECIFIED" {
 						finishReason = v
 					}
@@ -410,7 +410,7 @@ func doStreamPost(ctx context.Context, client *http.Client, url string, body []b
 			}
 		}
 
-		// Check done event (event-level, e.g., Anthropic's message_stop)
+		//
 		if streamCfg.UsesEventTypes && streamCfg.DoneEvent != "" && currentEvent == streamCfg.DoneEvent {
 			break
 		}
@@ -419,24 +419,24 @@ func doStreamPost(ctx context.Context, client *http.Client, url string, body []b
 			continue
 		}
 
-		// Extract text delta
+		//
 		if streamCfg.UsesEventTypes {
-			// Only process content events
+			//
 			if currentEvent == streamCfg.ContentEvent {
 				if text := extractPath(parsed, streamCfg.DeltaTextPath); text != "" && text != "<nil>" {
 					callback(text)
 				}
 			}
-			// Extract usage from usage events
+			//
 			if currentEvent == streamCfg.UsageEvent && streamCfg.UsageOutputPath != "" {
 				usage.Output = extractIntPath(parsed, streamCfg.UsageOutputPath)
 			}
 		} else {
-			// Data-only stream (OpenAI, Google)
+			//
 			if text := extractPath(parsed, streamCfg.DeltaTextPath); text != "" && text != "<nil>" {
 				callback(text)
 			}
-			// Check for usage in every event (OpenAI sends it in the last chunk)
+			//
 			if streamCfg.UsageInputPath != "" {
 				if v := extractIntPath(parsed, streamCfg.UsageInputPath); v > 0 {
 					usage.Input = v
@@ -455,10 +455,10 @@ func doStreamPost(ctx context.Context, client *http.Client, url string, body []b
 	return usage, finishReason, scanner.Err()
 }
 
-// parseStreamFinishPath splits an ADR-013 stream-finish locator into its
-// optional event-name prefix and the JSON path. `event_name:json.path`
-// returns (event_name, json.path); bare `json.path` returns ("", json.path);
-// empty returns ("", "").
+//
+//
+//
+//
 func parseStreamFinishPath(p string) (eventName, jsonPath string) {
 	if p == "" {
 		return "", ""
@@ -469,7 +469,7 @@ func parseStreamFinishPath(p string) (eventName, jsonPath string) {
 	return "", p
 }
 
-// detectMimeType returns MIME type based on file extension.
+//
 func detectMimeType(path string) string {
 	ext := strings.ToLower(filepath.Ext(path))
 	switch ext {

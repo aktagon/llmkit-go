@@ -12,11 +12,11 @@ import (
 	"github.com/aktagon/llmkit-go/v2/providers"
 )
 
-// TestAddHeader_ReachesWire_TextPath proves a custom header set via
-// Client.AddHeader (ADR-052) lands on the outgoing request alongside the
-// provider auth header — the BUG-015 gateway case (cf-aig-authorization rides
-// next to the provider key). Mirrors the authenticated Cloudflare AI Gateway
-// scenario: both headers must survive.
+//
+//
+//
+//
+//
 func TestAddHeader_ReachesWire_TextPath(t *testing.T) {
 	var gotAuth, gotGateway string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -46,9 +46,9 @@ func TestAddHeader_ReachesWire_TextPath(t *testing.T) {
 	}
 }
 
-// TestAddHeader_ReachesWire_ImagePath proves the same header threading on a
-// media capability (image generation) — the per-capability Provider copy is
-// the BUG-007/BUG-014 drift spot, so a separate path guards it.
+//
+//
+//
 func TestAddHeader_ReachesWire_ImagePath(t *testing.T) {
 	encoded := base64.StdEncoding.EncodeToString(fakePNG)
 	var gotAuth, gotGateway string
@@ -78,9 +78,9 @@ func TestAddHeader_ReachesWire_ImagePath(t *testing.T) {
 	}
 }
 
-// TestAddHeader_DoesNotClobberProviderAuth proves precedence: a caller header
-// whose name collides with the provider auth header cannot overwrite it
-// (ADR-052 precedence — provider auth always wins).
+//
+//
+//
 func TestAddHeader_DoesNotClobberProviderAuth(t *testing.T) {
 	var gotAuth string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -103,11 +103,11 @@ func TestAddHeader_DoesNotClobberProviderAuth(t *testing.T) {
 	}
 }
 
-// TestAddHeader_DifferentCasedCollisionCannotClobberAuth guards the
-// case-insensitive precedence: HTTP header names are case-insensitive, so a
-// caller "authorization" must not shadow the provider's "Authorization"
-// (ADR-052; the BUG class the non-deterministic Go map-iteration order would
-// otherwise allow).
+//
+//
+//
+//
+//
 func TestAddHeader_DifferentCasedCollisionCannotClobberAuth(t *testing.T) {
 	var gotAuth string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

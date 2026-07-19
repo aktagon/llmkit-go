@@ -1,10 +1,10 @@
-// Example: spend-cap middleware. Vetoes LLM requests once cumulative cost
-// exceeds a daily budget, and accumulates actual cost on post-phase using
-// a caller-supplied price table.
 //
-// Price tables drift monthly and belong in user code, not the library.
 //
-// Run with: ANTHROPIC_API_KEY=... go run ./examples/middleware
+//
+//
+//
+//
+//
 package main
 
 import (
@@ -18,11 +18,11 @@ import (
 	"github.com/aktagon/llmkit-go/v2/providers"
 )
 
-// Price is USD per 1M tokens for input / output.
+//
 type Price struct{ Input, Output float64 }
 
-// SpendCap vetoes LLM requests once cumulative cost >= budget, and
-// accumulates actual cost on post-phase.
+//
+//
 type SpendCap struct {
 	mu     sync.Mutex
 	budget float64
@@ -34,7 +34,7 @@ func NewSpendCap(budget float64, prices map[string]Price) *SpendCap {
 	return &SpendCap{budget: budget, prices: prices}
 }
 
-// Middleware implements the providers.MiddlewareFn contract.
+//
 func (s *SpendCap) Middleware(ctx context.Context, e providers.Event) error {
 	if e.Op != providers.OpLLMRequest {
 		return nil
@@ -49,7 +49,7 @@ func (s *SpendCap) Middleware(ctx context.Context, e providers.Event) error {
 		return nil
 	}
 
-	// Post-phase: accumulate.
+	//
 	p, ok := s.prices[e.Model]
 	if !ok {
 		return nil // no price entry — skip silently, or log in real code
@@ -58,14 +58,14 @@ func (s *SpendCap) Middleware(ctx context.Context, e providers.Event) error {
 	return nil
 }
 
-// Spent returns the accumulated cost so far.
+//
 func (s *SpendCap) Spent() float64 {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.spent
 }
 
-// TokenLogger prints token usage for each completed LLM request.
+//
 func TokenLogger(ctx context.Context, e providers.Event) error {
 	if e.Op == providers.OpLLMRequest && e.Phase == providers.PhasePost {
 		log.Printf("[%s/%s] in=%d out=%d cache_read=%d took=%s",

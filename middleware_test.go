@@ -11,7 +11,7 @@ import (
 	"github.com/aktagon/llmkit-go/v2/providers"
 )
 
-// newMockOpenAI returns a test server that returns a fixed OpenAI-shaped response.
+//
 func newMockOpenAI(inputTokens, outputTokens int) *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
@@ -213,9 +213,9 @@ func TestMiddlewareCarriesModelAndProvider(t *testing.T) {
 	}
 }
 
-// TestReasoningTokensPopulatedForOpenAI verifies that when a provider exposes
-// a reasoning_tokens path (OpenAI o1/o3/o4 models), parseResponse populates
-// Usage.Reasoning. Middleware receives the reasoning count on post-phase.
+//
+//
+//
 func TestReasoningTokensPopulatedForOpenAI(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
@@ -255,8 +255,8 @@ func TestReasoningTokensPopulatedForOpenAI(t *testing.T) {
 	}
 }
 
-// TestReasoningTokensZeroWhenUnreported verifies that providers without a
-// reasoningTokensPath (e.g., Anthropic) leave Usage.Reasoning at zero.
+//
+//
 func TestReasoningTokensZeroWhenUnreported(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
@@ -278,7 +278,7 @@ func TestReasoningTokensZeroWhenUnreported(t *testing.T) {
 }
 
 func TestMiddlewareStreamBracketsEntireStream(t *testing.T) {
-	// Minimal SSE stream: two content deltas then done signal.
+	//
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		flusher := w.(http.Flusher)

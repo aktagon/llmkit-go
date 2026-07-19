@@ -12,9 +12,9 @@ import (
 	"testing"
 )
 
-// HANDOFF-036 A2: a quote, backslash, or CR/LF in a caller-controlled field
-// name or filename must not break out of the Content-Disposition part header.
-// The shared hostile vector is asserted identically in Java, Swift, and Python.
+//
+//
+//
 func TestMultipartHostileFilenameEscaped(t *testing.T) {
 	hostileFilename := "evil\"name\\inject\r\nX-Fake: 1.mp3"
 	hostileField := "file\"field\r\nX-Sneak: a"
@@ -49,9 +49,9 @@ func TestMultipartHostileFilenameEscaped(t *testing.T) {
 		t.Fatalf("field name not escaped: %q", body)
 	}
 
-	// The body must still parse as well-formed multipart, and the part header
-	// round-trips to the CR/LF-stripped original (quoted-pairs unescaped by
-	// the stdlib reader).
+	//
+	//
+	//
 	_, params, err := mime.ParseMediaType(contentType)
 	if err != nil {
 		t.Fatalf("ParseMediaType(%q): %v", contentType, err)

@@ -22,8 +22,8 @@ const (
 	proModel   = "gemini-3-pro-image-preview"
 )
 
-// fakePNG is the minimum valid base64 payload — content is opaque to the
-// runtime, only the round-trip decode is verified.
+//
+//
 var fakePNG = []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'}
 
 func TestGenerateImageGoogleFlash(t *testing.T) {
@@ -37,9 +37,9 @@ func TestGenerateImageGoogleFlash(t *testing.T) {
 			t.Errorf("expected query-param auth, got %q", r.URL.Query().Get("key"))
 		}
 
-		// Body-shape asserts (generationConfig/imageConfig) migrated to the
-		// image-gen-google-flash wire fixture (ADR-028 M2); this test's
-		// remaining subjects are URL/auth shape and response parsing.
+		//
+		//
+		//
 		json.NewEncoder(w).Encode(map[string]any{
 			"candidates": []map[string]any{{
 				"content": map[string]any{
@@ -83,9 +83,9 @@ func TestGenerateImageWithIncludeText(t *testing.T) {
 	encoded := base64.StdEncoding.EncodeToString(fakePNG)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// The [TEXT, IMAGE] modality body assert migrated to the
-		// image-gen-google-pro wire fixture (ADR-028 M2); this test's
-		// remaining subject is text-part capture in the response.
+		//
+		//
+		//
 		json.NewEncoder(w).Encode(map[string]any{
 			"candidates": []map[string]any{{
 				"content": map[string]any{
@@ -111,13 +111,13 @@ func TestGenerateImageWithIncludeText(t *testing.T) {
 	}
 }
 
-// TestGenerateImagePartsInterleavedCompositional (ADR-008 wire-order assert)
-// migrated to the wire-conformance suite: the image-edit-google-flash fixture
-// witnesses inlineData encoding and caller-order preservation byte-for-byte
-// (ADR-028 M2, falsification class d2).
+//
+//
+//
+//
 
 func TestGenerateImageRejectsUnsupportedAspectOnPro(t *testing.T) {
-	// 8:1 is Flash-only; Pro must reject pre-flight.
+	//
 	c := New(providers.Google, "k")
 	c.provider.baseURL = "http://unused"
 	_, err := c.Image.Model(proModel).AspectRatio("8:1").Generate(context.Background(), "x")
@@ -131,7 +131,7 @@ func TestGenerateImageRejectsUnsupportedAspectOnPro(t *testing.T) {
 }
 
 func TestGenerateImageRejects512OnPro(t *testing.T) {
-	// Size_512 is Flash-only.
+	//
 	c := New(providers.Google, "k")
 	c.provider.baseURL = "http://unused"
 	_, err := c.Image.Model(proModel).ImageSize("512").Generate(context.Background(), "x")
@@ -145,9 +145,9 @@ func TestGenerateImageRejects512OnPro(t *testing.T) {
 }
 
 func TestGenerateImageRejectsTooManyImageParts(t *testing.T) {
-	// Google MaxInputCount = 14 image parts. Build a Parts slice with
-	// 15 image parts (interleaved with one text part for shape realism)
-	// and assert pre-flight rejection.
+	//
+	//
+	//
 	c := New(providers.Google, "k")
 	c.provider.baseURL = "http://unused"
 	chain := c.Image.Model(flashModel).Text("describe and edit:")
@@ -164,10 +164,10 @@ func TestGenerateImageRejectsTooManyImageParts(t *testing.T) {
 	}
 }
 
-// TestGenerateImageRejectsBothPromptAndParts removed: the typed-builder
-// (*Image).Generate has no Prompt sugar field — finalText is a separate
-// terminal arg, not a Request field. The XOR violation it tested cannot
-// be expressed through the typed-builder surface.
+//
+//
+//
+//
 
 func TestGenerateImageRejectsBothEmpty(t *testing.T) {
 	c := New(providers.Google, "k")
@@ -183,8 +183,8 @@ func TestGenerateImageRejectsBothEmpty(t *testing.T) {
 }
 
 func TestGenerateImagePartsOnlySingleText(t *testing.T) {
-	// The canonical equivalent of the Prompt sugar form: Parts: []Part{Text(...)}.
-	// Verifies the desugaring path produces the same wire shape as the sugar.
+	//
+	//
 	encoded := base64.StdEncoding.EncodeToString(fakePNG)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
@@ -284,12 +284,12 @@ func TestGenerateImageMiddlewareCanVeto(t *testing.T) {
 	}
 }
 
-// === OpenAI image generation ===
 //
-// Plan 020 phase 3: OpenAI Image API has two endpoints
-// (/v1/images/generations and /v1/images/edits) selected at runtime
-// based on whether the input includes any image parts. Output is always
-// b64_json (forced) so the response shape stays uniform.
+//
+//
+//
+//
+//
 
 const openaiImage2 = "gpt-image-2"
 
@@ -329,8 +329,8 @@ func TestGenerateImageOpenAIGenerationsHappyPath(t *testing.T) {
 		if req["prompt"] != "A red circle" {
 			t.Errorf("expected prompt 'A red circle', got %v", req["prompt"])
 		}
-		// gpt-image-* always returns b64_json and rejects the
-		// response_format parameter — must be absent on the wire.
+		//
+		//
 		if _, ok := req["response_format"]; ok {
 			t.Errorf("response_format must not be set for gpt-image-*; got %v", req["response_format"])
 		}
@@ -492,8 +492,8 @@ func TestGenerateImageOpenAIExtraFieldsNReturnsNImages(t *testing.T) {
 }
 
 func TestGenerateImageOpenAIArbitrarySizeAccepted(t *testing.T) {
-	// OpenAI's models carry empty ImageSizes whitelists per plan 020 q1:
-	// trust the API boundary, accept any size at the SDK layer.
+	//
+	//
 	encoded := base64.StdEncoding.EncodeToString(fakePNG)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
@@ -572,10 +572,10 @@ func TestGenerateImageOpenAIMiddlewareVetoStopsHTTP(t *testing.T) {
 	}
 }
 
-// parseMultipart reads a multipart/form-data request and splits it into
-// (string fields, files-by-fieldname). Files within the same field name
-// are returned in the order they appeared in the body — required to
-// verify caller-controlled ordering on image[] arrays.
+//
+//
+//
+//
 type multipartTestFile struct {
 	filename string
 	mimeType string
@@ -616,11 +616,11 @@ func parseMultipart(r *http.Request) (map[string]string, map[string][]multipartT
 	return fields, files, nil
 }
 
-// === xAI Grok Imagine ===
 //
-// Plan G (post-020): xAI Image API is JSON throughout — both endpoints
-// use JSON, image refs travel as data URLs in the body. response_format
-// must be forced to b64_json (xAI defaults to URL).
+//
+//
+//
+//
 
 const grokImagineQuality = "grok-imagine-image-quality"
 
@@ -660,12 +660,12 @@ func TestGenerateImageGrokGenerationsForcesB64Json(t *testing.T) {
 		if req["prompt"] != "A red circle" {
 			t.Errorf("expected prompt 'A red circle', got %v", req["prompt"])
 		}
-		// xAI defaults to URL response — must be forced to b64_json so the
-		// runtime can decode the bytes uniformly.
+		//
+		//
 		if req["response_format"] != "b64_json" {
 			t.Errorf("expected response_format=b64_json (forced), got %v", req["response_format"])
 		}
-		// No image parts — `image` / `images` must be absent.
+		//
 		if _, ok := req["image"]; ok {
 			t.Errorf("image field must not be set on generations path")
 		}
@@ -691,17 +691,17 @@ func TestGenerateImageGrokGenerationsForcesB64Json(t *testing.T) {
 	if resp.Images[0].MimeType != "image/png" {
 		t.Errorf("expected mime_type echoed back, got %q", resp.Images[0].MimeType)
 	}
-	// xAI doesn't report token counts (only cost_in_usd_ticks); both
-	// fields should remain zero rather than fabricated.
+	//
+	//
 	if resp.Usage.Input != 0 || resp.Usage.Output != 0 {
 		t.Errorf("xAI usage shape has no token counts; expected 0/0, got %d/%d",
 			resp.Usage.Input, resp.Usage.Output)
 	}
 }
 
-// fakeSVG is a minimal SVG document used to exercise the vector-output mime
-// sniff (Recraft recraftv3_vector returns SVG bytes in the b64_json slot
-// without echoing a mime type).
+//
+//
+//
 var fakeSVG = []byte(`<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"></svg>`)
 
 const (
@@ -730,15 +730,15 @@ func TestGenerateImageRecraftGenerationsHappyPath(t *testing.T) {
 		if req["prompt"] != "A red circle" {
 			t.Errorf("expected prompt 'A red circle', got %v", req["prompt"])
 		}
-		// Recraft defaults to URL delivery — must be forced to b64_json so the
-		// runtime can decode the bytes uniformly.
+		//
+		//
 		if req["response_format"] != "b64_json" {
 			t.Errorf("expected response_format=b64_json (forced), got %v", req["response_format"])
 		}
 		if req["size"] != "1024x1024" {
 			t.Errorf("expected size 1024x1024, got %v", req["size"])
 		}
-		// Text-to-image only: no image/images fields on the wire.
+		//
 		if _, ok := req["image"]; ok {
 			t.Errorf("image field must not be set on Recraft generations path")
 		}
@@ -766,8 +766,8 @@ func TestGenerateImageRecraftGenerationsHappyPath(t *testing.T) {
 	if resp.Images[0].MimeType != "image/png" {
 		t.Errorf("raster output should default to image/png, got %q", resp.Images[0].MimeType)
 	}
-	// Recraft generations returns no usage object; tokens stay zero (no
-	// fabricated values).
+	//
+	//
 	if resp.Usage.Input != 0 || resp.Usage.Output != 0 {
 		t.Errorf("Recraft has no token usage; expected 0/0, got %d/%d", resp.Usage.Input, resp.Usage.Output)
 	}
@@ -783,7 +783,7 @@ func TestGenerateImageRecraftVectorSniffsSVG(t *testing.T) {
 		if req["model"] != recraftV3Vector {
 			t.Errorf("expected model %s, got %v", recraftV3Vector, req["model"])
 		}
-		// Vector output: SVG bytes in the same b64_json slot, no mime echoed.
+		//
 		json.NewEncoder(w).Encode(map[string]any{
 			"data": []map[string]any{{"b64_json": encoded}},
 		})
@@ -859,7 +859,7 @@ func TestGenerateImageGrokAspectRatioAndResolution(t *testing.T) {
 }
 
 func TestGenerateImageGrokRejectsUnsupportedAspectRatio(t *testing.T) {
-	// xAI's whitelist excludes 4:5 (Google has it; xAI does not).
+	//
 	c := New(providers.Grok, "test-key")
 	c.provider.baseURL = "http://unused"
 	_, err := c.Image.Model(grokImagineQuality).
@@ -875,7 +875,7 @@ func TestGenerateImageGrokRejectsUnsupportedAspectRatio(t *testing.T) {
 }
 
 func TestGenerateImageGrokAcceptsAutoAspectRatio(t *testing.T) {
-	// `auto` is xAI's special sentinel — let the model pick the ratio.
+	//
 	encoded := base64.StdEncoding.EncodeToString(fakePNG)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
@@ -909,7 +909,7 @@ func TestGenerateImageGrokEditsSingleReferenceAsDataURL(t *testing.T) {
 		body, _ := io.ReadAll(r.Body)
 		var req map[string]any
 		json.Unmarshal(body, &req)
-		// Single image → `image: {url: "data:..."}` (not `images: [...]`).
+		//
 		image, ok := req["image"].(map[string]any)
 		if !ok {
 			t.Fatalf("expected `image` object on single-ref edit, got %v", req["image"])
@@ -1039,16 +1039,16 @@ func TestGenerateImageGrokMiddlewareFiresBothBranches(t *testing.T) {
 	}
 }
 
-// =============================================================================
-// Plan 020 phase 2 — typed image-gen knob tests
-// =============================================================================
+//
+//
+//
 
-// The typed-knob JSON-body asserts (TypedQuality, TypedOutputFormat,
-// TypedBackground, and TypedCount's `n` assert) migrated to the
-// image-gen-openai wire fixture (ADR-028 M2, falsification class d3),
-// which sets all five generations-branch knobs on one canonical call.
-// TypedCount survives trimmed: multi-image response parsing (n=3 ->
-// three decoded images) is a response-side subject no fixture covers.
+//
+//
+//
+//
+//
+//
 
 func TestGenerateImageOpenAITypedCount(t *testing.T) {
 	encoded := base64.StdEncoding.EncodeToString(fakePNG)
@@ -1068,7 +1068,7 @@ func TestGenerateImageOpenAITypedCount(t *testing.T) {
 	}
 }
 
-// Multipart edit branch: typed knobs propagate as form fields, not JSON keys.
+//
 func TestGenerateImageOpenAITypedKnobsInEditMultipart(t *testing.T) {
 	encoded := base64.StdEncoding.EncodeToString(fakePNG)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1187,8 +1187,8 @@ func TestGenerateImageGrokRejectsOpenAIKnobs(t *testing.T) {
 	}
 }
 
-// Direct option-function smoke tests so the public WithImage* functions
-// have at least one caller (coverage gate).
+//
+//
 func TestImageWithOptionsSetFields(t *testing.T) {
 	o := resolveImageOptions([]ImageOption{
 		WithImageQuality("high"),
@@ -1214,7 +1214,7 @@ func TestImageWithOptionsSetFields(t *testing.T) {
 	}
 }
 
-// Mask attaches a `mask` field to the OpenAI edit multipart form.
+//
 func TestGenerateImageOpenAIMaskInEditMultipart(t *testing.T) {
 	encoded := base64.StdEncoding.EncodeToString(fakePNG)
 	maskBytes := []byte{0xDE, 0xAD, 0xBE, 0xEF}
@@ -1248,7 +1248,7 @@ func TestGenerateImageOpenAIMaskInEditMultipart(t *testing.T) {
 	}
 }
 
-// Mask without any image part on OpenAI is rejected (edits-only branch).
+//
 func TestGenerateImageOpenAIMaskRejectedWithoutImageParts(t *testing.T) {
 	c := New(providers.OpenAI, "test-key")
 	_, err := c.Image.Model(openaiImage2).
@@ -1263,7 +1263,7 @@ func TestGenerateImageOpenAIMaskRejectedWithoutImageParts(t *testing.T) {
 	}
 }
 
-// Mask on Google + Grok is rejected (not supported on the wire at all).
+//
 func TestGenerateImageMaskRejectedOnGoogleAndGrok(t *testing.T) {
 	for _, p := range []struct {
 		provider providers.ProviderName
@@ -1287,9 +1287,9 @@ func TestGenerateImageMaskRejectedOnGoogleAndGrok(t *testing.T) {
 	}
 }
 
-// =============================================================================
-// Vertex Imagen (plan 021) — JSONPredict input mode, bearer auth
-// =============================================================================
+//
+//
+//
 
 const vertexImagen3 = "imagen-3.0-generate-002"
 
@@ -1328,7 +1328,7 @@ func TestGenerateImageVertexGenerationsHappyPath(t *testing.T) {
 		if inst["prompt"] != "A red circle" {
 			t.Errorf("expected prompt 'A red circle', got %v", inst["prompt"])
 		}
-		// Generation path has no `image` field on the instance.
+		//
 		if _, ok := inst["image"]; ok {
 			t.Errorf("generation path must not carry instances[0].image")
 		}
@@ -1336,7 +1336,7 @@ func TestGenerateImageVertexGenerationsHappyPath(t *testing.T) {
 		if !ok {
 			t.Fatalf("expected parameters object, got %v", req["parameters"])
 		}
-		// sampleCount defaults to 1 when Count() is not chained.
+		//
 		if got := params["sampleCount"]; got != float64(1) {
 			t.Errorf("expected sampleCount=1, got %v", got)
 		}
@@ -1359,7 +1359,7 @@ func TestGenerateImageVertexGenerationsHappyPath(t *testing.T) {
 	if resp.Images[0].MimeType != "image/png" {
 		t.Errorf("expected mime_type echoed back, got %q", resp.Images[0].MimeType)
 	}
-	// Vertex predict response does not carry token counts.
+	//
 	if resp.Usage.Input != 0 || resp.Usage.Output != 0 {
 		t.Errorf("Vertex usage shape has no token counts; expected 0/0, got %d/%d",
 			resp.Usage.Input, resp.Usage.Output)
@@ -1532,10 +1532,10 @@ func TestGenerateImageVertexRejectsQualityOutputFormatBackground(t *testing.T) {
 	}
 }
 
-// TestGenerateImageGoogleBlockedSurfacesFinishReason verifies that when
-// Gemini returns a candidate without parts but with finishReason +
-// finishMessage (a blocked / declined generation), the parser surfaces
-// both fields on ImageResponse so callers can show a useful message.
+//
+//
+//
+//
 func TestGenerateImageGoogleBlockedSurfacesFinishReason(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]any{
@@ -1568,8 +1568,8 @@ func TestGenerateImageGoogleBlockedSurfacesFinishReason(t *testing.T) {
 	}
 }
 
-// TestGenerateImageVertexSurfacesRaiFilteredReason confirms Vertex Imagen
-// maps predictions[0].raiFilteredReason onto ImageResponse.FinishReason.
+//
+//
 func TestGenerateImageVertexSurfacesRaiFilteredReason(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]any{

@@ -11,35 +11,35 @@ import (
 	"time"
 )
 
-// sigV4Signature carries the intermediate signing artifacts. Production
-// callers discard it; the wire-conformance driver (CR-002) asserts the
-// canonical request byte-identically against the shared golden.
+//
+//
+//
 type sigV4Signature struct {
 	canonicalRequest string
 	stringToSign     string
 	authorization    string
 }
 
-// signSigV4 adds AWS Signature Version 4 headers to an HTTP request.
+//
 func signSigV4(req *http.Request, body []byte, accessKey, secretKey, sessionToken, region, service string) {
 	signSigV4At(req, body, accessKey, secretKey, sessionToken, region, service, time.Now().UTC())
 }
 
-// signSigV4At is signSigV4 with an injected clock (CR-002): the timestamp is
-// the only non-deterministic signing input, so a fixed now makes the whole
-// signature chain reproducible for the cross-SDK golden.
+//
+//
+//
 func signSigV4At(req *http.Request, body []byte, accessKey, secretKey, sessionToken, region, service string, now time.Time) sigV4Signature {
 	datestamp := now.Format("20060102")
 	amzdate := now.Format("20060102T150405Z")
 
-	// Set required headers
+	//
 	req.Header.Set("X-Amz-Date", amzdate)
 	req.Header.Set("Host", req.Host)
 	if sessionToken != "" {
 		req.Header.Set("X-Amz-Security-Token", sessionToken)
 	}
 
-	// Step 1: Create canonical request
+	//
 	payloadHash := sha256Hex(body)
 	req.Header.Set("X-Amz-Content-Sha256", payloadHash)
 
@@ -54,7 +54,7 @@ func signSigV4At(req *http.Request, body []byte, accessKey, secretKey, sessionTo
 		payloadHash,
 	}, "\n")
 
-	// Step 2: Create string to sign
+	//
 	credentialScope := fmt.Sprintf("%s/%s/%s/aws4_request", datestamp, region, service)
 	stringToSign := strings.Join([]string{
 		"AWS4-HMAC-SHA256",
@@ -63,11 +63,11 @@ func signSigV4At(req *http.Request, body []byte, accessKey, secretKey, sessionTo
 		sha256Hex([]byte(canonicalRequest)),
 	}, "\n")
 
-	// Step 3: Calculate signature
+	//
 	signingKey := deriveSigningKey(secretKey, datestamp, region, service)
 	signature := hex.EncodeToString(hmacSHA256(signingKey, []byte(stringToSign)))
 
-	// Step 4: Add authorization header
+	//
 	auth := fmt.Sprintf("AWS4-HMAC-SHA256 Credential=%s/%s, SignedHeaders=%s, Signature=%s",
 		accessKey, credentialScope, signedHeaders, signature)
 	req.Header.Set("Authorization", auth)
@@ -99,11 +99,11 @@ func sha256Hex(data []byte) string {
 }
 
 func canonicalURI(req *http.Request) string {
-	// Sign the escaped path (what goes on the wire), not the decoded Path, so a
-	// percent-encoded path segment — e.g. Bedrock's GetAsyncInvoke ARN, encoded
-	// as a single segment — canonicalizes to the same bytes the server receives.
-	// A no-op for the chat Converse path: its model id's ':' is not escaped in
-	// path mode, so EscapedPath equals Path there.
+	//
+	//
+	//
+	//
+	//
 	path := req.URL.EscapedPath()
 	if path == "" {
 		path = "/"
@@ -138,7 +138,7 @@ func buildCanonicalHeaders(req *http.Request) (signedHeaders, canonicalHeaders s
 			headers[lower] = strings.TrimSpace(req.Header.Get(k))
 		}
 	}
-	// Always include host
+	//
 	if _, ok := headers["host"]; !ok {
 		headers["host"] = req.Host
 	}

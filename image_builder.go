@@ -4,14 +4,14 @@ import (
 	"context"
 )
 
-// Generate executes the chained ImageGeneration request against the
-// client's provider. Chain state populates ImageRequest and
-// the matching ImageOption set; finalText, when non-empty, becomes a
-// trailing text Part appended to the chain's accumulated Parts.
 //
-// Phase 3 wiring: typed front door on GenerateImage. Per
-// ADR-008, ImageRequest already speaks Parts natively, so the
-// translation is just chain → ImageRequest{Model, Parts} + options.
+//
+//
+//
+//
+//
+//
+//
 func (b *Image) Generate(ctx context.Context, finalText string) (ImageResponse, error) {
 	parts := b.parts
 	if finalText != "" {
@@ -68,12 +68,12 @@ func (b *Image) Generate(ctx context.Context, finalText string) (ImageResponse, 
 	return generateImage(ctx, provider, req, opts...)
 }
 
-// ExtraFields stages caller-supplied keys for the wire body. Use it to
-// reach provider knobs that don't yet have typed chain methods
-// (OpenAI: quality, output_format, output_compression, background, n,
-// moderation). Chain immutability is preserved — the input map is
-// shallow-copied so callers can mutate their map after the call without
-// affecting the builder.
+//
+//
+//
+//
+//
+//
 func (b *Image) ExtraFields(extras map[string]any) *Image {
 	out := *b
 	merged := make(map[string]any, len(b.extraFields)+len(extras))

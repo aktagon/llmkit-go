@@ -13,26 +13,26 @@ import (
 	"github.com/aktagon/llmkit-go/v2/providers"
 )
 
-// Cross-SDK RESPONSE-body conformance (ADR-065 / prompt 045 Track B).
-// The request-wire suite asserts the OUTBOUND bytes are identical across SDKs;
-// the lifecycle-wire suite asserts the INBOUND poll CLASSIFICATION agrees. This
-// suite asserts the INBOUND body PARSE agrees: given the same provider response
-// body, every SDK's public prompt path normalizes it to the same projection of
-// the contract-bearing parse output — Usage dims + finish reason + content
-// (RWR-004). Response parsing is handwritten per SDK (ADR-028 behavior, not
-// generated data); this is its parity floor, the inbound mirror of request-wire.
 //
-// The parser INPUT is a live/reference-anchored provider reply at
-//   codegen/testdata/wire/response/v1/bodies/<shape>.json   (RWR-002/003)
-// served verbatim by a single-hop mock. Each SDK drops
-//   target/wire/response/<shape>/{sdk}.json
-// the normalized projection; codegen/test_cross_sdk_response.py compares them to
-// the EXPECTED golden at codegen/testdata/wire/response/v1/<shape>.json.
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
 
-// responseArtifact is the normalized, cross-SDK-comparable projection of a
-// parsed Response. No provider payload, no internal container type — the
-// contract-bearing parse output only, so the four SDKs can agree regardless of
-// their internal representations.
+//
+//
+//
+//
 type responseArtifact struct {
 	Usage        responseUsage  `json:"usage"`
 	FinishReason string         `json:"finishReason"`
@@ -54,7 +54,7 @@ type responseError struct {
 	Message string `json:"message"`
 }
 
-// responseBody reads the anchored provider reply that is fed to the parser.
+//
 func responseBody(t *testing.T, shape string) []byte {
 	t.Helper()
 	p := filepath.Join(mustRepoRoot(t), "codegen", "testdata", "wire", "response", "v1", "bodies", shape+".json")
@@ -65,9 +65,9 @@ func responseBody(t *testing.T, shape string) []byte {
 	return b
 }
 
-// responseMockServer serves the anchored body verbatim on any path — the parse
-// path is single-hop, so a catch-all is enough (unlike the two-hop lifecycle
-// mock). The parser dispatches on the client's provider, not the URL.
+//
+//
+//
 func responseMockServer(t *testing.T, body []byte) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -76,9 +76,9 @@ func responseMockServer(t *testing.T, body []byte) *httptest.Server {
 	}))
 }
 
-// streamBody reads the anchored SSE event sequence fed to the stream parser. It
-// lives beside the JSON bodies but carries a .sse extension because it is a raw
-// text/event-stream, not a JSON document.
+//
+//
+//
 func streamBody(t *testing.T, shape string) []byte {
 	t.Helper()
 	p := filepath.Join(mustRepoRoot(t), "codegen", "testdata", "wire", "response", "v1", "bodies", shape+".sse")
@@ -89,9 +89,9 @@ func streamBody(t *testing.T, shape string) []byte {
 	return b
 }
 
-// streamMockServer serves the anchored SSE bytes verbatim with an event-stream
-// content type. The scanner-based parser reads to EOF, so the whole body served
-// at once (no per-event flush) is sufficient for a single-hop test.
+//
+//
+//
 func streamMockServer(t *testing.T, body []byte) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -116,11 +116,11 @@ func responseArtifactFrom(resp Response) responseArtifact {
 	}
 }
 
-// imageArtifactFrom projects an ImageResponse to the shared artifact. For media
-// the Content discriminant is {kind,mimeType,byteLen,count} (RWR-004): the four
-// SDKs must agree the same provider body decodes to the same number of images
-// with the same mime and decoded byte length — the batch×image parse-drift
-// class (BUG-024) lands here. mimeType/byteLen read the first decoded image.
+//
+//
+//
+//
+//
 func imageArtifactFrom(resp ImageResponse) responseArtifact {
 	mime := ""
 	byteLen := 0
@@ -148,9 +148,9 @@ func imageArtifactFrom(resp ImageResponse) responseArtifact {
 	}
 }
 
-// speechArtifactFrom projects a SpeechResponse. Content is the media discriminant
-// {kind,mimeType,byteLen} — the four SDKs must agree the same body decodes to the
-// same audio (the ADR-018 bytes/mime accessor contract the README lint watches).
+//
+//
+//
 func speechArtifactFrom(resp SpeechResponse) responseArtifact {
 	return responseArtifact{
 		Usage: responseUsage{
@@ -171,9 +171,9 @@ func speechArtifactFrom(resp SpeechResponse) responseArtifact {
 	}
 }
 
-// transcriptArtifactFrom projects a TranscriptionResponse. Content is
-// {kind,text,segments} — the four SDKs must agree on the extracted transcript
-// text and the number of timed segments.
+//
+//
+//
 func transcriptArtifactFrom(resp TranscriptionResponse) responseArtifact {
 	return responseArtifact{
 		Usage: responseUsage{
@@ -270,10 +270,10 @@ func TestResponse_ChatGoogle(t *testing.T) {
 	assertResponseGolden(t, "chat-google", responseArtifactFrom(resp))
 }
 
-// --- Phase 2: media response shapes (ADR-065 B2) -----------------------------
-// Image response dispatch is by config (llm:imageResponseShape), never provider
-// name (BUG-024). The three shapes each have a distinct parser; this suite
-// proves the four SDKs agree on the decoded image for each.
+//
+//
+//
+//
 
 func TestResponse_ImageGoogle(t *testing.T) {
 	server := responseMockServer(t, responseBody(t, "image-google"))
@@ -314,8 +314,8 @@ func TestResponse_ImageVertex(t *testing.T) {
 	assertResponseGolden(t, "image-vertex", imageArtifactFrom(resp))
 }
 
-// Speech (TTS) response: base64 audio at audioContent -> AudioData{mime,bytes};
-// mime is the model's declared OutputMime (audio/wav), not sniffed. Single-hop.
+//
+//
 func TestResponse_SpeechInworld(t *testing.T) {
 	server := responseMockServer(t, responseBody(t, "speech-inworld"))
 	defer server.Close()
@@ -329,10 +329,10 @@ func TestResponse_SpeechInworld(t *testing.T) {
 	assertResponseGolden(t, "speech-inworld", speechArtifactFrom(resp))
 }
 
-// Transcription (STT) SYNC response: OpenAI verbose_json {text, segments[]} ->
-// TranscriptionResponse{Text, Segments}. The AssemblyAI async parse shares the
-// TranscriptionResponse struct; its distinct piece (poll classification) is held
-// by test-lifecycle-wire, so this single-hop sync golden covers the body parse.
+//
+//
+//
+//
 func TestResponse_TranscriptionOpenAI(t *testing.T) {
 	server := responseMockServer(t, responseBody(t, "transcription-openai"))
 	defer server.Close()
@@ -349,16 +349,16 @@ func TestResponse_TranscriptionOpenAI(t *testing.T) {
 	assertResponseGolden(t, "transcription-openai", transcriptArtifactFrom(resp))
 }
 
-// --- B-stream: streaming (SSE) response shapes (ADR-065 OQ-4) -----------------
-// Streaming is a distinct parse path: SSE deltas assembled into the same final
-// Response (text + Usage + finish reason) the sync path yields. The projection
-// is therefore identical to the sync chat artifact; only the input shape (an
-// ordered event sequence) and the drive path (Stream + trailing handle) differ.
-// Data-only SSE only (OpenAI / Google); Anthropic's event-typed stream is
-// deferred — see PROVENANCE.md.
+//
+//
+//
+//
+//
+//
+//
 
-// driveStream drives the real public streaming path against the SSE mock, drains
-// the chunk iterator, and projects the trailing handle's accumulated Response.
+//
+//
 func driveStream(t *testing.T, shape string, c *Client) responseArtifact {
 	t.Helper()
 	server := streamMockServer(t, streamBody(t, shape))
@@ -376,31 +376,31 @@ func driveStream(t *testing.T, shape string, c *Client) responseArtifact {
 	return responseArtifactFrom(stream.Response())
 }
 
-// OpenAI data-only SSE: text deltas at choices[0].delta.content, finish at
-// choices[0].finish_reason, [DONE] sentinel. llmkit does NOT request
-// stream_options.include_usage, so a real stream carries no usage frame and the
-// token counts are a provider-honest 0 (a documented gap, PROVENANCE.md).
+//
+//
+//
+//
 func TestResponse_StreamOpenAI(t *testing.T) {
 	assertResponseGolden(t, "stream-openai", driveStream(t, "stream-openai", Openai("k")))
 }
 
-// Google data-only SSE: text at candidates[0].content.parts[0].text, finish at
-// candidates[0].finishReason (STOP), usage in usageMetadata on the final chunk —
-// Google streams native usage, so these counts are real.
+//
+//
+//
 func TestResponse_StreamGoogle(t *testing.T) {
 	assertResponseGolden(t, "stream-google", driveStream(t, "stream-google", Google("k")))
 }
 
-// --- Catalogue (/models) response shape (ADR-067 Fix B) ----------------------
-// Unlike the generation shapes, the catalogue parse seam is driven DIRECTLY (no
-// HTTP path): the anchored /models body is fed to the handwritten parser and the
-// resulting ParsedModelsPage is projected to the catalogue discriminant
-// {kind:"models", count, firstId, lastId, nextCursor, first{...}} — the same body
-// must decode to the same model list + pagination cursor across all five SDKs.
-// No usage / finishReason: a catalogue is not a generation response.
+//
+//
+//
+//
+//
+//
+//
 
-// assertModelsGolden mirrors assertResponseGolden's write+compare idiom for the
-// catalogue projection (a map, not a responseArtifact — no usage/finishReason).
+//
+//
 func assertModelsGolden(t *testing.T, fixture string, art map[string]any) {
 	t.Helper()
 	repoRoot := mustRepoRoot(t)
@@ -438,8 +438,8 @@ func assertModelsGolden(t *testing.T, fixture string, art map[string]any) {
 	}
 }
 
-// driveModels feeds the anchored /models body to the handwritten parser and
-// projects the ParsedModelsPage to the catalogue discriminant.
+//
+//
 func driveModels(t *testing.T, shape string, parse func([]byte) (providers.ParsedModelsPage, error)) {
 	t.Helper()
 	page, err := parse(responseBody(t, shape))
@@ -471,17 +471,17 @@ func driveModels(t *testing.T, shape string, parse func([]byte) (providers.Parse
 	})
 }
 
-// --- Batch results (HANDOFF-036 A1) ------------------------------------------
-// A completed batch's RESULTS file parse: one succeeded line + one errored line
-// (Anthropic result.type=errored carries no result.message at the configured
-// resultBodyPath). Every SDK must SKIP the errored line and return the
-// successful subset (count 1) — a throwing parser would destroy a completed,
-// potentially hours-long batch. Driven through the real public path:
-// BatchHandle.Poll against a two-hop scripted mock (Anthropic status "ended" ->
-// GET .../results serving the anchored JSONL verbatim). The parser INPUT is
-// bodies/batch-results-anthropic.jsonl (a JSONL results file, hence the
-// extension). Known shared assumption (recorded in PROVENANCE.md): no SDK
-// matches results by custom_id — all assume file line order.
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
 
 func batchResultsBody(t *testing.T) []byte {
 	t.Helper()
@@ -493,8 +493,8 @@ func batchResultsBody(t *testing.T) []byte {
 	return b
 }
 
-// batchResultsArtifact projects the parsed results to the batch-results
-// discriminant {kind, count, first{finishReason, text, usage}}.
+//
+//
 func batchResultsArtifact(responses []Response) map[string]any {
 	first := map[string]any{}
 	if len(responses) > 0 {

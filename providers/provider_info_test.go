@@ -4,9 +4,9 @@ import (
 	"testing"
 )
 
-// ADR-040: providers.Info / providers.List are the narrow public per-provider
-// metadata namespace, keyed by the typed ProviderName identity. Values are a
-// projection of provider A-Box facts; this test guards against drift.
+//
+//
+//
 func TestInfoAnthropic(t *testing.T) {
 	info := Info(Anthropic)
 	if info.ID != Anthropic {
@@ -29,12 +29,12 @@ func TestInfoAnthropic(t *testing.T) {
 	}
 }
 
-// ADR-035: browserCallable is the coarse per-provider CORS fact — true only for
-// providers whose actual GET/POST method response carries
-// Access-Control-Allow-Origin (google, response-level verified), false
-// (needs-proxy) otherwise. BUG-027: openai passes the OPTIONS preflight but
-// omits ACAO on the actual response, so it is false, not true — the fact is
-// keyed off the method response, not the preflight.
+//
+//
+//
+//
+//
+//
 func TestBrowserCallableCORSFact(t *testing.T) {
 	if !Info(Google).BrowserCallable {
 		t.Error("google BrowserCallable = false, want true")
@@ -47,8 +47,8 @@ func TestBrowserCallableCORSFact(t *testing.T) {
 	}
 }
 
-// Info is total over the provider name constants: every registered provider
-// projects a non-empty slug + env var, and the projected identity round-trips.
+//
+//
 func TestInfoIsTotal(t *testing.T) {
 	for id := range providerInfoTable {
 		info := Info(id)
@@ -64,8 +64,8 @@ func TestInfoIsTotal(t *testing.T) {
 	}
 }
 
-// List enumerates every provider's metadata, sorted by slug, with no entry
-// dropped relative to the registry.
+//
+//
 func TestListIsTotalAndSorted(t *testing.T) {
 	all := List()
 	if len(all) != len(providerInfoTable) {
@@ -78,8 +78,8 @@ func TestListIsTotalAndSorted(t *testing.T) {
 	}
 }
 
-// Parse is the single fallible slug -> ProviderName boundary (ADR-040 PSR-003):
-// a known slug round-trips to its constant; an unknown slug reports false.
+//
+//
 func TestParseRoundTrip(t *testing.T) {
 	got, ok := Parse("anthropic")
 	if !ok {

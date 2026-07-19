@@ -11,9 +11,9 @@ import (
 	"github.com/aktagon/llmkit-go/v2/providers"
 )
 
-// Prompt executes the chained ChatCompletion request against the
-// client's provider. Body absorbed from legacy free function in
-// plan-018 D1.3a.
+//
+//
+//
 func (b *Text) Prompt(ctx context.Context, finalText string) (Response, error) {
 	req, opts := b.buildRequest(finalText)
 	p := b.client.provider.toProvider(b.model)
@@ -39,8 +39,8 @@ func (b *Text) Prompt(ctx context.Context, finalText string) (Response, error) {
 		return Response{}, &ValidationError{Field: "provider", Message: "unknown: " + p.Name}
 	}
 
-	// ADR-055: opt into a non-default chat protocol (Responses). Overrides the
-	// endpoint + wire shape on this call's cfg copy; empty keeps the default.
+	//
+	//
 	cfg, err = resolveChatProtocol(cfg, b.protocol)
 	if err != nil {
 		return Response{}, err
@@ -97,10 +97,10 @@ func (b *Text) Prompt(ctx context.Context, finalText string) (Response, error) {
 		postEv.Err = err
 		postEv.Duration = time.Since(start)
 		firePost(ctx, o.middleware, postEv)
-		// Re-parse the body only when the underlying error is an
-		// *APIError. Transport-layer errors (network blip, ctx cancel,
-		// *url.Error) can leave respBody non-nil — propagate them as-is
-		// instead of panicking on the type assertion.
+		//
+		//
+		//
+		//
 		if apiErr, ok := err.(*APIError); ok && respBody != nil {
 			return Response{}, parseError(p.Name, apiErr.StatusCode, respBody, nil)
 		}
@@ -119,21 +119,21 @@ func (b *Text) Prompt(ctx context.Context, finalText string) (Response, error) {
 	return resp, parseErr
 }
 
-// buildRequest converts the chained config into the legacy
-// Request + functional-option pair. Exported via lowercase so
-// (*Text).Prompt / Stream / Batch reuse the one builder.
 //
-// The Request mapping:
-//   - System  -> req.System
-//   - History -> req.Messages
-//   - Schema  -> req.Schema
-//   - parts   -> req.User (concatenated Text parts, joined by spaces)
-//   - image Parts -> req.Images (base64 data URIs; ADR-060). A future
-//     slice may collapse User+Images onto a single Part-based request shape.
-//   - files   -> req.Files
 //
-// Any chain method whose option maps to a functional option (MaxTokens,
-// Temperature, Caching, Middleware) becomes the matching With* call.
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
 func (b *Text) buildRequest(finalText string) (Request, []Option) {
 	parts := b.parts
 	if finalText != "" {
@@ -197,14 +197,14 @@ func (b *Text) buildRequest(finalText string) (Request, []Option) {
 	return req, opts
 }
 
-// splitTextAndImages separates a Parts slice into the legacy Request
-// shape: Text parts join into a single User string (space-separated),
-// Image parts become InputImage entries via base64 data URIs.
 //
-// This is a phase-3 bridge — it lets the typed-builder front end ride
-// on the existing Request runtime without touching transforms.go.
-// Phase 4 will replace req.User+req.Images with req.Parts and delete
-// this helper.
+//
+//
+//
+//
+//
+//
+//
 func splitTextAndImages(parts []Part) (string, []InputImage) {
 	var text string
 	var images []InputImage

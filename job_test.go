@@ -13,11 +13,11 @@ import (
 	"github.com/aktagon/llmkit-go/v2/providers"
 )
 
-// The job engine (ADR-062) is proven end-to-end by the migrated batch +
-// transcription paths (batch_test / transcription_test). These tests cover the
-// new public surface the migration adds: Poll (one normalized round-trip,
-// ADR-063), the batch deadline backstop + WithPollTimeout override (ADR-062
-// OQ-1), and JobState rendering.
+//
+//
+//
+//
+//
 
 func TestJobStateString(t *testing.T) {
 	cases := map[JobState]string{
@@ -40,8 +40,8 @@ func assemblyAIHandle(baseURL string) TranscriptionHandle {
 	}
 }
 
-// Poll on a completed job returns Succeeded with the result populated inline
-// (the result decode is the terminal capability tail) and no failure cause.
+//
+//
 func TestTranscriptionHandlePollSucceeded(t *testing.T) {
 	server := assemblyAIServer(t, 0, completedTranscript(), "")
 	defer server.Close()
@@ -67,8 +67,8 @@ func TestTranscriptionHandlePollSucceeded(t *testing.T) {
 	}
 }
 
-// Poll on an in-progress job returns Running with no result and no cause — one
-// round-trip, no loop.
+//
+//
 func TestTranscriptionHandlePollRunning(t *testing.T) {
 	server := assemblyAIServer(t, 5, completedTranscript(), "") // always pending on the first poll
 	defer server.Close()
@@ -88,8 +88,8 @@ func TestTranscriptionHandlePollRunning(t *testing.T) {
 	}
 }
 
-// Poll on a failed job returns Failed with the provider error message on the
-// normalized cause (the same message Wait surfaces — S02), and no result.
+//
+//
 func TestTranscriptionHandlePollFailed(t *testing.T) {
 	failed := map[string]any{
 		"id":     "transcript-7c2",
@@ -123,9 +123,9 @@ func TestTranscriptionHandlePollFailed(t *testing.T) {
 	}
 }
 
-// The Wait path (not just Poll) must format a failed job as
-// "<noun> failed: <provider message>" — the jobFailedError surface that
-// preserves transcription's existing error (S02).
+//
+//
+//
 func TestTranscriptionWaitFailedErrorMessage(t *testing.T) {
 	fastTranscriptionPoll(t)
 	failed := map[string]any{
@@ -143,14 +143,14 @@ func TestTranscriptionWaitFailedErrorMessage(t *testing.T) {
 	if got := err.Error(); !strings.HasPrefix(got, "transcription failed: ") || !strings.Contains(got, "Download error") {
 		t.Errorf("Wait error format: got %q, want \"transcription failed: <provider message>\"", got)
 	}
-	// POLL-008: a provider-reported failure is NOT the timeout sentinel.
+	//
 	if errors.Is(err, ErrPollTimeout) {
 		t.Error("a provider failure must not match ErrPollTimeout")
 	}
 }
 
-// batchPollServer serves the OpenAI batch poll endpoint with a fixed status,
-// enough for the Running + deadline paths (no result hop needed).
+//
+//
 func batchPollServer(t *testing.T, status string) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -170,8 +170,8 @@ func openAIBatchHandle(baseURL string) BatchHandle {
 	}
 }
 
-// BatchHandle.Poll on an in-progress batch returns Running without attempting
-// the two-hop result fetch.
+//
+//
 func TestBatchHandlePollRunning(t *testing.T) {
 	server := batchPollServer(t, "in_progress")
 	defer server.Close()
@@ -191,11 +191,11 @@ func TestBatchHandlePollRunning(t *testing.T) {
 	}
 }
 
-// A batch the provider reports as terminally failed (OpenAI status "failed",
-// carried by the llm:pollingErrorValues fact) classifies as JobFailed on the
-// FIRST poll — it does not hang to the deadline backstop. This is the drift
-// slice 1 step 6 closes: before the errorValues fact, a failed batch looked
-// Running forever.
+//
+//
+//
+//
+//
 func TestBatchHandlePollFailed(t *testing.T) {
 	server := batchPollServer(t, "failed")
 	defer server.Close()
@@ -221,8 +221,8 @@ func TestBatchHandlePollFailed(t *testing.T) {
 	}
 }
 
-// Wait on a failed batch returns a provider-failure error (not the timeout
-// sentinel) — the deadline backstop is never reached.
+//
+//
 func TestBatchWaitFailedError(t *testing.T) {
 	prevInterval := batchPollInterval
 	batchPollInterval = time.Millisecond
@@ -238,15 +238,15 @@ func TestBatchWaitFailedError(t *testing.T) {
 	if !strings.HasPrefix(err.Error(), "batch failed: ") {
 		t.Errorf("Wait error format: got %q, want \"batch failed: <status>\"", err.Error())
 	}
-	// POLL-008: a provider-reported failure is NOT the timeout sentinel.
+	//
 	if errors.Is(err, ErrPollTimeout) {
 		t.Error("a provider failure must not match ErrPollTimeout")
 	}
 }
 
-// A batch that never completes must terminate at the deadline backstop rather
-// than loop forever (ADR-062 OQ-1) — the drift this slice closes. The timeout
-// error teaches the async/handle pattern. WithPollTimeout drives the ceiling.
+//
+//
+//
 func TestBatchWaitTimesOutAtBackstop(t *testing.T) {
 	prevInterval := batchPollInterval
 	batchPollInterval = time.Millisecond
@@ -259,14 +259,14 @@ func TestBatchWaitTimesOutAtBackstop(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected a timeout error from the deadline backstop, got nil")
 	}
-	// POLL-008: the backstop is identifiable as a typed sentinel, not by substring.
+	//
 	if !errors.Is(err, ErrPollTimeout) {
 		t.Errorf("expected errors.Is(err, ErrPollTimeout); got %v", err)
 	}
 }
 
-// A caller ctx deadline bounds Wait before the backstop does (Go/Rust honor the
-// caller ctx first, ADR-062).
+//
+//
 func TestBatchWaitHonorsContextDeadlineFirst(t *testing.T) {
 	prevInterval := batchPollInterval
 	batchPollInterval = 5 * time.Millisecond
@@ -278,7 +278,7 @@ func TestBatchWaitHonorsContextDeadlineFirst(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Millisecond)
 	defer cancel()
 
-	// A generous backstop so the ctx deadline is what fires.
+	//
 	_, err := waitBatch(ctx, openAIBatchHandle(server.URL), WithPollTimeout(time.Hour))
 	if err == nil {
 		t.Fatal("expected a context deadline error, got nil")

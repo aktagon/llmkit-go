@@ -8,9 +8,9 @@ import (
 	"testing"
 )
 
-// closedPortURL returns a URL pointing at a TCP port that is guaranteed to
-// refuse connections: bind an ephemeral listener, then close it immediately
-// so the OS won't hand the port to anything else during the test.
+//
+//
+//
 func closedPortURL(t *testing.T, query string) string {
 	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
@@ -24,9 +24,9 @@ func closedPortURL(t *testing.T, query string) string {
 	return "http://" + addr + "/v1/models" + query
 }
 
-// VULN-001: a transport failure (DNS, connection refused, TLS, timeout) must
-// not leak a key-bearing query string (Google's QueryParamKey auth splices
-// the API key into the URL as ?key=<secret>) into the returned error.
+//
+//
+//
 func TestDoGetRawRedactsAPIKeyOnTransportFailure(t *testing.T) {
 	url := closedPortURL(t, "?key=super-secret-api-key")
 	client := &http.Client{}
@@ -73,7 +73,7 @@ func TestRedactURLErrorDropsURLKeepsCause(t *testing.T) {
 	if strings.Contains(redacted.Error(), "key=") {
 		t.Fatalf("redacted error still contains the query string: %v", redacted)
 	}
-	// The underlying cause (e.g. "connection refused") must survive.
+	//
 	if redacted.Error() == "" {
 		t.Fatal("redacted error lost the underlying cause entirely")
 	}

@@ -17,44 +17,44 @@ import (
 	"github.com/aktagon/llmkit-go/v2/providers"
 )
 
-// VideoRequest is the canonical video-generation request (ADR-034).
 //
-// Model is required: video-generation models are explicit choices and the
-// text-generation default does not generate video.
 //
-// Input is provided in one of two mutually-exclusive forms:
 //
-//   - Prompt: terse sugar for the prompt-only hot path. Internally desugars
-//     to Parts: []Part{Text(Prompt)} before serialisation.
-//   - Parts: canonical sequence of text parts (slice 1 is text-to-video).
 //
-// Pre-flight validation requires exactly one of Prompt or Parts to be
-// non-empty (XOR).
+//
+//
+//
+//
+//
+//
+//
+//
+//
 type VideoRequest struct {
 	Model  string
 	Prompt string
 	Parts  []Part
 
-	// OutputURI is the caller-supplied destination S3 URI for output-uri
-	// delivery providers (Bedrock Nova Reel writes the mp4 to the caller's own
-	// S3 bucket). Required when the provider's config sets RequiresOutputURI;
-	// ignored otherwise. Set it on the builder via (*Video).OutputURI.
+	//
+	//
+	//
+	//
 	OutputURI string
 }
 
-// VideoData, VideoResponse, and VideoHandle are declared in go/structs.go
-// (ADR-018, API-PDS-002).
+//
+//
 
-// Default poll cadence for VideoHandle.Wait. xAI documents up-to-several-minute
-// generations; the SDK polls every videoPollInterval until videoPollTimeout
-// elapses. Per-call overrides (a chain option) are deferred (ADR-034 D2).
-// Package vars (not consts) so tests can shrink the interval.
+//
+//
+//
+//
 var (
 	videoPollInterval = 5 * time.Second
 	videoPollTimeout  = 10 * time.Minute
 )
 
-// VideoOption configures Submit / Wait.
+//
 type VideoOption func(*videoOptions)
 
 type videoOptions struct {
@@ -63,20 +63,20 @@ type videoOptions struct {
 	raw        bool
 }
 
-// WithVideoHTTPClient overrides the http.Client used for the video calls.
+//
 func WithVideoHTTPClient(c *http.Client) VideoOption {
 	return func(o *videoOptions) { o.httpClient = c }
 }
 
-// WithVideoMiddleware registers pre/post hooks that fire around the video
-// submit request. Op is providers.OpVideoGeneration. Pre-phase can veto.
+//
+//
 func WithVideoMiddleware(fns ...providers.MiddlewareFn) VideoOption {
 	return func(o *videoOptions) { o.middleware = append(o.middleware, fns...) }
 }
 
-// withVideoRaw opts the call into populating VideoResponse.Raw with the parsed
-// provider poll body (ADR-014). Internal — typed-builder users reach this via
-// *Video.Raw().
+//
+//
+//
 func withVideoRaw() VideoOption {
 	return func(o *videoOptions) { o.raw = true }
 }
@@ -89,11 +89,11 @@ func resolveVideoOptions(opts []VideoOption) *videoOptions {
 	return o
 }
 
-// submitVideo submits an asynchronous text-to-video job and returns a
-// VideoHandle immediately. Poll the handle with Wait. Pre-flight validation
-// rejects unknown models and unsupported part kinds before any HTTP call.
 //
-// Internal helper — the public surface is (*Video).Submit in video_builder.go.
+//
+//
+//
+//
 func submitVideo(ctx context.Context, p Provider, req VideoRequest, opts ...VideoOption) (VideoHandle, error) {
 	o := resolveVideoOptions(opts)
 
@@ -130,9 +130,9 @@ func submitVideo(ctx context.Context, p Provider, req VideoRequest, opts ...Vide
 				Message: "video generation does not accept lyrics parts",
 			}
 		case part.Image != nil:
-			// Image-to-video seed frame (BUG-010): accepted only by models whose
-			// VideoModelDef sets SupportsImageToVideo; text-to-video-only models
-			// reject it pre-flight rather than silently dropping it at wire time.
+			//
+			//
+			//
 			if !model.SupportsImageToVideo {
 				return VideoHandle{}, &ValidationError{
 					Field:   fmt.Sprintf("parts[%d]", i),
@@ -146,9 +146,9 @@ func submitVideo(ctx context.Context, p Provider, req VideoRequest, opts ...Vide
 			}
 		}
 	}
-	// VID-005: output-uri providers (Bedrock Nova Reel) write the video to the
-	// caller's own S3 bucket, so the submit MUST carry a destination URI. Reject
-	// pre-flight rather than letting the provider 400.
+	//
+	//
+	//
 	if vgCfg.RequiresOutputURI && req.OutputURI == "" {
 		return VideoHandle{}, &ValidationError{Field: "output_uri", Message: p.Name + " requires a caller output S3 URI; set OutputURI on the request"}
 	}
@@ -180,20 +180,20 @@ func submitVideo(ctx context.Context, p Provider, req VideoRequest, opts ...Vide
 	return VideoHandle{ID: requestID, Provider: p, Raw: o.raw, Model: req.Model}, nil
 }
 
-// dispatchVideoSubmit POSTs the submit body and returns the provider-assigned
-// poll handle id. The submit endpoint is resolved from config (absolute when
-// the video host differs from the chat base) and the handle id is read from the
-// config-declared dotted path (OQ7) — both are A-Box facts, not per-wire-shape
-// code branches.
 //
-// VideoGrok (xAI), VideoZhipu (CogVideoX), and VideoTogether share the simple
-// {model, prompt} submit body. VideoQwen (DashScope) diverges: it nests the
-// prompt under an `input` object ({model, input:{prompt}}) and requires the
-// X-DashScope-Async: enable header. VideoBedrock (Nova Reel) nests the prompt
-// under modelInput and carries the caller S3 URI under outputDataConfig, and is
-// signed with SigV4. The body and any per-shape headers are selected by wire
-// shape (never provider name); the poll handle id is always read from the
-// config-declared dotted path (vgCfg.SubmitHandleField).
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
 func dispatchVideoSubmit(
 	ctx context.Context,
 	client *http.Client,
@@ -214,15 +214,15 @@ func dispatchVideoSubmit(
 			"model": model,
 			"input": map[string]any{"prompt": joinPromptText(parts)},
 		}
-		// DashScope's async submit requires this header; without it the
-		// endpoint rejects the request. Set per-request only.
+		//
+		//
 		headers = cloneStringMap(headers)
 		headers["X-DashScope-Async"] = "enable"
 	case providers.VideoShapePixVerse:
-		// PixVerse requires all five fields; the generic surface is prompt-only,
-		// so duration/quality/aspect_ratio are sent as reference-anchored defaults
-		// (valid across the recorded models). The per-request Ai-trace-id header
-		// (UUID, unique per request) is PixVerse's anti-cache key.
+		//
+		//
+		//
+		//
 		body = map[string]any{
 			"model":        model,
 			"prompt":       joinPromptText(parts),
@@ -233,19 +233,19 @@ func dispatchVideoSubmit(
 		headers = cloneStringMap(headers)
 		headers["Ai-trace-id"] = newVideoTraceID()
 	case providers.VideoShapeVeo, providers.VideoShapeVertexVeo:
-		// Veo (Gemini API) and Vertex Veo share the submit body: the model is in
-		// the PATH (:predictLongRunning), not the body, so the body has no model
-		// field. The prompt nests under instances[]; the optional parameters
-		// object ({aspectRatio, resolution} for Gemini; {sampleCount, storageUri}
-		// for Vertex) is omitted on the prompt-only hot path.
+		//
+		//
+		//
+		//
+		//
 		body = map[string]any{
 			"instances": []map[string]any{{"prompt": joinPromptText(parts)}},
 		}
 	case providers.VideoShapeBedrock:
-		// Nova Reel carries the model in the BODY (modelId, unlike the Converse
-		// chat path) and writes the mp4 to the caller's S3 bucket. The optional
-		// videoGenerationConfig {durationSeconds, fps, dimension, seed} is
-		// omitted on the prompt-only hot path (provider defaults apply).
+		//
+		//
+		//
+		//
 		body = map[string]any{
 			"modelId": model,
 			"modelInput": map[string]any{
@@ -261,11 +261,11 @@ func dispatchVideoSubmit(
 			"model":  model,
 			"prompt": joinPromptText(parts),
 		}
-		// Image-to-video (BUG-010): when a seed frame is present (only reachable
-		// for grok-imagine-video, the lone SupportsImageToVideo model this slice),
-		// inline it as a data URL in xAI's image.url field — the same encoding the
-		// Grok image-edit path uses. Absent on the text-to-video hot path, so the
-		// existing video-grok golden is unchanged.
+		//
+		//
+		//
+		//
+		//
 		seed, err := videoSeedImageURL(parts)
 		if err != nil {
 			return "", err
@@ -279,16 +279,16 @@ func dispatchVideoSubmit(
 		return "", fmt.Errorf("marshal video request: %w", err)
 	}
 
-	// {model} in the submit endpoint is substituted with the per-call model
-	// (Veo's :predictLongRunning path); a no-op for providers that carry the
-	// model in the body. Query-param auth (Google ?key=) is appended last.
+	//
+	//
+	//
 	submitEndpoint := strings.ReplaceAll(vgCfg.GenEndpoint, "{model}", model)
 	submitURL := appendVideoAuth(base+submitEndpoint, p, cfg)
 
 	var respBody []byte
 	if cfg.AuthScheme == providers.AuthSigV4 {
-		// Bedrock signs every request (SigV4); the bearer/query-param header map
-		// does not apply. Region/secret/session come from the AWS env vars.
+		//
+		//
 		region := os.Getenv(cfg.RegionEnvVar)
 		secretKey := os.Getenv(cfg.SecretKeyEnvVar)
 		sessionToken := os.Getenv(cfg.SessionTokenEnvVar)
@@ -311,11 +311,11 @@ func dispatchVideoSubmit(
 	return id, nil
 }
 
-// Wait polls the provider until the video job reaches a terminal state, then
-// returns the finished VideoResponse. A failed or expired job surfaces as an
-// error. Poll cadence uses videoPollInterval until videoPollTimeout elapses
-// (ADR-034 D2; per-call overrides deferred). The handle carries the request id
-// and provider config, so Wait works across process boundaries.
+//
+//
+//
+//
+//
 func (h VideoHandle) Wait(ctx context.Context, opts ...VideoOption) (VideoResponse, error) {
 	o := resolveVideoOptions(opts)
 	p := h.Provider
@@ -331,9 +331,9 @@ func (h VideoHandle) Wait(ctx context.Context, opts ...VideoOption) (VideoRespon
 
 	base := videoBaseURL(p, cfg, vgCfg)
 	headers := buildAuthHeaders(p, cfg)
-	// PixVerse requires the per-request Ai-trace-id header on the poll GET too
-	// (not just submit); one trace id per Wait call is sufficient — uniqueness is
-	// an anti-cache measure on the generation, and the poll is a read.
+	//
+	//
+	//
 	if vgCfg.WireShape == providers.VideoShapePixVerse {
 		headers = cloneStringMap(headers)
 		headers["Ai-trace-id"] = newVideoTraceID()
@@ -346,33 +346,33 @@ func (h VideoHandle) Wait(ctx context.Context, opts ...VideoOption) (VideoRespon
 
 	deadline := time.Now().Add(videoPollTimeout)
 
-	// Poll dispatch has three arms, selected here once before the loop:
-	//   - sigV4 (Bedrock): signs the poll GET and carries the handle ARN as a
-	//     single percent-encoded path segment (its ':' and '/' must not split
-	//     into extra segments).
-	//   - vertexPoll (Vertex Veo): the ONLY POST-poll shape — fetches the
-	//     operation with a POST to {model}:fetchPredictOperation carrying
-	//     {operationName}. The model is templated from the handle; the operation
-	//     name goes in the body, not the URL.
-	//   - default: the verbatim {id} substitution and a GET on the bearer/
-	//     query-param auth path (every other provider).
 	//
-	// The arms are config-disjoint by design: sigV4 keys off AuthScheme and
-	// vertexPoll off WireShape, and no A-Box pairs SigV4 with VideoVertexVeo
-	// (Bedrock is SigV4+VideoBedrock; Vertex is bearer+VideoVertexVeo). sigV4 is
-	// matched first so a hypothetical both-true misconfig would poll as SigV4.
+	//
+	//
+	//
+	//
+	//
+	//
+	//
+	//
+	//
+	//
+	//
+	//
+	//
+	//
 	sigV4 := cfg.AuthScheme == providers.AuthSigV4
 	vertexPoll := vgCfg.WireShape == providers.VideoShapeVertexVeo
 	var pollURL, region, secretKey, sessionToken string
 	var vertexPollBody []byte
 	switch {
 	case sigV4:
-		// url.PathEscape encodes the ARN's '/' to %2F (keeping it a single path
-		// segment) but leaves ':' literal — which matches Bedrock's SigV4
-		// canonicalization: the live-verified Converse chat path signs a model id
-		// carrying ':' literally and AWS accepts it, so ':' is not %3A-encoded for
-		// bedrock. The signer canonicalizes EscapedPath, so the signed path equals
-		// the wire path. (Poll signing itself is NOT live-anchored — no AWS key.)
+		//
+		//
+		//
+		//
+		//
+		//
 		pollURL = base + strings.Replace(vgCfg.PollEndpoint, "{id}", url.PathEscape(h.ID), 1)
 		region = os.Getenv(cfg.RegionEnvVar)
 		secretKey = os.Getenv(cfg.SecretKeyEnvVar)
@@ -417,19 +417,19 @@ func (h VideoHandle) Wait(ctx context.Context, opts ...VideoOption) (VideoRespon
 			return VideoResponse{}, err
 		}
 		if done {
-			// Two-hop providers (vgCfg.FileEndpoint set, e.g. minimax): the
-			// terminal poll carried a file reference, not a video URL — resolve
-			// it with one more GET before delivery.
+			//
+			//
+			//
 			if vgCfg.FileEndpoint != "" {
 				resp, err = resolveVideoFile(ctx, client, base, vgCfg, respBody, headers)
 				if err != nil {
 					return VideoResponse{}, err
 				}
 			}
-			// Delivery dispatch (VID-005). download-delivery providers (Veo)
-			// returned a temporary fetch URI in VideoData.URL; the SDK GETs it
-			// and fills VideoData.Bytes (clearing URL, per the source-XOR
-			// contract). url- and output-uri-delivery providers leave the URL.
+			//
+			//
+			//
+			//
 			if vgCfg.OutputDelivery == providers.VideoDeliveryDownload {
 				resp, err = downloadVideoBytes(ctx, client, p, cfg, resp)
 				if err != nil {
@@ -446,8 +446,8 @@ func (h VideoHandle) Wait(ctx context.Context, opts ...VideoOption) (VideoRespon
 	}
 }
 
-// cloneStringMap returns a shallow copy so a per-request header mutation (e.g.
-// VideoQwen's X-DashScope-Async) never leaks into the shared auth-header map.
+//
+//
 func cloneStringMap(m map[string]string) map[string]string {
 	out := make(map[string]string, len(m)+1)
 	for k, v := range m {
@@ -456,12 +456,12 @@ func cloneStringMap(m map[string]string) map[string]string {
 	return out
 }
 
-// videoBaseURL resolves the base for the video API (Option D): an explicit
-// per-client override wins (tests point it at a mock; users at a proxy), else
-// the provider's distinct video base (vgCfg.VideoBaseURL) when the video host
-// differs from chat, else the chat base. Submit/poll endpoints are always
-// relative paths joined to this base — never absolute — so the host stays a
-// fact, overridable and mockable.
+//
+//
+//
+//
+//
+//
 func videoBaseURL(p Provider, cfg providerSpec, vgCfg *providers.VideoGenDef) string {
 	if p.BaseURL != "" {
 		return p.BaseURL
@@ -470,27 +470,27 @@ func videoBaseURL(p Provider, cfg providerSpec, vgCfg *providers.VideoGenDef) st
 	if vgCfg.VideoBaseURL != "" {
 		base = vgCfg.VideoBaseURL
 	}
-	// SigV4 hosts carry a {region} placeholder (Bedrock:
-	// bedrock-runtime.{region}.amazonaws.com) resolved from the region env var;
-	// a no-op for every provider without the placeholder.
+	//
+	//
+	//
 	if cfg.RegionEnvVar != "" {
 		base = strings.ReplaceAll(base, "{region}", os.Getenv(cfg.RegionEnvVar))
 	}
 	return base
 }
 
-// videoPollURL builds the poll URL: the {id} placeholder in the config poll
-// template (an A-Box fact, OQ7) is substituted with the handle id and joined
-// to the resolved video base. The handle is interpolated verbatim as a path
-// segment — Veo's operation name (models/.../operations/...) carries slashes
-// that are part of the LRO poll path, so it is intentionally not escaped.
+//
+//
+//
+//
+//
 func videoPollURL(pollEndpoint, base, id string) string {
 	return base + strings.Replace(pollEndpoint, "{id}", id, 1)
 }
 
-// lookupHandleField descends a dotted path (e.g. "id", "output.task_id")
-// through the decoded submit response and returns the string at the leaf, or
-// "" if any segment is missing or the leaf is not a string.
+//
+//
+//
 func lookupHandleField(raw map[string]any, path string) string {
 	if path == "" {
 		return ""
@@ -503,9 +503,9 @@ func lookupHandleField(raw map[string]any, path string) string {
 		}
 		cur = m[seg]
 	}
-	// The leaf is usually a string handle, but some providers return a numeric
-	// job id (PixVerse's Resp.video_id is an integer) — JSON decodes it as
-	// float64, so format it back to its integer string form.
+	//
+	//
+	//
 	switch v := cur.(type) {
 	case string:
 		return v
@@ -516,14 +516,14 @@ func lookupHandleField(raw map[string]any, path string) string {
 	}
 }
 
-// newVideoTraceID returns a random RFC-4122 v4 UUID string, used for providers
-// that require a unique per-request trace header (PixVerse's Ai-trace-id). It
-// reads 16 crypto-random bytes and sets the version (4) and variant bits.
+//
+//
+//
 func newVideoTraceID() string {
 	var b [16]byte
 	if _, err := rand.Read(b[:]); err != nil {
-		// crypto/rand failure is effectively impossible; fall back to a
-		// time-derived value so the header is still unique-ish rather than empty.
+		//
+		//
 		return fmt.Sprintf("%016x-%016x", time.Now().UnixNano(), time.Now().UnixNano())
 	}
 	b[6] = (b[6] & 0x0f) | 0x40 // version 4
@@ -532,26 +532,26 @@ func newVideoTraceID() string {
 	return fmt.Sprintf("%s-%s-%s-%s-%s", h[0:8], h[8:12], h[12:16], h[16:20], h[20:32])
 }
 
-// parseVideoPoll decodes one poll response per wire shape. Returns
-// (resp, done, err):
 //
-//   - done=false when the job is still pending (caller keeps polling).
 //
-//   - done=true with the finished VideoResponse when status is terminal-success.
 //
-//   - a non-nil err when the job failed or expired.
 //
-//   - VideoGrok: {"status": "...", "video": {"url", "duration"}} or
-//     {"status": "failed", "error": {"code", "message"}}.
 //
-//   - VideoZhipu: {"task_status": "SUCCESS"|"FAIL"|"PROCESSING",
-//     "video_result": [{"url"}]}.
 //
-//   - VideoTogether: {"status": "completed"|"failed"|"cancelled"|"queued"|
-//     "in_progress", "outputs": {"video_url"}}.
 //
-//   - VideoQwen: {"output": {"task_status": "SUCCEEDED"|"FAILED"|"CANCELED"|
-//     "PENDING"|"RUNNING"|"UNKNOWN", "video_url"}}.
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
 func parseVideoPoll(vgCfg *providers.VideoGenDef, body []byte) (VideoResponse, bool, error) {
 	var raw map[string]any
 	if err := json.Unmarshal(body, &raw); err != nil {
@@ -591,9 +591,9 @@ func parseVideoPoll(vgCfg *providers.VideoGenDef, body []byte) (VideoResponse, b
 			return VideoResponse{}, false, nil
 		}
 	case providers.VideoShapeMinimax:
-		// Two-hop: terminal-success yields a file_id, not a URL. Report done
-		// with an empty result; Wait performs the file-retrieve hop (gated on
-		// vgCfg.FileEndpoint) and fills the URL.
+		//
+		//
+		//
 		status, _ := raw["status"].(string)
 		switch status {
 		case "Success":
@@ -604,9 +604,9 @@ func parseVideoPoll(vgCfg *providers.VideoGenDef, body []byte) (VideoResponse, b
 			return VideoResponse{}, false, nil
 		}
 	case providers.VideoShapeVeo:
-		// Operation-based LRO: poll until done=true (the long-running-operation
-		// done flag, not a status string). A done op carrying an error object is
-		// a terminal failure; otherwise the response holds the finished video.
+		//
+		//
+		//
 		done, _ := raw["done"].(bool)
 		if !done {
 			return VideoResponse{}, false, nil
@@ -618,18 +618,18 @@ func parseVideoPoll(vgCfg *providers.VideoGenDef, body []byte) (VideoResponse, b
 			}
 			return VideoResponse{}, false, fmt.Errorf("video generation failed: %s", msg)
 		}
-		// A done op with neither error nor a usable uri must surface as an error,
-		// not a silent zero-byte success: download delivery would otherwise GET
-		// nothing and return a VideoData with empty Bytes and empty URL.
+		//
+		//
+		//
 		result := videoResultFromVeo(vgCfg, raw)
 		if len(result.Videos) == 0 || result.Videos[0].URL == "" {
 			return VideoResponse{}, false, fmt.Errorf("video generation: operation done but carried no video uri")
 		}
 		return result, true, nil
 	case providers.VideoShapeVertexVeo:
-		// Vertex Veo operation poll (fetchPredictOperation): same done/error LRO
-		// shape as Gemini Veo, but the finished video arrives as inline base64 in
-		// the poll body (response.videos[0].bytesBase64Encoded), not a fetch URI.
+		//
+		//
+		//
 		done, _ := raw["done"].(bool)
 		if !done {
 			return VideoResponse{}, false, nil
@@ -645,23 +645,23 @@ func parseVideoPoll(vgCfg *providers.VideoGenDef, body []byte) (VideoResponse, b
 		if err != nil {
 			return VideoResponse{}, false, err
 		}
-		// Mirror the Veo done+no-uri guard: a done op carrying no decodable bytes
-		// must surface as an error, not a silent zero-byte success.
+		//
+		//
 		if len(result.Videos) == 0 || len(result.Videos[0].Bytes) == 0 {
 			return VideoResponse{}, false, fmt.Errorf("video generation: operation done but carried no video bytes")
 		}
 		return result, true, nil
 	case providers.VideoShapeBedrock:
-		// Bedrock async-invoke status (GetAsyncInvoke): Completed terminal-success,
-		// Failed terminal-error (failureMessage), InProgress pending. On success
-		// the provider wrote the mp4 to the caller's S3 bucket and echoes the URI.
+		//
+		//
+		//
 		status, _ := raw["status"].(string)
 		switch status {
 		case "Completed":
-			// A Completed invocation that echoes no output s3 uri must surface as
-			// an error, not a silent empty success (mirrors the Veo done+no-uri
-			// guard): the caller would otherwise get a "successful" VideoResponse
-			// whose URL is empty and never find the mp4.
+			//
+			//
+			//
+			//
 			result := videoResultFromBedrock(vgCfg, raw)
 			if len(result.Videos) == 0 || result.Videos[0].URL == "" {
 				return VideoResponse{}, false, fmt.Errorf("video generation: completed but carried no output s3 uri")
@@ -677,9 +677,9 @@ func parseVideoPoll(vgCfg *providers.VideoGenDef, body []byte) (VideoResponse, b
 			return VideoResponse{}, false, nil
 		}
 	case providers.VideoShapePixVerse:
-		// PixVerse status poll: the status is an INTEGER code nested under Resp.
-		// 1=success (terminal), 7/8=failed (terminal-error), 5=generating
-		// (pending). The finished video URL sits at Resp.url (url delivery).
+		//
+		//
+		//
 		resp, _ := raw["Resp"].(map[string]any)
 		status, _ := resp["status"].(float64)
 		switch int(status) {
@@ -691,9 +691,9 @@ func parseVideoPoll(vgCfg *providers.VideoGenDef, body []byte) (VideoResponse, b
 			return VideoResponse{}, false, nil
 		}
 	case providers.VideoShapeVidu:
-		// Vidu (Shengshu) task poll: state success terminal-success, failed
-		// terminal-error, created/queueing/processing pending. The finished
-		// video URL sits at creations[0].url (url delivery, single-hop).
+		//
+		//
+		//
 		state, _ := raw["state"].(string)
 		switch state {
 		case "success":
@@ -731,9 +731,9 @@ func parseVideoPoll(vgCfg *providers.VideoGenDef, body []byte) (VideoResponse, b
 	}
 }
 
-// videoResultFromGrok extracts the finished video from a Grok poll response.
-// Grok uses url delivery: VideoData.URL carries a temporary xAI-hosted URL and
-// Bytes stays empty (the SDK does not download on the caller's behalf).
+//
+//
+//
 func videoResultFromGrok(vgCfg *providers.VideoGenDef, raw map[string]any) VideoResponse {
 	mime := videoFallbackMime(vgCfg)
 	video, _ := raw["video"].(map[string]any)
@@ -748,10 +748,10 @@ func videoResultFromGrok(vgCfg *providers.VideoGenDef, raw map[string]any) Video
 	return VideoResponse{Videos: []VideoData{data}}
 }
 
-// videoResultFromZhipu extracts the finished video from a Zhipu CogVideoX
-// poll response. Zhipu uses url delivery: the finished video sits at
-// video_result[0].url (no duration field on the result), so VideoData.URL
-// carries the temporary Zhipu-hosted URL and Bytes stays empty.
+//
+//
+//
+//
 func videoResultFromZhipu(vgCfg *providers.VideoGenDef, raw map[string]any) VideoResponse {
 	mime := videoFallbackMime(vgCfg)
 	results, _ := raw["video_result"].([]any)
@@ -766,10 +766,10 @@ func videoResultFromZhipu(vgCfg *providers.VideoGenDef, raw map[string]any) Vide
 	return VideoResponse{Videos: []VideoData{{MimeType: mime, URL: url}}}
 }
 
-// videoResultFromTogether extracts the finished video from a Together poll
-// response. Together uses url delivery: the finished video sits at
-// outputs.video_url, so VideoData.URL carries the temporary Together-hosted
-// URL and Bytes stays empty.
+//
+//
+//
+//
 func videoResultFromTogether(vgCfg *providers.VideoGenDef, raw map[string]any) VideoResponse {
 	mime := videoFallbackMime(vgCfg)
 	outputs, _ := raw["outputs"].(map[string]any)
@@ -780,10 +780,10 @@ func videoResultFromTogether(vgCfg *providers.VideoGenDef, raw map[string]any) V
 	return VideoResponse{Videos: []VideoData{{MimeType: mime, URL: url}}}
 }
 
-// videoResultFromPixVerse extracts the finished video from a PixVerse poll
-// response. PixVerse uses url delivery: the finished video sits at Resp.url
-// (nested under the Resp envelope), so VideoData.URL carries the temporary
-// PixVerse-hosted URL and Bytes stays empty.
+//
+//
+//
+//
 func videoResultFromPixVerse(vgCfg *providers.VideoGenDef, raw map[string]any) VideoResponse {
 	mime := videoFallbackMime(vgCfg)
 	resp, _ := raw["Resp"].(map[string]any)
@@ -794,10 +794,10 @@ func videoResultFromPixVerse(vgCfg *providers.VideoGenDef, raw map[string]any) V
 	return VideoResponse{Videos: []VideoData{{MimeType: mime, URL: url}}}
 }
 
-// videoResultFromVidu extracts the finished video from a Vidu (Shengshu) poll
-// response. Vidu uses url delivery: the finished video sits at
-// creations[0].url, so VideoData.URL carries the temporary Vidu-hosted URL and
-// Bytes stays empty.
+//
+//
+//
+//
 func videoResultFromVidu(vgCfg *providers.VideoGenDef, raw map[string]any) VideoResponse {
 	mime := videoFallbackMime(vgCfg)
 	creations, _ := raw["creations"].([]any)
@@ -812,10 +812,10 @@ func videoResultFromVidu(vgCfg *providers.VideoGenDef, raw map[string]any) Video
 	return VideoResponse{Videos: []VideoData{{MimeType: mime, URL: url}}}
 }
 
-// videoResultFromQwen extracts the finished video from a DashScope (Qwen) poll
-// response. Qwen uses url delivery: the finished video sits at
-// output.video_url, so VideoData.URL carries the temporary DashScope-hosted URL
-// and Bytes stays empty.
+//
+//
+//
+//
 func videoResultFromQwen(vgCfg *providers.VideoGenDef, raw map[string]any) VideoResponse {
 	mime := videoFallbackMime(vgCfg)
 	output, _ := raw["output"].(map[string]any)
@@ -826,12 +826,12 @@ func videoResultFromQwen(vgCfg *providers.VideoGenDef, raw map[string]any) Video
 	return VideoResponse{Videos: []VideoData{{MimeType: mime, URL: url}}}
 }
 
-// resolveVideoFile performs the two-hop file-retrieve step for providers whose
-// terminal poll yields a file reference rather than a finished video URL
-// (vgCfg.FileEndpoint set, e.g. minimax). It extracts the file id from the
-// terminal poll body, GETs the file endpoint (joined to the resolved video
-// base), and extracts the finished reference. The file-id and result
-// locations are wire-shape-keyed (the transform); the endpoint is config.
+//
+//
+//
+//
+//
+//
 func resolveVideoFile(ctx context.Context, client *http.Client, base string, vgCfg *providers.VideoGenDef, pollBody []byte, headers map[string]string) (VideoResponse, error) {
 	var poll map[string]any
 	if err := json.Unmarshal(pollBody, &poll); err != nil {
@@ -853,8 +853,8 @@ func resolveVideoFile(ctx context.Context, client *http.Client, base string, vgC
 	return videoResultFromMinimaxFile(vgCfg, file), nil
 }
 
-// videoFileID reads the minimax terminal poll's file_id, which the API may
-// encode as a string or a (large) integer.
+//
+//
 func videoFileID(poll map[string]any) string {
 	switch v := poll["file_id"].(type) {
 	case string:
@@ -866,9 +866,9 @@ func videoFileID(poll map[string]any) string {
 	}
 }
 
-// videoResultFromMinimaxFile extracts the finished video from a minimax
-// file-retrieve response. minimax uses url delivery: the download URL sits at
-// file.download_url, so VideoData.URL carries it and Bytes stays empty.
+//
+//
+//
 func videoResultFromMinimaxFile(vgCfg *providers.VideoGenDef, raw map[string]any) VideoResponse {
 	mime := videoFallbackMime(vgCfg)
 	fileObj, _ := raw["file"].(map[string]any)
@@ -879,12 +879,12 @@ func videoResultFromMinimaxFile(vgCfg *providers.VideoGenDef, raw map[string]any
 	return VideoResponse{Videos: []VideoData{{MimeType: mime, URL: url}}}
 }
 
-// videoResultFromVeo extracts the finished video reference from a Veo LRO poll
-// response. Veo uses download delivery: the response carries a temporary
-// Files-API download URI at response.generateVideoResponse.generatedSamples[0]
-// .video.uri. parseVideoPoll places it in VideoData.URL; the Wait download
-// step (OutputDelivery=DeliveryDownload) then fetches the bytes into
-// VideoData.Bytes and clears URL.
+//
+//
+//
+//
+//
+//
 func videoResultFromVeo(vgCfg *providers.VideoGenDef, raw map[string]any) VideoResponse {
 	mime := videoFallbackMime(vgCfg)
 	response, _ := raw["response"].(map[string]any)
@@ -902,14 +902,14 @@ func videoResultFromVeo(vgCfg *providers.VideoGenDef, raw map[string]any) VideoR
 	return VideoResponse{Videos: []VideoData{{MimeType: mime, URL: uri}}}
 }
 
-// videoResultFromVertexVeo extracts the finished video from a Vertex Veo
-// fetchPredictOperation poll response. Unlike Gemini Veo (which returns a fetch
-// URI), Vertex Veo returns the bytes inline as base64 at
-// response.videos[0].bytesBase64Encoded with the mime at .mimeType. This is
-// download delivery with NO fetch hop: the bytes are decoded straight into
-// VideoData.Bytes here and VideoData.URL stays empty, so the Wait download step
-// (downloadVideoBytes) finds no URL and no-ops — the source-XOR contract holds
-// (VID-004: download delivery returns bytes, never a URL).
+//
+//
+//
+//
+//
+//
+//
+//
 func videoResultFromVertexVeo(vgCfg *providers.VideoGenDef, raw map[string]any) (VideoResponse, error) {
 	mime := videoFallbackMime(vgCfg)
 	response, _ := raw["response"].(map[string]any)
@@ -935,13 +935,13 @@ func videoResultFromVertexVeo(vgCfg *providers.VideoGenDef, raw map[string]any) 
 	return VideoResponse{Videos: []VideoData{{MimeType: mime, Bytes: decoded}}}, nil
 }
 
-// videoResultFromBedrock extracts the finished video reference from a Bedrock
-// Nova Reel poll response. Bedrock uses output-uri delivery: the provider wrote
-// the mp4 to the caller's own S3 bucket and the finished poll echoes the S3 URI
-// at outputDataConfig.s3OutputDataConfig.s3Uri. The SDK surfaces it as
-// VideoData.URL with Bytes empty — the Wait delivery step never downloads it
-// (only DeliveryDownload fetches), so the caller fetches from S3 with their own
-// tooling (VID-005; ADR-034 open question 4).
+//
+//
+//
+//
+//
+//
+//
 func videoResultFromBedrock(vgCfg *providers.VideoGenDef, raw map[string]any) VideoResponse {
 	mime := videoFallbackMime(vgCfg)
 	odc, _ := raw["outputDataConfig"].(map[string]any)
@@ -950,12 +950,12 @@ func videoResultFromBedrock(vgCfg *providers.VideoGenDef, raw map[string]any) Vi
 	return VideoResponse{Videos: []VideoData{{MimeType: mime, URL: uri}}}
 }
 
-// downloadVideoBytes fetches the finished video for download-delivery providers
-// (vgCfg.OutputDelivery == DeliveryDownload, e.g. Veo). The poll result placed
-// the temporary fetch URI in VideoData.URL; this GETs each one (carrying the
-// provider's query-param auth when applicable) and moves the payload into
-// VideoData.Bytes, clearing URL so the source-XOR contract holds (VID-004):
-// download delivery returns bytes, never a URL.
+//
+//
+//
+//
+//
+//
 func downloadVideoBytes(ctx context.Context, client *http.Client, p Provider, cfg providerSpec, resp VideoResponse) (VideoResponse, error) {
 	headers := buildAuthHeaders(p, cfg)
 	for i := range resp.Videos {
@@ -973,11 +973,11 @@ func downloadVideoBytes(ctx context.Context, client *http.Client, p Provider, cf
 	return resp, nil
 }
 
-// appendVideoAuth appends the provider's query-param API key to a video URL
-// when the provider authenticates that way (Google ?key=); a no-op for
-// bearer-header providers (every other video provider). Picks ? or & based on
-// whether the URL already carries a query string (the Files-API download URI
-// arrives with ?alt=media).
+//
+//
+//
+//
+//
 func appendVideoAuth(url string, p Provider, cfg providerSpec) string {
 	if cfg.AuthScheme != providers.AuthQueryParamKey {
 		return url
@@ -989,14 +989,14 @@ func appendVideoAuth(url string, p Provider, cfg providerSpec) string {
 	return url + sep + cfg.AuthQueryParam + "=" + p.APIKey
 }
 
-// videoSeedImageURL builds the image-to-video seed-frame data URL for wire
-// shapes that condition on a single reference frame (Grok Imagine, BUG-010).
-// The image Part's bytes are inlined as a data URL carried in xAI's image.url
-// field, mirroring the Grok image-edit encoding in image.go. Returns "" when no
-// image part is present (the text-to-video hot path). Errors on more than one
-// image part: Grok animates a single seed frame, so multi-image conditioning is
-// a separate slice — rejecting is honest where silently using the first would
-// reintroduce the silent-drop bug.
+//
+//
+//
+//
+//
+//
+//
+//
 func videoSeedImageURL(parts []Part) (string, error) {
 	var seed *MediaRef
 	for _, part := range parts {
@@ -1018,8 +1018,8 @@ func videoSeedImageURL(parts []Part) (string, error) {
 	return "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(seed.Bytes), nil
 }
 
-// videoFallbackMime returns the first model's output MIME, used when the
-// provider does not echo a MIME on the result.
+//
+//
 func videoFallbackMime(vgCfg *providers.VideoGenDef) string {
 	if len(vgCfg.Models) > 0 {
 		return vgCfg.Models[0].OutputMime
@@ -1027,9 +1027,9 @@ func videoFallbackMime(vgCfg *providers.VideoGenDef) string {
 	return "video/mp4"
 }
 
-// normalizeVideoParts enforces the XOR rule and produces the canonical []Part.
-// When only Prompt is set, it synthesises []Part{Text(req.Prompt)}. Both empty
-// or both set is a validation error.
+//
+//
+//
 func normalizeVideoParts(req VideoRequest) ([]Part, error) {
 	hasPrompt := req.Prompt != ""
 	hasParts := len(req.Parts) > 0

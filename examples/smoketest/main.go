@@ -1,23 +1,23 @@
-// Smoke-test every provider whose API-key env var is set.
 //
-// Run: cd go && go run ./examples/smoketest
 //
-// For each provider with credentials available, runs two probes:
 //
-//	chat=OK         one-token Prompt against the chat endpoint
-//	list=OK         live model list via c.Models.Provider(p).List(ctx)
 //
-// list=N/A          provider declares no models endpoint (Vertex,
 //
-//	Bedrock, local backends).
 //
-// list=PENDING      provider supports the endpoint but Phase 3 HTTP
 //
-//	wiring isn't merged yet (ErrModelsUnavailable).
-//	Auto-upgrades to OK once Phase 3 lands.
 //
-// SKIP / FAIL on the line itself refer to the chat probe — that's
-// llmkit's load-bearing API today and what determines exit code.
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
 package main
 
 import (
@@ -33,15 +33,15 @@ import (
 
 const timeout = 30 * time.Second
 
-// Per-provider model used by the smoke test. Add an entry when the
-// A-Box default isn't accessible from the test account.
+//
+//
 var models = map[string]string{
 	"cerebras": "zai-glm-4.7",
 	"ollama":   "gemma4:latest",
 }
 
 func main() {
-	// providers.List() is already sorted by slug.
+	//
 	var pass, fail, skip int
 	for _, cfg := range providers.List() {
 		name := cfg.Slug
@@ -84,10 +84,10 @@ func smoke(id providers.ProviderName, key string) error {
 	return err
 }
 
-// listModels probes the catalogue list endpoint and returns a short
-// status: OK (live list returned), N/A (provider has no models
-// endpoint), PENDING (endpoint declared but Phase 3 HTTP path not yet
-// wired), or FAIL (real error).
+//
+//
+//
+//
 func listModels(id providers.ProviderName, key string) string {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
@@ -113,6 +113,6 @@ func truncate(err error) string {
 	if len(s) > 120 {
 		s = s[:120] + "..."
 	}
-	// Strip leading "llmkit: " etc. wrappers so the column stays readable.
+	//
 	return s
 }

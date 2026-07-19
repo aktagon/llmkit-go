@@ -11,15 +11,15 @@ import (
 	"github.com/aktagon/llmkit-go/v2/providers"
 )
 
-// ADR-055 Phase B: the Responses protocol response-parse + opt-in surface. The
-// request-wire golden (responses-openai.json) covers the outbound body; these
-// tests cover the reply envelope (output[] not choices[]), the endpoint switch,
-// and the loud ValidationError on a provider that lacks the protocol.
+//
+//
+//
+//
 
-// TestResponses_ParsesOutputEnvelope asserts a Responses reply (output[] array
-// with output_text content + input_tokens/output_tokens usage) parses into
-// Response.Text + Usage — NOT the Chat Completions choices[] path. Live-anchored
-// shape 2026-07-02.
+//
+//
+//
+//
 func TestResponses_ParsesOutputEnvelope(t *testing.T) {
 	var gotPath string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -55,9 +55,9 @@ func TestResponses_ParsesOutputEnvelope(t *testing.T) {
 	}
 }
 
-// TestResponses_DefaultUnchangedHitsChatCompletions asserts that WITHOUT
-// Protocol(Responses) the same client still POSTs to /v1/chat/completions and
-// parses the choices[] envelope — the default is pinned (ADR-055 goal #1).
+//
+//
+//
 func TestResponses_DefaultUnchangedHitsChatCompletions(t *testing.T) {
 	var gotPath string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -83,10 +83,10 @@ func TestResponses_DefaultUnchangedHitsChatCompletions(t *testing.T) {
 	}
 }
 
-// TestResponses_UnsupportedProviderErrors asserts Protocol(Responses) on a
-// provider that does not expose it (Anthropic) raises the uniform
-// ValidationError(field:"protocol") — the loud error the ADR requires — before
-// any network call.
+//
+//
+//
+//
 func TestResponses_UnsupportedProviderErrors(t *testing.T) {
 	c := New(providers.Anthropic, "key")
 	_, err := c.Text.Protocol(Responses).Model("claude-sonnet-4-6").Prompt(context.Background(), "hi")
@@ -102,8 +102,8 @@ func TestResponses_UnsupportedProviderErrors(t *testing.T) {
 	}
 }
 
-// TestResponses_UnknownProtocolErrors asserts an unknown protocol token raises
-// ValidationError(field:"protocol") rather than silently falling back.
+//
+//
 func TestResponses_UnknownProtocolErrors(t *testing.T) {
 	c := New(providers.OpenAI, "key")
 	_, err := c.Text.Protocol("nonexistent").Model("gpt-4o-mini").Prompt(context.Background(), "hi")

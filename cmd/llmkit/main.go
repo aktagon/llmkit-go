@@ -27,7 +27,7 @@ func main() {
 	flag.BoolVar(&stream, "stream", false, "Stream response chunks to stdout")
 	flag.Parse()
 
-	// Handle positional arguments for backwards compatibility
+	//
 	args := flag.Args()
 	if len(args) >= 2 && systemPrompt == "" && userPrompt == "" {
 		systemPrompt = args[0]

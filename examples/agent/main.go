@@ -1,11 +1,11 @@
-// Agent tool loop with a single add tool.
 //
-// Run with: ANTHROPIC_API_KEY=sk-... go run ./examples/agent
 //
-// `c.Agent` is a stateful builder -- repeated Prompt calls on the same
-// *Agent accumulate conversation history. Any chain method (.System,
-// .AddTool, ...) forks a fresh clone with empty state. agent.Reset()
-// clears history without dropping configured tools.
+//
+//
+//
+//
+//
+//
 package main
 
 import (

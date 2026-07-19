@@ -1,16 +1,16 @@
-// Example: text-to-music generation against Google Cloud Vertex AI's Lyria 2
-// (ADR-033). Demonstrates the caller-managed OAuth flow: the SDK takes a
-// bearer token string; the caller obtains it externally (gcloud /
-// service-account / workload identity) and substitutes {location} and
-// {project_id} into the base URL. Lyria 2 is instrumental-only and returns a
-// ~30s, 48 kHz stereo WAV clip.
 //
-// Run with:
 //
-//	VERTEX_BEARER_TOKEN=$(gcloud auth print-access-token) \
-//	GCP_PROJECT_ID=my-project \
-//	GCP_LOCATION=us-central1 \
-//	go run ./examples/music-gen
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
 package main
 
 import (
@@ -45,8 +45,8 @@ func main() {
 	ctx := context.Background()
 	c := llmkit.Vertex(token).BaseURL(baseURL)
 
-	// Keep the prompt abstract and instrumental — genre/artist-evocative
-	// prompts can trip Lyria's recitation filter (returns a 400).
+	//
+	//
 	resp, err := c.Music.Model(lyriaModel).
 		Generate(ctx, "a calm, slow instrumental with warm piano, soft sustained strings, and gentle ambient texture")
 	if err != nil {

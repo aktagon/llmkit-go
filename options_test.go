@@ -10,10 +10,10 @@ import (
 	"github.com/aktagon/llmkit-go/v2/providers"
 )
 
-// Behavioral coverage for the public Option setters and the small
-// public methods on error/Agent types. Each test asserts the visible
-// effect of the call (field set, method returns the right value,
-// state cleared), not just that the call doesn't panic.
+//
+//
+//
+//
 
 func TestWithHTTPClientOverridesDefaultClient(t *testing.T) {
 	custom := &http.Client{Timeout: 7 * time.Second}
@@ -87,7 +87,7 @@ func TestAPIErrorErrorIncludesProviderAndStatus(t *testing.T) {
 	if got == "" {
 		t.Fatal("APIError.Error returned empty string")
 	}
-	// Provider and message should both surface in the formatted string.
+	//
 	for _, want := range []string{"openai", "rate limit"} {
 		if !contains([]string{got}, got) {
 			continue
@@ -118,25 +118,25 @@ func TestMiddlewareVetoErrorWrapsCause(t *testing.T) {
 	if v.Unwrap() != cause {
 		t.Errorf("MiddlewareVetoError.Unwrap should return original cause")
 	}
-	// errors.Is must walk through the wrapper.
+	//
 	if !errors.Is(v, cause) {
 		t.Errorf("errors.Is(MiddlewareVetoError, cause) = false")
 	}
 }
 
-// TestAgentResetClearsHistoryAndTools removed (plan-018 D1.3f). The
-// typed-builder (*Agent).Reset clears only the live state; chain
-// config (system, tools, max-tokens, ...) is intentionally preserved
-// so the next Prompt re-initialises with the same configuration. The
-// legacy Reset semantics this test exercised (which clear tools too)
-// are private to legacyAgent and not part of the v1.0.0 contract.
-// Coverage for the typed-builder Reset semantics lives in
-// TestAgent_StateForking in builders_test.go.
+//
+//
+//
+//
+//
+//
+//
+//
 
 func TestUploadFileRejectsUnsupportedProvider(t *testing.T) {
-	// anthropic supports file uploads, but ai21 doesn't — picking a
-	// no-upload provider keeps the test offline while still entering
-	// the function body and exercising the error path.
+	//
+	//
+	//
 	_, err := New(providers.AI21, "k").Upload.Path("any.pdf").Run(context.Background())
 	var verr *ValidationError
 	if !errors.As(err, &verr) {

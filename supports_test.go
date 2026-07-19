@@ -1,9 +1,9 @@
 package llmkit
 
-// ADR-030: Client.Supports(Capability) — public capability query.
-// CAP-002 is proven by exhaustive comparison against the exact generated
-// lookups the strict validation paths dispatch on, so the query and the
-// error cannot drift.
+//
+//
+//
+//
 
 import (
 	"testing"
@@ -30,8 +30,8 @@ func TestSupports_UngatedCapabilitiesTrue(t *testing.T) {
 }
 
 func TestSupports_MatchesStrictGateLookups(t *testing.T) {
-	// CAP-002: same predicate as the validation paths, never a parallel
-	// table. Exhaustive over the registry so drift is structurally caught.
+	//
+	//
 	for name := range providerSpecs() {
 		c := New(providers.ProviderName(name), "k")
 		checks := []struct {

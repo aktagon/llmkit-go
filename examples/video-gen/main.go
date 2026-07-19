@@ -1,13 +1,13 @@
-// Example: text-to-video generation against xAI's Grok Imagine (ADR-034).
-// Demonstrates the asynchronous handle: Submit returns immediately with a
-// VideoHandle; Wait polls until the job completes and returns a temporary
-// xAI-hosted URL (url delivery). This example then downloads that URL to a
-// local mp4 to prove the round-trip end to end.
 //
-// Run with:
 //
-//	XAI_API_KEY=$(security find-generic-password -s xai-api-key -w) \
-//	go run ./examples/video-gen
+//
+//
+//
+//
+//
+//
+//
+//
 package main
 
 import (
@@ -52,7 +52,7 @@ func main() {
 	v := resp.Videos[0]
 	fmt.Printf("done: url=%s duration=%ds mime=%s\n", v.URL, v.DurationSeconds, v.MimeType)
 
-	// url delivery: the SDK returns a link; download it here to prove the trip.
+	//
 	out := "grok_video.mp4"
 	if err := download(ctx, v.URL, out); err != nil {
 		log.Fatal(err)

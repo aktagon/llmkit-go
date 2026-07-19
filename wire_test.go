@@ -9,9 +9,9 @@ import (
 	"testing"
 )
 
-// canonicalWireFixture mirrors ontology/fixtures/wire.ttl — the
-// conversation covering every Message role + every tool-turn
-// permutation.
+//
+//
+//
 func canonicalWireFixture() []Message {
 	return []Message{
 		{Role: "user", Content: "list .py files in src", ToolCalls: []ToolCall{}},
@@ -38,8 +38,8 @@ func goldenWirePath(t *testing.T) string {
 
 func mustRepoRoot(t *testing.T) string {
 	t.Helper()
-	// Walk up from this test file until we find a go.mod sibling +
-	// codegen/ sibling (repo layout invariant).
+	//
+	//
 	cwd, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("getwd: %v", err)
@@ -55,8 +55,8 @@ func mustRepoRoot(t *testing.T) string {
 	return ""
 }
 
-// TestWire_GoldenMatches asserts ADR-023 STAB-007 — SaveHistory
-// output is JSON-value-equal to the committed golden.
+//
+//
 func TestWire_GoldenMatches(t *testing.T) {
 	data, err := SaveHistory(canonicalWireFixture())
 	if err != nil {
@@ -78,7 +78,7 @@ func TestWire_GoldenMatches(t *testing.T) {
 	}
 }
 
-// TestWire_RoundTripValueEqual asserts ADR-023 STAB-007 round-trip.
+//
 func TestWire_RoundTripValueEqual(t *testing.T) {
 	fixture := canonicalWireFixture()
 	data, err := SaveHistory(fixture)
@@ -125,14 +125,14 @@ func TestWire_MetaPassthroughAccepted(t *testing.T) {
 	}
 }
 
-// TestWire_ChainMethodsRoundTrip asserts STAB-012 — bot.Save() /
-// bot.Load(data) produce bytes that load back into a value-equal
-// builder.
+//
+//
+//
 func TestWire_ChainMethodsRoundTrip(t *testing.T) {
 	c := Anthropic("k")
 	bot := c.Agent
 	bot.initAgent()
-	// Match the canonical fixture so every turn kind is exercised.
+	//
 	bot.state.agent.history = []internalMessage{
 		{role: "user", content: "list .py files in src"},
 		{role: "assistant", toolCalls: []toolCall{
@@ -149,8 +149,8 @@ func TestWire_ChainMethodsRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("bot.Load: %v", err)
 	}
-	// Runtime state isn't initialized yet on the loaded builder —
-	// loading just populates the chain history list.
+	//
+	//
 	if fresh.state != nil {
 		t.Errorf("Load should leave state nil; got %+v", fresh.state)
 	}
@@ -159,10 +159,10 @@ func TestWire_ChainMethodsRoundTrip(t *testing.T) {
 	}
 }
 
-// TestWire_ToolCallInputNullPreserved exercises the documented
-// semantic: a caller-constructed `json.RawMessage("null")` (4 bytes
-// of literal "null") survives Save → Load as itself, distinct from
-// a nil RawMessage which omits the key entirely.
+//
+//
+//
+//
 func TestWire_ToolCallInputNullPreserved(t *testing.T) {
 	cases := []struct {
 		name  string
@@ -190,9 +190,9 @@ func TestWire_ToolCallInputNullPreserved(t *testing.T) {
 				t.Fatalf("LoadHistory: %v", err)
 			}
 			gotInput := restored[0].ToolCalls[0].Input
-			// Nil and literal "null" are distinct wire-side: nil
-			// omits the key, "null" emits the literal. LoadHistory
-			// preserves the distinction.
+			//
+			//
+			//
 			if tc.input == nil && gotInput != nil {
 				t.Errorf("nil input not preserved; got %q", gotInput)
 			}
@@ -203,8 +203,8 @@ func TestWire_ToolCallInputNullPreserved(t *testing.T) {
 	}
 }
 
-// TestWire_MalformedDocumentRejected covers the three Malformed
-// paths: non-object root, non-integer `_v`, non-array `messages`.
+//
+//
 func TestWire_MalformedDocumentRejected(t *testing.T) {
 	cases := []struct {
 		name string
@@ -225,8 +225,8 @@ func TestWire_MalformedDocumentRejected(t *testing.T) {
 	}
 }
 
-// TestWire_LoadClearsState verifies STAB-012 — Load returns a fork
-// with cleared runtime state regardless of the parent's state.
+//
+//
 func TestWire_LoadClearsState(t *testing.T) {
 	c := Anthropic("k")
 	bot := c.Agent
@@ -247,9 +247,9 @@ func TestWire_LoadClearsState(t *testing.T) {
 	}
 }
 
-// TestWire_DropTargetArtifact emits target/wire/go.json so the
-// cross-SDK comparator (STAB-010) can validate Go's bytes are
-// JSON-value-equal to the committed golden.
+//
+//
+//
 func TestWire_DropTargetArtifact(t *testing.T) {
 	repo := mustRepoRoot(t)
 	dir := filepath.Join(repo, "target", "wire")

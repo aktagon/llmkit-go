@@ -10,16 +10,16 @@ import (
 	"time"
 )
 
-// SigV4 canonical-request wire driver (CR-002): sign the two production-shaped
-// Bedrock requests with an injected clock and assert the canonical request,
-// string-to-sign, and Authorization header byte-identically against the shared
-// golden at codegen/testdata/wire/sigv4/v1/<fixture>.json. The golden is
-// minted from botocore (codegen/anchor_sigv4.py — external authority, see the
-// PROVENANCE.md beside the goldens), and the same fixed inputs are hard-coded
-// in every SDK's driver; the cross-SDK comparator
-// (codegen/test_cross_sdk_sigv4.py) cross-checks the six artifacts.
+//
+//
+//
+//
+//
+//
+//
+//
 
-// The frozen signing clock shared by every SDK driver: 2026-07-18T00:00:00Z.
+//
 var sigv4WireNow = time.Date(2026, 7, 18, 0, 0, 0, 0, time.UTC)
 
 const (
@@ -66,10 +66,10 @@ func assertSigV4WireGolden(t *testing.T, fixture string, sig sigV4Signature) {
 	}
 }
 
-// TestSigV4Wire_ChatPost mirrors doSigV4Post's request assembly for the
-// Bedrock Converse chat path: POST, Content-Type set before signing (so it
-// joins the signed set), session token present, model id ':' literal in the
-// path.
+//
+//
+//
+//
 func TestSigV4Wire_ChatPost(t *testing.T) {
 	body := []byte(`{"messages":[{"role":"user","content":[{"text":"Hello, Bedrock"}]}]}`)
 	req, err := http.NewRequest("POST",
@@ -85,11 +85,11 @@ func TestSigV4Wire_ChatPost(t *testing.T) {
 	assertSigV4WireGolden(t, "sigv4-chat-post", sig)
 }
 
-// TestSigV4Wire_PollGet mirrors doSigV4Get's request assembly for the Bedrock
-// async-invoke poll: GET, empty body (empty-string SHA-256 payload hash), no
-// Content-Type, no session token, and the invocation ARN percent-encoded as
-// ONE path segment ('/' -> %2F, ':' literal) so the signed path equals the
-// wire path.
+//
+//
+//
+//
+//
 func TestSigV4Wire_PollGet(t *testing.T) {
 	req, err := http.NewRequest("GET",
 		"https://bedrock-runtime.us-west-2.amazonaws.com/async-invoke/arn:aws:bedrock:us-west-2:123456789012:async-invoke%2Fabc123xyz",

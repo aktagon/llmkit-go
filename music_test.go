@@ -22,17 +22,17 @@ const (
 	minimaxMusic26 = "music-2.6"
 )
 
-// fakeWAV / fakeMP3 are opaque payloads — only the encode/decode round-trip is
-// verified, not the audio content.
+//
+//
 var (
 	fakeWAV = []byte{'R', 'I', 'F', 'F', 0x00, 'W', 'A', 'V', 'E'}
 	fakeMP3 = []byte{0xFF, 0xFB, 0x90, 0x00, 'm', 'p', '3'}
 )
 
-// rewriteTransport redirects every request to target, regardless of the
-// request URL's host. Used to intercept MiniMax's absolute music endpoint
-// (https://api.minimax.io/...) in tests, where a baseURL override cannot
-// reach an absolute URL.
+//
+//
+//
+//
 type rewriteTransport struct{ target *url.URL }
 
 func (rt rewriteTransport) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -193,7 +193,7 @@ func TestGenerateMusicTextChainAndRaw(t *testing.T) {
 
 	c := New(providers.Vertex, "test-token")
 	c.provider.baseURL = server.URL
-	// Text() accumulates a prompt Part; the trailing Generate text appends another.
+	//
 	resp, err := c.Music.Model(lyria2Model).Text("warm pads").Raw().Generate(context.Background(), "slow tempo")
 	if err != nil {
 		t.Fatal(err)
@@ -211,9 +211,9 @@ func TestGenerateMusicTextChainAndRaw(t *testing.T) {
 	}
 }
 
-// ADR-037 (MUS-008): supportsLyrics is advisory, not a gate. Lyrics on the
-// instrumental-only Lyria 2 fold into the :predict prompt instead of being
-// rejected.
+//
+//
+//
 func TestGenerateMusicFoldsLyricsIntoPromptOnInstrumentalModel(t *testing.T) {
 	encoded := base64.StdEncoding.EncodeToString(fakeWAV)
 	var gotBody map[string]any
@@ -267,7 +267,7 @@ func TestGenerateMusicModelRequired(t *testing.T) {
 }
 
 func TestGenerateMusicMiddlewareFiresAndVetoes(t *testing.T) {
-	// Veto in pre-phase aborts before any HTTP call.
+	//
 	mw := func(_ context.Context, ev providers.Event) error {
 		if ev.Op != providers.OpMusicGeneration {
 			t.Errorf("expected Op=music_generation, got %s", ev.Op)

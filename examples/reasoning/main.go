@@ -1,12 +1,12 @@
-// Reasoning: ask the model to spend extra hidden reasoning effort with the
-// .ReasoningEffort() chain method ("low", "medium", "high"). The thinking
-// tokens the model burns before answering are reported in
-// resp.Usage.Reasoning.
 //
-// Run with: OPENAI_API_KEY=sk-... go run ./examples/reasoning
 //
-// reasoning_effort is an OpenAI o-series option; Usage.Reasoning is only
-// populated by o-series / thinking models, and stays 0 otherwise.
+//
+//
+//
+//
+//
+//
+//
 package main
 
 import (

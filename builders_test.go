@@ -14,10 +14,10 @@ import (
 	"github.com/aktagon/llmkit-go/v2/providers"
 )
 
-// TestSurface_Chains exercises every chain method on every builder
-// and asserts the chained config lands in the right struct field.
-// Phase 3 wired chain bodies to mutate the copy; this test verifies
-// the mutation actually happens.
+//
+//
+//
+//
 func TestSurface_Chains(t *testing.T) {
 	c := Google("k")
 	if c == nil || c.Text == nil || c.Image == nil || c.Agent == nil || c.Upload == nil {
@@ -137,8 +137,8 @@ func TestSurface_Chains(t *testing.T) {
 	}
 }
 
-// TestSurface_Immutable confirms chain methods return a NEW instance
-// — the prototype on *Client never mutates.
+//
+//
 func TestSurface_Immutable(t *testing.T) {
 	c := Google("k")
 	original := c.Text
@@ -154,10 +154,10 @@ func TestSurface_Immutable(t *testing.T) {
 	}
 }
 
-// TestAgent_AddTool_Appends guards the appender semantics that the
-// ADR-021 `Add*` prefix telegraphs: two AddTool calls accumulate, not
-// replace. Regression guard against anyone "simplifying" the chain
-// method body to assignment-instead-of-append.
+//
+//
+//
+//
 func TestAgent_AddTool_Appends(t *testing.T) {
 	t1 := Tool{Name: "first"}
 	t2 := Tool{Name: "second"}
@@ -167,8 +167,8 @@ func TestAgent_AddTool_Appends(t *testing.T) {
 	}
 }
 
-// TestText_AddMiddleware_Appends mirrors the AddTool guard for
-// AddMiddleware — two calls accumulate.
+//
+//
 func TestText_AddMiddleware_Appends(t *testing.T) {
 	m1 := MiddlewareFn(func(_ context.Context, _ providers.Event) error { return nil })
 	m2 := MiddlewareFn(func(_ context.Context, _ providers.Event) error { return nil })
@@ -178,9 +178,9 @@ func TestText_AddMiddleware_Appends(t *testing.T) {
 	}
 }
 
-// Per-provider constructor smoke moved to the generated
-// TestEveryProviderFactory_Constructs in builders_constructors_test.go
-// — keeps the list and the ontology in lockstep.
+//
+//
+//
 
 func TestClient_BaseURL_SetsAndReturnsSelf(t *testing.T) {
 	override := "https://example.test/v1"
@@ -188,8 +188,8 @@ func TestClient_BaseURL_SetsAndReturnsSelf(t *testing.T) {
 	if c.provider.baseURL != override {
 		t.Errorf("baseURL not stored: got %q, want %q", c.provider.baseURL, override)
 	}
-	// Chainability: BaseURL must return the same *Client so callers
-	// can write `c := Vertex(t).BaseURL(url)` in one line.
+	//
+	//
 	if Vertex("k").BaseURL(override) == nil {
 		t.Error("BaseURL returned nil")
 	}
@@ -205,26 +205,26 @@ func TestClient_AddHeader_AccumulatesOntoProvider(t *testing.T) {
 	if got := c.provider.headers["x-trace-id"]; got != "abc123" {
 		t.Errorf("second header not stored (calls must accumulate): got %q", got)
 	}
-	// The headers must lower onto the runtime Provider via toProvider so
-	// every capability picks them up (ADR-052).
+	//
+	//
 	p := c.provider.toProvider("claude-sonnet-4-6")
 	if p.Headers["cf-aig-authorization"] != "Bearer gw-token" {
 		t.Errorf("headers not copied onto Provider: %v", p.Headers)
 	}
 }
 
-// All phase-3 terminals are wired. The legacy panic-stub assertion is
-// retired; remaining work for v1.0.0 is the *Upload Bytes path
-// (slice 2d, deferred — needs main-package change to UploadFile)
-// and the TS / Python / Rust mirrors of phases 2b + 3.
+//
+//
+//
+//
 
-// TestAgent_StateForking is the load-bearing immutability test for
-// the stateful builder. After Prompt initialises *Agent's internal
-// state, forking via a chain method (System) MUST produce a clone
-// with FRESH state — otherwise both builders would mutate the same
-// underlying Agent and successive Prompt calls would see
-// each other's history. The post-mutation hook in codegen sets
-// out.state = nil after every chain method body to enforce this.
+//
+//
+//
+//
+//
+//
+//
 func TestAgent_StateForking(t *testing.T) {
 	c := Google("k")
 	bot := c.Agent.System("a")
@@ -242,8 +242,8 @@ func TestAgent_StateForking(t *testing.T) {
 	}
 }
 
-// TestAgent_History_Writer_Replaces_Chain_State asserts ADR-020 HIST-003
-// — the chain method replaces prior history rather than appending.
+//
+//
 func TestAgent_History_Writer_Replaces_Chain_State(t *testing.T) {
 	c := Google("k")
 	msgA := Message{Role: "user", Content: "first"}
@@ -262,8 +262,8 @@ func TestAgent_History_Writer_Replaces_Chain_State(t *testing.T) {
 	}
 }
 
-// TestAgent_Messages_Empty_Before_Prompt asserts ADR-020 HIST-004 —
-// bot.Messages() returns an empty slice before initAgent runs.
+//
+//
 func TestAgent_Messages_Empty_Before_Prompt(t *testing.T) {
 	c := Google("k")
 	bot := c.Agent.System("seed").History(Message{Role: "user", Content: "hi"})
@@ -272,15 +272,15 @@ func TestAgent_Messages_Empty_Before_Prompt(t *testing.T) {
 	}
 }
 
-// TestAgent_Messages_Projects_Internal_History asserts ADR-020 HIST-004
-// — bot.Messages() projects the runtime agent's internal history
-// (including tool-call/tool-result turns) through the public Message
-// shape with the union-by-role discriminator.
+//
+//
+//
+//
 func TestAgent_Messages_Projects_Internal_History(t *testing.T) {
 	c := Google("k")
 	bot := c.Agent
 	bot.initAgent()
-	// Synthesise an internal-message history covering all three turn kinds.
+	//
 	bot.state.agent.history = []internalMessage{
 		{role: "user", content: "list py files"},
 		{role: "assistant", toolCalls: []toolCall{
@@ -298,15 +298,15 @@ func TestAgent_Messages_Projects_Internal_History(t *testing.T) {
 	if got[1].Role != "assistant" || len(got[1].ToolCalls) != 1 || got[1].ToolCalls[0].Name != "list_files" {
 		t.Errorf("assistant tool turn: %+v", got[1])
 	}
-	// Internal "tool_result" flattens to public "tool".
+	//
 	if got[2].Role != "tool" || got[2].ToolResult == nil || got[2].ToolResult.ToolUseID != "call_1" {
 		t.Errorf("tool result turn: %+v", got[2])
 	}
 }
 
-// TestAgent_History_Init_Seeds_Runtime asserts ADR-020 HIST-007 —
-// chain history is translated into internal-message form on
-// initAgent.
+//
+//
+//
 func TestAgent_History_Init_Seeds_Runtime(t *testing.T) {
 	c := Google("k")
 	bot := c.Agent.System("seed").History(
@@ -322,8 +322,8 @@ func TestAgent_History_Init_Seeds_Runtime(t *testing.T) {
 	}
 }
 
-// TestAgent_Reset confirms Reset clears state so the next Prompt
-// reinitialises a fresh Agent.
+//
+//
 func TestAgent_Reset(t *testing.T) {
 	c := Google("k")
 	bot := c.Agent.System("a")
@@ -337,10 +337,10 @@ func TestAgent_Reset(t *testing.T) {
 	}
 }
 
-// TestAgent_Prompt_Coverage exercises the wired terminal under a
-// cancelled context — the goroutine inside Agent.Chat
-// short-circuits and returns an error; we don't care about the
-// specific error, only that the line ran.
+//
+//
+//
+//
 func TestAgent_Prompt_Coverage(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -356,14 +356,14 @@ func TestAgent_Prompt_Coverage(t *testing.T) {
 		Prompt(ctx, "hello")
 }
 
-// TestBatch_Coverage / TestSubmitBatch_Coverage / TestWait_Coverage /
-// TestUpload_Coverage exercise the wired terminals under cancelled
-// context + obviously-invalid inputs so the function-level coverage
-// gate is satisfied without reaching the network.
+//
+//
+//
+//
 func TestBatch_Coverage(t *testing.T) {
-	// ADR-064: batch is a *Text execution mode (parallel to Stream).
-	// Exercise a full Text chain then the blocking one-liner
-	// Batch(...).Wait(...) compose against a cancelled context.
+	//
+	//
+	//
 	b := Anthropic("k").Text.
 		Caching().
 		File("file-id").
@@ -412,9 +412,9 @@ func TestWait_Coverage(t *testing.T) {
 	_, _ = h.Wait(ctx)
 }
 
-// TestStream_Coverage exercises the iter.Seq2 bridge: cancelled
-// context aborts the producer goroutine; the consumer sees the final
-// error yield.
+//
+//
+//
 func TestStream_Coverage(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -429,22 +429,22 @@ func TestStream_Coverage(t *testing.T) {
 		_ = chunk
 	}
 	if !sawError {
-		// Either cancelled-context errored cleanly (sawError=true) OR
-		// the stream produced no chunks and no error (provider may
-		// short-circuit before reaching the streaming path). Both are
-		// acceptable for a coverage smoke; fail only if the closure
-		// itself never ran.
+		//
+		//
+		//
+		//
+		//
 		t.Log("Stream completed without surfacing an error — provider short-circuited (acceptable)")
 	}
 }
 
-// TestStream_EarlyBreak exercises the cancel-propagation branch: the
-// consumer breaks after the first attempt; the closure must cancel
-// the inner context, drain the channel, and exit cleanly without
-// leaking the producer goroutine. Cancelled context up-front means
-// PromptStream returns immediately, so the early-break path may or
-// may not fire depending on timing — the test passes as long as the
-// iterator returns control to the test goroutine.
+//
+//
+//
+//
+//
+//
+//
 func TestStream_EarlyBreak(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -457,11 +457,11 @@ func TestStream_EarlyBreak(t *testing.T) {
 	}
 }
 
-// TestStream_RealBridge boots an httptest SSE server that emits the
-// OpenAI streaming format the legacy PromptStream understands, then
-// runs the typed-builder Stream() over it and asserts each chunk
-// arrives in the iterator in order. Proves the goroutine + channel
-// + iter.Seq2 bridge actually delivers data, not just compiles.
+//
+//
+//
+//
+//
 func TestStream_RealBridge(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
@@ -499,8 +499,8 @@ func TestStream_RealBridge(t *testing.T) {
 		t.Errorf("chunks: got %v want %v", got, want)
 	}
 
-	// Trailing handle: Response() carries the accumulated text + token
-	// counts after the range loop ends.
+	//
+	//
 	resp := stream.Response()
 	if resp.Text != "Hello world" {
 		t.Errorf("Response().Text: got %q want %q", resp.Text, "Hello world")
@@ -514,11 +514,11 @@ func TestStream_RealBridge(t *testing.T) {
 	_ = strings.Join // keep import alive when other tests evolve
 }
 
-// TestStream_BoundedBuffer pushes more chunks than the channel
-// capacity (64) with a fast SSE producer and a slow consumer
-// (1ms sleep per chunk). Asserts every chunk arrives in order
-// and none are lost — i.e. the channel applies backpressure on
-// the producer rather than dropping or scrambling.
+//
+//
+//
+//
+//
 func TestStream_BoundedBuffer(t *testing.T) {
 	const total = 200
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -566,14 +566,14 @@ func TestUpload_Coverage(t *testing.T) {
 	cancel()
 	c := Openai("k")
 
-	// Path branch — exercises the wired path.
+	//
 	_, _ = c.Upload.Path("/nonexistent").AddMiddleware(noopMiddleware).Run(ctx)
 
-	// Bytes branch — exercises the wired path (cancelled ctx forces
-	// the call to bail out before the network).
+	//
+	//
 	_, _ = c.Upload.Bytes([]byte("hi")).Filename("note.txt").MimeType("text/plain").Run(ctx)
 
-	// Validation branches — exercised without going to the network.
+	//
 	if _, err := c.Upload.Run(ctx); err == nil {
 		t.Error("expected error for empty Path+Bytes")
 	}
@@ -585,8 +585,8 @@ func TestUpload_Coverage(t *testing.T) {
 	}
 }
 
-// TestSurface_TypeAliases verifies the public-facing aliased types are
-// usable from outside the main llmkit package via builders.
+//
+//
 func TestSurface_TypeAliases(t *testing.T) {
 	_ = Message{Role: "user", Content: "hi"}
 	_ = Tool{Name: "t"}
@@ -599,10 +599,10 @@ func TestSurface_TypeAliases(t *testing.T) {
 	_ = BatchHandle{ID: "id", Provider: Provider{Name: "openai", APIKey: "k"}}
 }
 
-// TestText_Prompt_Coverage invokes the wired terminal so the line
-// counts toward Go coverage. The cancelled context aborts the HTTP
-// call before reaching the network; we don't care about the specific
-// error, only that the function ran.
+//
+//
+//
+//
 func TestText_Prompt_Coverage(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -610,8 +610,8 @@ func TestText_Prompt_Coverage(t *testing.T) {
 	_, _ = c.Text.System("x").MaxTokens(1).Temperature(0.5).Caching().AddMiddleware(noopMiddleware).Prompt(ctx, "hi")
 }
 
-// TestImage_Generate_Coverage same idea — exercises the wired Image
-// terminal under a cancelled context.
+//
+//
 func TestImage_Generate_Coverage(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -625,24 +625,24 @@ func TestImage_Generate_Coverage(t *testing.T) {
 		Generate(ctx, "a banana")
 }
 
-// TestText_BuildRequest_Compatibility asserts that the typed-builder
-// chain produces a Request structurally identical to what a
-// hand-written legacy caller would build. This is the compatibility
-// proof: since both code paths feed Prompt the same Request,
-// any existing test fixture (mock server, response shape, transform
-// rule) works against the typed-builder front end unchanged.
+//
+//
+//
+//
+//
+//
 func TestText_BuildRequest_Compatibility(t *testing.T) {
 	temp := 0.7
 	maxTok := 50
 
-	// Legacy: hand-built Request that an existing call site would use.
+	//
 	want := Request{
 		System:   "be terse",
 		User:     "hello",
 		Messages: []Message{{Role: "user", Content: "earlier"}},
 		Schema:   `{"type":"object"}`,
 		Files:    []File{{ID: "f1"}},
-		// No Images — the test stays text-only so we can compare bytes.
+		//
 	}
 	wantOpts := []optKind{
 		{kind: "MaxTokens", v: maxTok},
@@ -651,7 +651,7 @@ func TestText_BuildRequest_Compatibility(t *testing.T) {
 		{kind: "Middleware"},
 	}
 
-	// Builder: equivalent typed-chain.
+	//
 	c := Google("k")
 	tb := c.Text.
 		System("be terse").
@@ -672,25 +672,25 @@ func TestText_BuildRequest_Compatibility(t *testing.T) {
 	if len(gotOpts) != len(wantOpts) {
 		t.Fatalf("option count: got %d want %d", len(gotOpts), len(wantOpts))
 	}
-	// We can't deeply compare functional options (closures), but we can
-	// at least confirm the count matches the expected With* set.
+	//
+	//
 }
 
-// optKind is a marker for the wantOpts list above — proves the
-// translation emits the right number of functional options. Phase 4
-// can replace this scaffolding with a richer test once the legacy
-// option type is gone.
+//
+//
+//
+//
 type optKind struct {
 	kind string
 	v    any
 }
 
-// noopMiddleware satisfies MiddlewareFn (= providers.MiddlewareFn).
+//
 func noopMiddleware(ctx context.Context, e providers.Event) error { return nil }
 
-// TestText_Raw_Populated and TestText_Raw_Absent cover ADR-014: the
-// .Raw() chain method routes the parsed provider body onto
-// Response.Raw, and the field stays nil otherwise.
+//
+//
+//
 func TestText_Raw_Populated(t *testing.T) {
 	body := `{"id":"msg_1","choices":[{"message":{"content":"hi there"}}],"usage":{"prompt_tokens":2,"completion_tokens":3},"x_extra":42}`
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -718,10 +718,10 @@ func TestText_Raw_Populated(t *testing.T) {
 }
 
 func TestImage_Raw_Coverage(t *testing.T) {
-	// Chain method coverage. The full Image.Raw fire-site behaviour is
-	// exercised in image-gen integration tests; here we confirm the
-	// chain hook compiles and Raw() returns a builder. WithImageRaw
-	// covered transitively via image_builder.go.
+	//
+	//
+	//
+	//
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	c := Google("k")

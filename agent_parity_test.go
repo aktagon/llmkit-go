@@ -9,12 +9,12 @@ import (
 	"testing"
 )
 
-// TestAgent_RequestParity_SafetyAndOptions locks ADR-026 PIPE-001/004 for Go:
-// the Agent path now constructs its body through the shared buildRequest, so
-// generation options AND safety settings reach the wire body — matching the
-// Text path. The old buildAgentRequest applied options but silently dropped
-// safety settings (the latent gap class, same shape as TS BUG-006). Google is
-// used because it is the only provider shape that emits safetySettings.
+//
+//
+//
+//
+//
+//
 func TestAgent_RequestParity_SafetyAndOptions(t *testing.T) {
 	var captured map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -38,7 +38,7 @@ func TestAgent_RequestParity_SafetyAndOptions(t *testing.T) {
 		t.Fatalf("text: got %q, want ok", resp.Text)
 	}
 
-	// Generation option lands inside the generationConfig wrapper.
+	//
 	gc, ok := captured["generationConfig"].(map[string]any)
 	if !ok {
 		t.Fatalf("generationConfig missing: %v", captured)
@@ -47,7 +47,7 @@ func TestAgent_RequestParity_SafetyAndOptions(t *testing.T) {
 		t.Errorf("temperature: got %v, want 0.1", gc["temperature"])
 	}
 
-	// Safety settings land at the top level — the field the old agent dropped.
+	//
 	ss, ok := captured["safetySettings"].([]any)
 	if !ok || len(ss) != 1 {
 		t.Fatalf("safetySettings missing or wrong length: %v", captured["safetySettings"])

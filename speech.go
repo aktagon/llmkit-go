@@ -11,27 +11,27 @@ import (
 	"github.com/aktagon/llmkit-go/v2/providers"
 )
 
-// SpeechRequest is the canonical text-to-speech request (ADR-049).
 //
-// Model is required: speech-generation models are explicit choices and the
-// text-generation default does not synthesize audio. Voice is required and is
-// validated pre-flight against the provider's voice catalogue (SPK-004). Text
-// is the single utterance to speak — single-turn, no Message/Role wrapper
-// (SPK-003).
+//
+//
+//
+//
+//
+//
 type SpeechRequest struct {
 	Model string
 	Voice string
 	Text  string
 }
 
-// AudioData and SpeechResponse are declared in go/structs.go (ADR-018).
-
-// generateSpeech synthesizes speech audio from text. Pre-flight validation
-// rejects an unknown model and a voice outside the provider's catalogue before
-// any HTTP call (the music model-validation discipline). The audio is returned
-// as a single decoded AudioData (one synthesis, one clip — ADR-049 OQ-4).
 //
-// Internal helper — the public surface is (*Speech).Generate in speech_builder.go.
+
+//
+//
+//
+//
+//
+//
 func generateSpeech(ctx context.Context, p Provider, req SpeechRequest) (SpeechResponse, error) {
 	if err := validateProvider(p); err != nil {
 		return SpeechResponse{}, err
@@ -76,10 +76,10 @@ func generateSpeech(ctx context.Context, p Provider, req SpeechRequest) (SpeechR
 	return parseSpeechResponse(p.Name, sgCfg.AudioEncoding, model.OutputMime, respBody)
 }
 
-// dispatchSpeechHTTP picks a wire shape per provider config (never by provider
-// name — the wire shape is the single discriminator). SpeechInworld is a
-// flat-JSON POST whose response carries base64 audio at audioContent;
-// SpeechOpenAI is a flat-JSON POST whose response body is the raw audio bytes.
+//
+//
+//
+//
 func dispatchSpeechHTTP(
 	ctx context.Context,
 	client *http.Client,
@@ -116,10 +116,10 @@ func dispatchSpeechHTTP(
 	return doPost(ctx, client, url, jsonBody, headers)
 }
 
-// buildInworldSpeechBody assembles the Inworld /tts/v1/voice request body.
-// Slice 1 sends a fixed audioConfig (LINEAR16/22050 -> WAV output) and the
-// BALANCED delivery mode; format/sample-rate selection is a later slice
-// (ADR-049 OQ-5).
+//
+//
+//
+//
 func buildInworldSpeechBody(req SpeechRequest) map[string]any {
 	return map[string]any{
 		"text":    req.Text,
@@ -133,10 +133,10 @@ func buildInworldSpeechBody(req SpeechRequest) map[string]any {
 	}
 }
 
-// buildOpenAISpeechBody assembles the OpenAI /v1/audio/speech request body.
-// Slice 1 fixes response_format=mp3 (KISS; the model's outputMime is audio/mpeg
-// to match), so the response body is mp3 audio bytes. Format selection is a
-// later slice (ADR-051).
+//
+//
+//
+//
 func buildOpenAISpeechBody(req SpeechRequest) map[string]any {
 	return map[string]any{
 		"model":           req.Model,
@@ -164,11 +164,11 @@ func voiceInCatalogue(cfg *providers.SpeechGenDef, voice string) bool {
 	return false
 }
 
-// parseSpeechResponse decodes the synthesized audio per the wire shape's audio
-// response encoding (ADR-051 OAA-002). "rawBody" (OpenAI) takes the response
-// body verbatim as the audio bytes; "base64Envelope" (Inworld) parses a JSON
-// envelope and base64-decodes the audio field. A 2xx body that does not parse
-// to audio is a decoding error (HANDOFF-036 A5) — never a silent empty clip.
+//
+//
+//
+//
+//
 func parseSpeechResponse(providerName, audioEncoding, fallbackMime string, body []byte) (SpeechResponse, error) {
 	switch audioEncoding {
 	case "rawBody":
@@ -182,11 +182,11 @@ func parseSpeechResponse(providerName, audioEncoding, fallbackMime string, body 
 	}
 }
 
-// parseInworldSpeechResponse decodes Inworld /tts/v1/voice responses.
-// Shape: {"audioContent": "<base64>", "usage": {"processedCharactersCount": N}}.
-// A missing/empty audioContent or invalid base64 is a decoding error
-// (HANDOFF-036 A5): a success response always carries audio, so an
-// unparseable envelope must never masquerade as an empty clip.
+//
+//
+//
+//
+//
 func parseInworldSpeechResponse(providerName string, raw map[string]any, fallbackMime string) (SpeechResponse, error) {
 	b64, ok := raw["audioContent"].(string)
 	if !ok || b64 == "" {

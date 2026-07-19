@@ -8,8 +8,8 @@ import (
 	"github.com/aktagon/llmkit-go/v2/providers"
 )
 
-// MiddlewareVetoError wraps a pre-phase veto. Callers can errors.As against
-// this type to discriminate a veto from a transport or provider error.
+//
+//
 type MiddlewareVetoError struct {
 	Cause error
 }
@@ -22,8 +22,8 @@ func (e *MiddlewareVetoError) Unwrap() error {
 	return e.Cause
 }
 
-// firePre runs pre-phase middlewares in registration order. First non-nil
-// return aborts and is wrapped as MiddlewareVetoError.
+//
+//
 func firePre(ctx context.Context, mws []providers.MiddlewareFn, base providers.Event) error {
 	if len(mws) == 0 {
 		return nil
@@ -38,8 +38,8 @@ func firePre(ctx context.Context, mws []providers.MiddlewareFn, base providers.E
 	return nil
 }
 
-// firePost runs post-phase middlewares in registration order. Return values
-// are discarded — post-phase is strictly observational.
+//
+//
 func firePost(ctx context.Context, mws []providers.MiddlewareFn, base providers.Event) {
 	if len(mws) == 0 {
 		return
@@ -54,11 +54,11 @@ func firePost(ctx context.Context, mws []providers.MiddlewareFn, base providers.
 	}
 }
 
-// eventErrType maps a typed error to the stable OTEL error.type kind carried
-// on Event.ErrType (ADR-071). Classification is structural (errors.As) and
-// happens here, at the firePost seam — the one place the typed error still
-// exists — so consumers (the OTLP builder included) read the kind verbatim
-// and never re-parse a message string.
+//
+//
+//
+//
+//
 func eventErrType(err error) string {
 	var apiErr *APIError
 	if errors.As(err, &apiErr) {
@@ -71,11 +71,11 @@ func eventErrType(err error) string {
 	return "error"
 }
 
-// resolveModel returns the caller-specified model or the provider's curated
-// default. It is the single predicate every resolution point dispatches on.
-// Both empty is a ValidationError: local daemons declare no default — what a
-// daemon serves is runtime inventory, not a registry fact (ADR-031) — so the
-// SDK asks the caller to pick instead of guessing a model that may 404.
+//
+//
+//
+//
+//
 func resolveModel(p Provider, cfg providerSpec) (string, error) {
 	if p.Model != "" {
 		return p.Model, nil

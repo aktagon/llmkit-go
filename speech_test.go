@@ -16,7 +16,7 @@ import (
 
 const inworldTTS2 = "inworld-tts-2"
 
-// fakeSpeechWAV is an opaque payload — only the base64 round-trip is verified.
+//
 var fakeSpeechWAV = []byte{'R', 'I', 'F', 'F', 0x00, 'W', 'A', 'V', 'E', 0x01}
 
 func TestGenerateSpeechInworld(t *testing.T) {
@@ -50,7 +50,7 @@ func TestGenerateSpeechInworld(t *testing.T) {
 		t.Errorf("expected audio/wav, got %q", resp.Audio.MimeType)
 	}
 
-	// Request body parity (the same shape the speech-inworld wire golden asserts).
+	//
 	if gotBody["text"] != "Hello from llmkit." {
 		t.Errorf("expected text, got %q", gotBody["text"])
 	}
@@ -74,7 +74,7 @@ func TestGenerateSpeechInworld(t *testing.T) {
 
 const openaiTTS = "gpt-4o-mini-tts"
 
-// fakeSpeechMP3 is an opaque payload — only the raw-body round-trip is verified.
+//
 var fakeSpeechMP3 = []byte{0xFF, 0xFB, 0x90, 0x00, 'm', 'p', '3'}
 
 func TestGenerateSpeechOpenAI(t *testing.T) {
@@ -87,7 +87,7 @@ func TestGenerateSpeechOpenAI(t *testing.T) {
 			t.Errorf("expected Bearer auth, got %q", got)
 		}
 		json.NewDecoder(r.Body).Decode(&gotBody)
-		// OpenAI returns the raw audio bytes as the response body, not JSON.
+		//
 		w.Header().Set("Content-Type", "audio/mpeg")
 		w.Write(fakeSpeechMP3)
 	}))
@@ -106,7 +106,7 @@ func TestGenerateSpeechOpenAI(t *testing.T) {
 		t.Errorf("expected audio/mpeg, got %q", resp.Audio.MimeType)
 	}
 
-	// Request body parity (the same shape the speech-openai wire golden asserts).
+	//
 	if gotBody["model"] != openaiTTS {
 		t.Errorf("expected model %s, got %q", openaiTTS, gotBody["model"])
 	}
@@ -178,7 +178,7 @@ func TestGenerateSpeechRequiresVoice(t *testing.T) {
 }
 
 func TestGenerateSpeechUnsupportedProviderRejected(t *testing.T) {
-	// Anthropic does not support speech generation (OpenAI now does, ADR-051).
+	//
 	c := New(providers.Anthropic, "test-token")
 	_, err := c.Speech.Model(inworldTTS2).Voice("Dennis").Generate(context.Background(), "Hello")
 	var verr *ValidationError
@@ -187,10 +187,10 @@ func TestGenerateSpeechUnsupportedProviderRejected(t *testing.T) {
 	}
 }
 
-// TestGenerateSpeechMalformed2xxIsDecodingError locks HANDOFF-036 A5: a 2xx
-// whose body does not parse to audio (missing audioContent, invalid base64,
-// non-JSON) is a decoding error naming the provider and field — never a
-// success response with silent empty audio.
+//
+//
+//
+//
 func TestGenerateSpeechMalformed2xxIsDecodingError(t *testing.T) {
 	cases := []struct {
 		name string

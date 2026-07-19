@@ -13,30 +13,30 @@ import (
 	"github.com/aktagon/llmkit-go/v2/providers"
 )
 
-// MusicRequest is the canonical music-generation request (ADR-033).
 //
-// Model is required: music-generation models are explicit choices and the
-// text-generation default does not generate audio.
 //
-// Input is provided in one of two mutually-exclusive forms:
 //
-//   - Prompt: terse sugar for the prompt-only hot path. Internally desugars
-//     to Parts: []Part{Text(Prompt)} before serialisation.
-//   - Parts: canonical sequence of text and lyrics parts. A music request
-//     never carries image parts; the runtime rejects them pre-flight.
 //
-// Pre-flight validation requires exactly one of Prompt or Parts to be
-// non-empty (XOR). Lyrics on an instrumental-only model are advisory, not
-// rejected (ADR-037 MUS-008): they fold into the prompt for the Predict shape.
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
 type MusicRequest struct {
 	Model  string
 	Prompt string
 	Parts  []Part
 }
 
-// AudioData and MusicResponse are declared in go/structs.go (ADR-018, API-PDS-002).
+//
 
-// MusicOption configures GenerateMusic.
+//
 type MusicOption func(*musicOptions)
 
 type musicOptions struct {
@@ -45,20 +45,20 @@ type musicOptions struct {
 	raw        bool
 }
 
-// WithMusicHTTPClient overrides the http.Client used for the GenerateMusic call.
+//
 func WithMusicHTTPClient(c *http.Client) MusicOption {
 	return func(o *musicOptions) { o.httpClient = c }
 }
 
-// WithMusicMiddleware registers pre/post hooks that fire around the music
-// generation request. Op is providers.OpMusicGeneration. Pre-phase can veto.
+//
+//
 func WithMusicMiddleware(fns ...providers.MiddlewareFn) MusicOption {
 	return func(o *musicOptions) { o.middleware = append(o.middleware, fns...) }
 }
 
-// withMusicRaw opts the call into populating MusicResponse.Raw with the parsed
-// provider response body (ADR-014). Internal — typed-builder users reach this
-// via *Music.Raw().
+//
+//
+//
 func withMusicRaw() MusicOption {
 	return func(o *musicOptions) { o.raw = true }
 }
@@ -71,13 +71,13 @@ func resolveMusicOptions(opts []MusicOption) *musicOptions {
 	return o
 }
 
-// generateMusic produces audio from a text prompt, optionally conditioned on
-// lyrics. Input is either Prompt (sugar) or Parts (canonical sequence) —
-// exactly one must be set. Pre-flight validation rejects image parts and
-// unknown models before any HTTP call; lyrics support is advisory (ADR-037),
-// not gated.
 //
-// Internal helper — the public surface is (*Music).Generate in music_builder.go.
+//
+//
+//
+//
+//
+//
 func generateMusic(ctx context.Context, p Provider, req MusicRequest, opts ...MusicOption) (MusicResponse, error) {
 	o := resolveMusicOptions(opts)
 
@@ -126,9 +126,9 @@ func generateMusic(ctx context.Context, p Provider, req MusicRequest, opts ...Mu
 	if model == nil {
 		return MusicResponse{}, &ValidationError{Field: "model", Message: req.Model + " is not a known music-generation model for " + p.Name}
 	}
-	// ADR-037 (MUS-008): supportsLyrics is advisory metadata, not a gate.
-	// Lyrics on an instrumental-only model fold into the prompt (for the
-	// single-prompt Predict shape) and the model ignores or honors them.
+	//
+	//
+	//
 
 	baseEvent := providers.Event{
 		Op:       providers.OpMusicGeneration,
@@ -170,16 +170,16 @@ func generateMusic(ctx context.Context, p Provider, req MusicRequest, opts ...Mu
 	return resp, parseErr
 }
 
-// dispatchMusicHTTP picks a wire shape per provider config (never by provider
-// name — the wire shape is the single discriminator):
 //
-//   - MusicShapePredict (Vertex): instances/parameters envelope to :predict;
-//     audio at predictions[].audioContent (base64 WAV).
-//   - MusicShapeGenerateContent (Gemini): prompt + lyrics fold into
-//     contents[0].parts[].text with responseModalities=["AUDIO"]; audio at
-//     candidates[0].content.parts[].inlineData.data (base64).
-//   - MusicShapeMinimax: top-level model/prompt/lyrics/audio_setting to the
-//     absolute GenEndpoint; audio at data.audio (hex).
+//
+//
+//
+//
+//
+//
+//
+//
+//
 func dispatchMusicHTTP(
 	ctx context.Context,
 	client *http.Client,
@@ -227,10 +227,10 @@ func postMusicJSON(ctx context.Context, client *http.Client, url string, body ma
 	return doPost(ctx, client, url, jsonBody, headers)
 }
 
-// buildVertexMusicBody assembles the Vertex AI Lyria :predict request body.
-// Lyria 2 has no lyrics wire-slot, so any lyrics parts fold into the prompt
-// text (ADR-037 MUS-008); the instrumental model ignores vocal content. The
-// instances/parameters envelope mirrors Vertex Imagen.
+//
+//
+//
+//
 func buildVertexMusicBody(parts []Part) map[string]any {
 	prompt := joinPromptText(parts)
 	if lyrics := joinLyricsText(parts); lyrics != "" {
@@ -246,10 +246,10 @@ func buildVertexMusicBody(parts []Part) map[string]any {
 	}
 }
 
-// buildGeminiMusicBody assembles the Gemini generateContent body for Lyria 3.
-// Text and lyrics parts both serialise as {text} parts in caller order
-// (Gemini takes custom lyrics inline in the prompt text). responseModalities
-// requests AUDIO output.
+//
+//
+//
+//
 func buildGeminiMusicBody(parts []Part) map[string]any {
 	wire := make([]map[string]any, 0, len(parts))
 	for _, p := range parts {
@@ -266,9 +266,9 @@ func buildGeminiMusicBody(parts []Part) map[string]any {
 	}
 }
 
-// buildMinimaxMusicBody assembles the MiniMax /v1/music_generation body.
-// Prompt parts join into `prompt`; lyrics parts join into `lyrics`.
-// output_format=hex returns hex-encoded audio at data.audio.
+//
+//
+//
 func buildMinimaxMusicBody(parts []Part, model string) map[string]any {
 	body := map[string]any{
 		"model":         model,
@@ -306,9 +306,9 @@ func joinLyricsText(parts []Part) string {
 	return strings.Join(texts, "\n")
 }
 
-// buildMusicURL substitutes the per-call model into the provider's endpoint
-// template (Gemini reuses the main generateContent endpoint) and appends the
-// query auth key for query-param-key providers (Google).
+//
+//
+//
 func buildMusicURL(p Provider, cfg providerSpec, mgCfg *providers.MusicGenDef, model string) string {
 	base := p.BaseURL
 	if base == "" {
@@ -326,9 +326,9 @@ func buildMusicURL(p Provider, cfg providerSpec, mgCfg *providers.MusicGenDef, m
 	return base + endpoint
 }
 
-// normalizeMusicParts enforces the XOR rule and produces the canonical []Part.
-// When only Prompt is set, it synthesises []Part{Text(req.Prompt)}. Both empty
-// or both set is a validation error.
+//
+//
+//
 func normalizeMusicParts(req MusicRequest) ([]Part, error) {
 	hasPrompt := req.Prompt != ""
 	hasParts := len(req.Parts) > 0
@@ -353,9 +353,9 @@ func findMusicModel(cfg *providers.MusicGenDef, modelID string) *providers.Music
 	return nil
 }
 
-// parseMusicResponse decodes the audio payloads per wire shape. Each shape's
-// response diverges enough (predictions[] vs candidates[] vs data.audio,
-// base64 vs hex) that a switch is clearer than a generic walker.
+//
+//
+//
 func parseMusicResponse(wireShape, fallbackMime string, body []byte) (MusicResponse, error) {
 	var raw map[string]any
 	if err := json.Unmarshal(body, &raw); err != nil {
@@ -371,8 +371,8 @@ func parseMusicResponse(wireShape, fallbackMime string, body []byte) (MusicRespo
 	}
 }
 
-// parseVertexMusicResponse decodes Vertex Lyria :predict responses.
-// Shape: {"predictions": [{"audioContent": "<base64>", "mimeType": "audio/wav"}]}.
+//
+//
 func parseVertexMusicResponse(raw map[string]any, fallbackMime string) MusicResponse {
 	preds, _ := raw["predictions"].([]any)
 	var audio []AudioData
@@ -405,8 +405,8 @@ func parseVertexMusicResponse(raw map[string]any, fallbackMime string) MusicResp
 	return MusicResponse{Audio: audio, FinishReason: finishReason}
 }
 
-// parseGeminiMusicResponse walks candidates[0].content.parts, decoding each
-// inlineData audio part and concatenating text parts (generated lyrics).
+//
+//
 func parseGeminiMusicResponse(raw map[string]any, fallbackMime string) MusicResponse {
 	candidates, _ := raw["candidates"].([]any)
 	if len(candidates) == 0 {
@@ -441,8 +441,8 @@ func parseGeminiMusicResponse(raw map[string]any, fallbackMime string) MusicResp
 	return MusicResponse{Audio: audio, Text: strings.Join(textParts, ""), FinishReason: finishReason}
 }
 
-// parseMinimaxMusicResponse decodes MiniMax /v1/music_generation responses.
-// Shape: {"data": {"audio": "<hex>"}, "base_resp": {"status_msg": "..."}}.
+//
+//
 func parseMinimaxMusicResponse(raw map[string]any, fallbackMime string) MusicResponse {
 	var audio []AudioData
 	if data, ok := raw["data"].(map[string]any); ok {

@@ -15,10 +15,10 @@ import (
 	"github.com/aktagon/llmkit-go/v2/providers"
 )
 
-// audioURLPart / audioBytesPart construct audio Parts as struct literals (the
-// internal form); the public parts.Audio / parts.AudioBytes constructors are
-// exercised from the parts package's own tests (an in-package test importing
-// parts would form an import cycle).
+//
+//
+//
+//
 func audioURLPart(url string) Part { return Part{AudioURL: url} }
 func audioBytesPart(mime string, b []byte) Part {
 	return Part{Audio: &MediaRef{MimeType: mime, Bytes: b}}
@@ -26,8 +26,8 @@ func audioBytesPart(mime string, b []byte) Part {
 
 const assemblyAIAudioURL = "https://storage.example.com/meeting-2026-06-24.mp3"
 
-// fastTranscriptionPoll shrinks the poll interval for tests and restores it on
-// cleanup.
+//
+//
 func fastTranscriptionPoll(t *testing.T) {
 	t.Helper()
 	prevInterval, prevTimeout := transcriptionPollInterval, transcriptionPollTimeout
@@ -39,9 +39,9 @@ func fastTranscriptionPoll(t *testing.T) {
 	})
 }
 
-// completedTranscript is the AssemblyAI transcript object on terminal success:
-// the full text plus word-level timing (start/end in milliseconds), with a
-// diarized speaker label on the first word.
+//
+//
+//
 func completedTranscript() map[string]any {
 	return map[string]any{
 		"id":     "transcript-7c2",
@@ -55,9 +55,9 @@ func completedTranscript() map[string]any {
 	}
 }
 
-// assemblyAIServer serves the AssemblyAI upload + submit + poll endpoints. The
-// poll returns `processing` for the first pendingPolls calls, then the supplied
-// done body. uploadURL, when non-empty, is returned from POST /v2/upload.
+//
+//
+//
 func assemblyAIServer(t *testing.T, pendingPolls int32, doneBody map[string]any, uploadURL string) *httptest.Server {
 	t.Helper()
 	var polls int32
@@ -227,7 +227,7 @@ func TestWithTranscriptionHTTPClientOverridesDefault(t *testing.T) {
 }
 
 func TestTranscriptionUnsupportedProviderRejected(t *testing.T) {
-	// Anthropic does not support transcription (OpenAI now does, ADR-051).
+	//
 	c := New(providers.Anthropic, "test-key")
 	_, err := c.Transcription.Submit(context.Background(), audioURLPart(assemblyAIAudioURL))
 	if err == nil {
@@ -238,10 +238,10 @@ func TestTranscriptionUnsupportedProviderRejected(t *testing.T) {
 	}
 }
 
-// === Synchronous transcription — OpenAI (TranscriptionOpenAI, ADR-051) ===
+//
 
-// openaiVerboseTranscript is the OpenAI verbose_json response: full text plus
-// segment timings with start/end in SECONDS (float).
+//
+//
 func openaiVerboseTranscript() map[string]any {
 	return map[string]any{
 		"text": "The quarterly review is scheduled for Tuesday.",
@@ -252,9 +252,9 @@ func openaiVerboseTranscript() map[string]any {
 	}
 }
 
-// openaiTranscriptionServer serves POST /v1/audio/transcriptions, asserting the
-// multipart fields (model, response_format, the file part + its Content-Type),
-// and returns the supplied JSON body.
+//
+//
+//
 func openaiTranscriptionServer(t *testing.T, respBody map[string]any) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -306,7 +306,7 @@ func TestTranscribeSyncOpenAI(t *testing.T) {
 	if got := len(resp.Segments); got != 2 {
 		t.Fatalf("expected 2 segments, got %d", got)
 	}
-	// verbose_json offsets are seconds; the segment stores integer ms.
+	//
 	if got, want := resp.Segments[0].End, 1500; got != want {
 		t.Errorf("segment[0].End: got %d ms, want %d ms (1.5s)", got, want)
 	}
@@ -316,8 +316,8 @@ func TestTranscribeSyncOpenAI(t *testing.T) {
 }
 
 func TestTranscribeOpenAIEmptySegments(t *testing.T) {
-	// The gpt-4o-*-transcribe models return text with NO segments[] (OAA-006):
-	// segments is empty, not an error.
+	//
+	//
 	server := openaiTranscriptionServer(t, map[string]any{"text": "Hello there."})
 	defer server.Close()
 
@@ -337,7 +337,7 @@ func TestTranscribeOpenAIEmptySegments(t *testing.T) {
 }
 
 func TestSubmitOnSyncProviderRejected(t *testing.T) {
-	// OpenAI is synchronous; Submit/Wait is the wrong terminal (OAA-003).
+	//
 	c := New(providers.OpenAI, "test-key")
 	_, err := c.Transcription.Model("whisper-1").Submit(context.Background(), audioBytesPart("audio/mpeg", fakeSpeechMP3))
 	var verr *ValidationError
@@ -350,7 +350,7 @@ func TestSubmitOnSyncProviderRejected(t *testing.T) {
 }
 
 func TestTranscribeOnAsyncProviderRejected(t *testing.T) {
-	// AssemblyAI is asynchronous; Transcribe is the wrong terminal (OAA-003).
+	//
 	c := New(providers.Assemblyai, "test-key")
 	_, err := c.Transcription.Model("best").Transcribe(context.Background(), audioBytesPart("audio/mpeg", fakeSpeechMP3))
 	var verr *ValidationError
@@ -363,7 +363,7 @@ func TestTranscribeOnAsyncProviderRejected(t *testing.T) {
 }
 
 func TestTranscribeRejectsAudioURL(t *testing.T) {
-	// OpenAI ingests inline bytes only; a remote URL is rejected (OAA-005).
+	//
 	c := New(providers.OpenAI, "test-key")
 	_, err := c.Transcription.Model("whisper-1").Transcribe(context.Background(), audioURLPart("https://storage.example.com/talk.mp3"))
 	var verr *ValidationError

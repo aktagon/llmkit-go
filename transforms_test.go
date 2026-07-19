@@ -15,7 +15,7 @@ func bedrockConfig() providerSpec {
 	return providerSpecs()["bedrock"]
 }
 
-// --- Google transforms ---
+//
 
 func TestTransformGoogleParts(t *testing.T) {
 	body := map[string]any{}
@@ -55,7 +55,7 @@ func TestTransformGooglePartsRoleMapping(t *testing.T) {
 	if len(contents) != 2 {
 		t.Fatalf("expected 2 contents, got %d", len(contents))
 	}
-	// Google maps assistant → model
+	//
 	if contents[1]["role"] != "model" {
 		t.Errorf("expected role 'model' for assistant, got %v", contents[1]["role"])
 	}
@@ -63,9 +63,9 @@ func TestTransformGooglePartsRoleMapping(t *testing.T) {
 
 func TestTransformGoogleFunctionDeclarations(t *testing.T) {
 	body := map[string]any{}
-	// BUG-002 shapes: additionalProperties + a ["string","null"] union. These
-	// 400 under the OpenAPI-subset "parameters" field but are valid native
-	// JSON Schema; they must pass through verbatim under parametersJsonSchema.
+	//
+	//
+	//
 	schema := map[string]any{
 		"type":                 "object",
 		"additionalProperties": false,
@@ -89,14 +89,14 @@ func TestTransformGoogleFunctionDeclarations(t *testing.T) {
 	if decls[0]["name"] != "calc" {
 		t.Errorf("expected name calc, got %v", decls[0]["name"])
 	}
-	// ADR-025 / BUG-002: schema goes under parametersJsonSchema, not parameters.
+	//
 	if _, ok := decls[0]["parametersJsonSchema"]; !ok {
 		t.Errorf("expected schema under parametersJsonSchema, got keys %v", keysOfAny(decls[0]))
 	}
 	if _, leaked := decls[0]["parameters"]; leaked {
 		t.Errorf("schema must not use the OpenAPI-subset 'parameters' field for Google")
 	}
-	// Verbatim passthrough: additionalProperties + union preserved unchanged.
+	//
 	got := decls[0]["parametersJsonSchema"].(map[string]any)
 	if got["additionalProperties"] != false {
 		t.Errorf("additionalProperties not preserved verbatim: %v", got["additionalProperties"])
@@ -141,7 +141,7 @@ func TestExtractGoogleToolCalls(t *testing.T) {
 	}
 }
 
-// --- Bedrock transforms ---
+//
 
 func TestTransformBedrockConverse(t *testing.T) {
 	body := map[string]any{}
@@ -150,13 +150,13 @@ func TestTransformBedrockConverse(t *testing.T) {
 
 	transformBedrockConverse(body, nil, req, cfg)
 
-	// System should be array of text blocks
+	//
 	system := body["system"].([]map[string]any)
 	if system[0]["text"] != "Be helpful" {
 		t.Errorf("expected system text, got %v", system[0]["text"])
 	}
 
-	// Messages should wrap content in [{text}] array
+	//
 	msgs := body["messages"].([]map[string]any)
 	if len(msgs) != 1 {
 		t.Fatalf("expected 1 message, got %d", len(msgs))
@@ -247,7 +247,7 @@ func TestExtractBedrockToolCalls(t *testing.T) {
 	}
 }
 
-// --- Anthropic transforms ---
+//
 
 func TestTransformAnthropicTools(t *testing.T) {
 	body := map[string]any{}
@@ -319,7 +319,7 @@ func TestExtractAnthropicToolCalls(t *testing.T) {
 	}
 }
 
-// --- Error parsing ---
+//
 
 func TestParseErrorOpenAIFormat(t *testing.T) {
 	body := []byte(`{"error":{"message":"Invalid API key","type":"invalid_request_error"}}`)
@@ -376,7 +376,7 @@ func TestParseErrorInvalidJSON(t *testing.T) {
 	}
 }
 
-// --- Selector tests ---
+//
 
 func TestSelectTransformsBedrock(t *testing.T) {
 	cfg := bedrockConfig()
@@ -385,14 +385,14 @@ func TestSelectTransformsBedrock(t *testing.T) {
 		t.Fatalf("expected ChatWireShape ChatBedrock for bedrock config, got %q", cfg.ChatWireShape)
 	}
 
-	// Should pick Bedrock-specific transforms
+	//
 	msg := selectMessageTransform(cfg)
 	body := map[string]any{}
 	msg(body, nil, Request{User: "test"}, cfg)
 	if _, ok := body["messages"]; !ok {
 		t.Error("expected messages key from Bedrock transform")
 	}
-	// Verify content is array of text blocks, not flat string
+	//
 	msgs := body["messages"].([]map[string]any)
 	content := msgs[0]["content"].([]map[string]any)
 	if content[0]["text"] != "test" {
@@ -425,7 +425,7 @@ func TestSelectTransformsOpenAI(t *testing.T) {
 		t.Error("expected messages key from FlatContent transform")
 	}
 	msgs := body["messages"].([]map[string]any)
-	// OpenAI FlatContent: content is a plain string
+	//
 	if msgs[0]["content"] != "test" {
 		t.Errorf("expected flat string content, got %v", msgs[0]["content"])
 	}

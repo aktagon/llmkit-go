@@ -5,14 +5,14 @@ import (
 	"testing"
 )
 
-// Regression net for ADR-026 (unified request builder, Go slice).
 //
-// buildRequest is the single body builder shared by Text and batch — and,
-// after this slice, the Agent. These snapshots freeze the Text/batch wire
-// bodies for each provider shape and MUST stay byte-equal after the Agent is
-// routed through buildRequest (PIPE-005). Batch builds its per-item body via
-// the same buildRequest, so this pins the batch shape too. Go sorts map keys
-// on marshal, so the JSON comparison is deterministic.
+//
+//
+//
+//
+//
+//
+//
 
 func snapFloat(v float64) *float64 { return &v }
 
@@ -47,12 +47,12 @@ func TestBuildRequestWireBodySnapshots(t *testing.T) {
 	}
 }
 
-// TestGoogleToolResultResolvesFunctionName locks the ADR-026 #2 fix. Google's
-// wire identifies a tool result by function NAME, but the universal ToolResult
-// carries only ToolUseID. On the Text/batch path a user supplies a history
-// where the id differs from the name (unlike the agent, whose extractor sets
-// id==name), so the result's functionResponse.name must be resolved back to the
-// function name via the preceding tool-call turn — not echo the raw id.
+//
+//
+//
+//
+//
+//
 func TestGoogleToolResultResolvesFunctionName(t *testing.T) {
 	req := Request{Messages: []Message{
 		{Role: "user", Content: "weather in Paris?"},

@@ -12,51 +12,51 @@ import (
 	"github.com/aktagon/llmkit-go/v2/providers"
 )
 
-// ImageRequest is the canonical image-generation request.
 //
-// Model is required: image-generation models are explicit choices and the
-// text-generation default (e.g., gemini-2.5-flash) does not generate images.
 //
-// Input is provided in one of two mutually-exclusive forms:
 //
-//   - Prompt: terse sugar for the text-only hot path. Internally desugars
-//     to Parts: []Part{Text(Prompt)} before serialisation.
-//   - Parts: canonical multimodal input. A positionally-ordered sequence
-//     of text and image parts; required for editing and compositional
-//     generation where caller-controlled ordering matters.
 //
-// Pre-flight validation requires exactly one of Prompt or Parts to be
-// non-empty (XOR). Image-typed parts respect ImageGenConfig.MaxInputCount.
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
 type ImageRequest struct {
 	Model  string
 	Prompt string
 	Parts  []Part
 }
 
-// Part is the universal multimodal input atom. Exactly one of Text, Image,
-// or Lyrics is set; none or more than one is invalid (rejected by pre-flight
-// validation). Lyrics is a text payload tagged as song lyrics, used only by
-// music generation (ADR-033) — image and text generation reject it.
-// Construct via the parts/ sub-package: parts.Text(s) / parts.Image(mime,
-// bytes) / parts.Lyrics(s).
+//
+//
+//
+//
+//
+//
 type Part struct {
 	Text   string
 	Image  *MediaRef
 	Lyrics string
 
-	// AudioURL is a public audio URL for transcription (ADR-048), constructed
-	// via parts.Audio(url). Submitted to the provider directly as audio_url.
+	//
+	//
 	AudioURL string
 
-	// Audio is local audio bytes for transcription (ADR-048), constructed via
-	// parts.AudioBytes(mime, raw). The runtime uploads them first to obtain a
-	// URL, then submits that.
+	//
+	//
+	//
 	Audio *MediaRef
 }
 
-// ImageData and ImageResponse are declared in go/structs.go (ADR-018, API-PDS-002).
+//
 
-// ImageOption configures GenerateImage.
+//
 type ImageOption func(*imageOptions)
 
 type imageOptions struct {
@@ -76,42 +76,42 @@ type imageOptions struct {
 	raw            bool
 }
 
-// WithImageHTTPClient overrides the http.Client used for the GenerateImage call.
+//
 func WithImageHTTPClient(c *http.Client) ImageOption {
 	return func(o *imageOptions) { o.httpClient = c }
 }
 
-// WithAspectRatio constrains the output aspect ratio (e.g., "16:9").
-// The value must appear in ImageGenConfig(provider).Models[].AspectRatios for
-// the requested model, otherwise GenerateImage returns ValidationError.
+//
+//
+//
 func WithAspectRatio(ratio string) ImageOption {
 	return func(o *imageOptions) { o.aspectRatio = ratio }
 }
 
-// WithImageSize sets the output resolution (e.g., "1K", "2K", "4K", "512").
-// Same per-model whitelist enforcement as WithAspectRatio.
+//
+//
 func WithImageSize(size string) ImageOption {
 	return func(o *imageOptions) { o.imageSize = size }
 }
 
-// WithIncludeText asks the model to also emit text parts (captions, refusals)
-// alongside images. Defaults to off — most callers want pure image output.
+//
+//
 func WithIncludeText() ImageOption {
 	return func(o *imageOptions) { o.includeText = true }
 }
 
-// WithImageMiddleware registers pre/post hooks that fire around the image
-// generation request. Op is providers.OpImageGeneration. Pre-phase can veto.
+//
+//
 func WithImageMiddleware(fns ...providers.MiddlewareFn) ImageOption {
 	return func(o *imageOptions) { o.middleware = append(o.middleware, fns...) }
 }
 
-// WithImageExtraFields adds caller-supplied keys to the wire body (JSON for
-// the generations branch; form fields for the edits branch). Reserved for
-// provider-specific knobs that don't yet have typed chain methods (OpenAI:
-// output_compression, moderation). Knobs covered by typed methods (quality,
-// output_format, background, n) should use those — typed methods are
-// validated per provider; ExtraFields is not.
+//
+//
+//
+//
+//
+//
 func WithImageExtraFields(extras map[string]any) ImageOption {
 	return func(o *imageOptions) {
 		if o.extraFields == nil {
@@ -123,60 +123,60 @@ func WithImageExtraFields(extras map[string]any) ImageOption {
 	}
 }
 
-// WithImageQuality sets the OpenAI gpt-image-* quality enum
-// (low|medium|high|auto). ValidationError on Google and xAI Grok.
+//
+//
 func WithImageQuality(s string) ImageOption {
 	return func(o *imageOptions) { o.quality = s }
 }
 
-// WithImageOutputFormat sets the OpenAI gpt-image-* output MIME format
-// (png|webp|jpeg). ValidationError on Google and xAI Grok.
+//
+//
 func WithImageOutputFormat(s string) ImageOption {
 	return func(o *imageOptions) { o.outputFormat = s }
 }
 
-// WithImageBackground sets the OpenAI gpt-image-* background treatment
-// (transparent|opaque|auto). ValidationError on other providers.
+//
+//
 func WithImageBackground(s string) ImageOption {
 	return func(o *imageOptions) { o.background = s }
 }
 
-// WithImageCount sets the number of images to generate (wire field `n`).
-// Accepted by OpenAI gpt-image-* and xAI Grok; ValidationError on Google
-// (where output count is bound to the model's per-aspect-ratio default).
+//
+//
+//
 func WithImageCount(n int) ImageOption {
 	return func(o *imageOptions) { v := n; o.count = &v }
 }
 
-// WithImageMask attaches a PNG mask to the request (transparent pixels mark
-// the region to edit). OpenAI gpt-image-* /v1/images/edits only — Google,
-// xAI Grok, and the OpenAI generations branch (no image parts) all return
-// ValidationError.
+//
+//
+//
+//
 func WithImageMask(mime string, data []byte) ImageOption {
 	return func(o *imageOptions) {
 		o.mask = &MediaRef{MimeType: mime, Bytes: append([]byte(nil), data...)}
 	}
 }
 
-// WithImageSafetyFilter sets the global safety threshold for Vertex Imagen.
-// Wire field: parameters.safetySetting. Use ImageSafetyFilter* constants or
-// a raw string. ValidationError on all other image-gen providers.
+//
+//
+//
 func WithImageSafetyFilter(threshold string) ImageOption {
 	return func(o *imageOptions) { o.safetyFilter = threshold }
 }
 
-// WithImageSafetySettings sets per-category safety thresholds for Google
-// image generation (the same safetySettings top-level field as text-gen).
-// Wire field: safetySettings[]. Use SafetySetting{Category, Threshold} with
-// the HarmCategory* / HarmBlockThreshold* constants. ValidationError on all
-// non-Google image-gen providers (safetySettingsWirePath must be non-empty).
+//
+//
+//
+//
+//
 func WithImageSafetySettings(s ...SafetySetting) ImageOption {
 	return func(o *imageOptions) { o.safetySettings = append(o.safetySettings, s...) }
 }
 
-// withImageRaw opts the call into populating ImageResponse.Raw with
-// the parsed provider response body (ADR-014). Internal — typed-builder
-// users reach this via *Image.Raw().
+//
+//
+//
 func withImageRaw() ImageOption {
 	return func(o *imageOptions) { o.raw = true }
 }
@@ -189,15 +189,15 @@ func resolveImageOptions(opts []ImageOption) *imageOptions {
 	return o
 }
 
-// GenerateImage produces one or more images from a text prompt, optionally
-// conditioned on reference images for editing or composition. Input is
-// either Prompt (sugar for the text-only case) or Parts (canonical
-// multimodal sequence) — exactly one must be set. Pre-flight validation
-// rejects unsupported aspect ratios, sizes, and image-part counts before
-// any HTTP call.
 //
-// Internal helper as of plan-018 D1.3c — public surface is
-// (*Image).Generate in image_builder.go.
+//
+//
+//
+//
+//
+//
+//
+//
 func generateImage(ctx context.Context, p Provider, req ImageRequest, opts ...ImageOption) (ImageResponse, error) {
 	o := resolveImageOptions(opts)
 
@@ -233,10 +233,10 @@ func generateImage(ctx context.Context, p Provider, req ImageRequest, opts ...Im
 	if model == nil {
 		return ImageResponse{}, &ValidationError{Field: "model", Message: req.Model + " is not a known image-generation model for " + p.Name}
 	}
-	// Empty whitelist means "no client-side check; pass through" — used by
-	// providers (e.g., OpenAI) that accept arbitrary sizes within documented
-	// bounds. The provider API rejects bad values with a clean 400; trust
-	// the boundary instead of carrying a stale whitelist (plan 020 q1).
+	//
+	//
+	//
+	//
 	if o.aspectRatio != "" && len(model.AspectRatios) > 0 && !contains(model.AspectRatios, o.aspectRatio) {
 		return ImageResponse{}, &ValidationError{Field: "aspect_ratio", Message: o.aspectRatio + " not supported by " + req.Model}
 	}
@@ -256,13 +256,13 @@ func generateImage(ctx context.Context, p Provider, req ImageRequest, opts ...Im
 		}
 	}
 
-	// Per-provider knob validation. Quality, OutputFormat, Background are
-	// OpenAI-only on the wire; Count (n) is OpenAI + xAI; Mask is OpenAI
-	// edits-only (i.e. MultipartForm with image parts present). Catch
-	// mismatches here so the runtime returns a clean ValidationError
-	// instead of shipping the field and waiting for the provider to
-	// reject (or silently ignore) it. Mirrors llmkit.go sampling-knob
-	// validation.
+	//
+	//
+	//
+	//
+	//
+	//
+	//
 	switch imgCfg.InputMode {
 	case providers.ImageInputInlineParts: // Google
 		if o.quality != "" {
@@ -283,7 +283,7 @@ func generateImage(ctx context.Context, p Provider, req ImageRequest, opts ...Im
 		if o.safetyFilter != "" {
 			return ImageResponse{}, &ValidationError{Field: "safety_filter", Message: "not supported by " + p.Name + "; use SafetySettings for text-gen"}
 		}
-		// safetySettings valid for InlineParts (Google); wired in buildImageBody
+		//
 	case providers.ImageInputJSONInlineRefs: // xAI Grok
 		if o.quality != "" {
 			return ImageResponse{}, &ValidationError{Field: "quality", Message: "not supported by " + p.Name}
@@ -326,14 +326,14 @@ func generateImage(ctx context.Context, p Provider, req ImageRequest, opts ...Im
 		if len(o.safetySettings) > 0 {
 			return ImageResponse{}, &ValidationError{Field: "safety_settings", Message: "not supported by " + p.Name + "; use SafetyFilter for Vertex Imagen"}
 		}
-		// safetyFilter is valid for Vertex Imagen; wired in buildVertexBody
+		//
 	case providers.ImageInputJSONGenerations: // Recraft
-		// Recraft's flat generations body carries only size (-> `size`) and
-		// count (-> `n`); aspect_ratio is not a Recraft wire field (it sizes
-		// by an explicit WxH `size`), and the gpt-image / safety knobs are
-		// OpenAI / Google / Vertex only. Image parts are rejected upstream by
-		// the MaxInputCount==0 gate (text-to-image only). Style and other
-		// provider-specific knobs ride ExtraFields.
+		//
+		//
+		//
+		//
+		//
+		//
 		if o.aspectRatio != "" {
 			return ImageResponse{}, &ValidationError{Field: "aspect_ratio", Message: "not supported by " + p.Name + "; use ImageSize (Recraft sizes by WxH)"}
 		}
@@ -397,23 +397,23 @@ func generateImage(ctx context.Context, p Provider, req ImageRequest, opts ...Im
 	return resp, parseErr
 }
 
-// dispatchImageHTTP picks a wire shape per provider config:
 //
-//   - InlineParts (Google): JSON body, all parts inlined; uses the provider's
-//     main endpoint template (substitutes {model}).
-//   - MultipartForm + image parts present (OpenAI edits): multipart/form-data
-//     POST to imgCfg.EditEndpoint with one image[] field per image part and
-//     the concatenated text as `prompt`.
-//   - MultipartForm + no image parts (OpenAI generations): JSON POST to
-//     imgCfg.GenEndpoint. response_format is omitted (gpt-image-* rejects it).
-//   - JSONInlineRefs + image parts (xAI Grok edits): JSON POST to
-//     imgCfg.EditEndpoint; refs encoded as data URLs in `image:` (single)
-//     or `images: [...]` (multi); response_format=b64_json forced.
-//   - JSONInlineRefs + no image parts (xAI Grok generations): JSON POST to
-//     imgCfg.GenEndpoint; same body shape minus image refs.
-//   - JSONGenerations (Recraft): flat JSON POST to imgCfg.GenEndpoint;
-//     {model, prompt, response_format:"b64_json", size, n}. Text-to-image
-//     only (image parts are rejected upstream by MaxInputCount==0).
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
 func dispatchImageHTTP(
 	ctx context.Context,
 	client *http.Client,
@@ -486,7 +486,7 @@ func dispatchImageHTTP(
 		return doPost(ctx, client, base+imgCfg.GenEndpoint, jsonBody, headers)
 	}
 
-	// Default: InlineParts (Google).
+	//
 	body := buildImageBody(parts, o)
 	jsonBody, err := json.Marshal(body)
 	if err != nil {
@@ -495,14 +495,14 @@ func dispatchImageHTTP(
 	return doPost(ctx, client, buildImageURL(p, cfg, model), jsonBody, headers)
 }
 
-// buildOpenAIGenBody assembles the JSON body for /v1/images/generations.
-// Text parts are joined with "\n" into the `prompt` field. extraFields are
-// spread into the top-level body so callers can pass `quality`, `n`,
-// `output_format`, etc. without typed chain methods.
 //
-// Note: gpt-image-* models always return base64-encoded images via
-// `data[i].b64_json` and reject the `response_format` parameter (it
-// belonged to the legacy dall-e-* surface). Don't set it.
+//
+//
+//
+//
+//
+//
+//
 func buildOpenAIGenBody(parts []Part, model string, o *imageOptions) map[string]any {
 	body := map[string]any{
 		"model":  model,
@@ -529,10 +529,10 @@ func buildOpenAIGenBody(parts []Part, model string, o *imageOptions) map[string]
 	return body
 }
 
-// buildOpenAIEditMultipart assembles the multipart form for /v1/images/edits.
-// Each image Part becomes one image[] file field in caller order; text
-// Parts are concatenated into the `prompt` form field. extraFields with
-// scalar values become string fields; non-scalars are JSON-encoded.
+//
+//
+//
+//
 func buildOpenAIEditMultipart(parts []Part, model string, o *imageOptions) ([]multipartFile, map[string]string) {
 	files := make([]multipartFile, 0)
 	idx := 0
@@ -596,9 +596,9 @@ func buildOpenAIEditMultipart(parts []Part, model string, o *imageOptions) ([]mu
 	return files, fields
 }
 
-// buildXAIGenBody assembles the JSON body for xAI Grok /v1/images/generations.
-// Image-size maps to `resolution` (xAI's name); aspect_ratio maps as-is.
-// response_format=b64_json is forced because xAI defaults to URL.
+//
+//
+//
 func buildXAIGenBody(parts []Part, model string, o *imageOptions) map[string]any {
 	body := map[string]any{
 		"model":           model,
@@ -620,10 +620,10 @@ func buildXAIGenBody(parts []Part, model string, o *imageOptions) map[string]any
 	return body
 }
 
-// buildXAIEditBody assembles the JSON body for xAI Grok /v1/images/edits.
-// Single image part → `image: {url: "data:..."}`. Multiple image parts →
-// `images: [{url: "data:..."}, ...]` in caller order. Text parts join into
-// `prompt`. Same response_format / option mapping as the gen body.
+//
+//
+//
+//
 func buildXAIEditBody(parts []Part, model string, o *imageOptions) map[string]any {
 	body := map[string]any{
 		"model":           model,
@@ -654,8 +654,8 @@ func buildXAIEditBody(parts []Part, model string, o *imageOptions) map[string]an
 	}
 	switch len(refs) {
 	case 0:
-		// Caller passed no image parts but we landed on the edit path —
-		// shouldn't happen given dispatchImageHTTP's gate. Treat as gen.
+		//
+		//
 	case 1:
 		body["image"] = refs[0]
 	default:
@@ -668,13 +668,13 @@ func buildXAIEditBody(parts []Part, model string, o *imageOptions) map[string]an
 	return body
 }
 
-// buildVertexBody assembles the Vertex AI Imagen :predict request body.
-// Vertex uses an instances/parameters envelope: instance carries the
-// per-call inputs (prompt, image ref for editing, mask for inpainting);
-// parameters carries config (sampleCount, aspectRatio). Extra fields
-// like negativePrompt and safetySetting spread into parameters via
-// imageOptions.extraFields so callers can reach Imagen-specific knobs
-// without typed chain methods.
+//
+//
+//
+//
+//
+//
+//
 func buildVertexBody(parts []Part, o *imageOptions) map[string]any {
 	instance := map[string]any{
 		"prompt": joinTextParts(parts),
@@ -717,13 +717,13 @@ func buildVertexBody(parts []Part, o *imageOptions) map[string]any {
 	}
 }
 
-// buildRecraftGenBody assembles the JSON body for Recraft's text-to-image
-// /v1/images/generations endpoint. Image-size maps to `size`; count maps to
-// `n`. response_format is forced to b64_json because Recraft defaults to URL
-// delivery — forcing it keeps the response shape uniform (data[].b64_json).
-// Vector/SVG output is selected by a vector model id (recraftv3_vector), not
-// a body flag, so the body shape is identical for raster and vector. Style
-// and other Recraft-specific knobs ride extraFields.
+//
+//
+//
+//
+//
+//
+//
 func buildRecraftGenBody(parts []Part, model string, o *imageOptions) map[string]any {
 	body := map[string]any{
 		"model":           model,
@@ -752,10 +752,10 @@ func joinTextParts(parts []Part) string {
 	return strings.Join(texts, "\n")
 }
 
-// looksLikeSVG reports whether the decoded image bytes are an SVG document.
-// SVG is XML text starting with an optional BOM/whitespace, then either an
-// XML prolog (<?xml) or the root <svg element. Used to label vector-model
-// output (Recraft) correctly when the provider does not echo a mime type.
+//
+//
+//
+//
 func looksLikeSVG(data []byte) bool {
 	s := strings.TrimSpace(string(data))
 	return strings.HasPrefix(s, "<?xml") || strings.HasPrefix(s, "<svg")
@@ -774,10 +774,10 @@ func extFromMime(mime string) string {
 	}
 }
 
-// normalizeImageParts enforces the XOR rule and produces the canonical
-// []Part the rest of the pipeline operates on. When only Prompt is set
-// (the text-only sugar path), it synthesises a single-element slice
-// []Part{Text(req.Prompt)}. Both empty or both set is a validation error.
+//
+//
+//
+//
 func normalizeImageParts(req ImageRequest) ([]Part, error) {
 	hasPrompt := req.Prompt != ""
 	hasParts := len(req.Parts) > 0
@@ -811,12 +811,12 @@ func contains(haystack []string, needle string) bool {
 	return false
 }
 
-// buildImageBody constructs the Google generateContent request body for image
-// generation. Walks the normalised []Part in order: text parts emit
-// {text}, image parts emit {inlineData}. Caller-controlled ordering is
-// preserved on the wire — required for compositional generation. Other
-// providers will diverge — when OpenAI lands (plan 016) this function
-// gets a dispatch on cfg.InputMode.
+//
+//
+//
+//
+//
+//
 func buildImageBody(parts []Part, o *imageOptions) map[string]any {
 	wire := make([]map[string]any, 0, len(parts))
 	for _, p := range parts {
@@ -864,8 +864,8 @@ func buildImageBody(parts []Part, o *imageOptions) map[string]any {
 	return body
 }
 
-// buildImageURL substitutes the per-call image-gen model into the provider's
-// endpoint template (Google reuses the main generateContent endpoint).
+//
+//
 func buildImageURL(p Provider, cfg providerSpec, model string) string {
 	base := p.BaseURL
 	if base == "" {
@@ -895,12 +895,12 @@ func imageAuthHeaders(p Provider, cfg providerSpec) map[string]string {
 	return headers
 }
 
-// parseImageResponse decodes inline image parts and concatenates text parts.
-// The response parser is selected by the config's response wire family
-// (imgCfg.ResponseShape), never by provider name (BUG-024). imgCfg's
-// UsageInputPath/UsageOutputPath are dotted-from-root and empty when the
-// endpoint reports no usage. provider is still used for the Google-only
-// finish-signal paths in the GoogleParts branch.
+//
+//
+//
+//
+//
+//
 func parseImageResponse(imgCfg *providers.ImageGenDef, provider string, body []byte) (ImageResponse, error) {
 	var raw map[string]any
 	if err := json.Unmarshal(body, &raw); err != nil {
@@ -909,14 +909,14 @@ func parseImageResponse(imgCfg *providers.ImageGenDef, provider string, body []b
 
 	switch imgCfg.ResponseShape {
 	case "DataArrayB64Json":
-		// OpenAI/xAI/Recraft data[].b64_json shape. SVG bytes (Recraft vector
-		// models) are sniffed to image/svg+xml inside parseImageResponseDataArray.
+		//
+		//
 		return parseImageResponseDataArray(raw, imgCfg.UsageInputPath, imgCfg.UsageOutputPath), nil
 	case "VertexPredictions":
 		return parseVertexImageResponse(raw), nil
 	}
 
-	// GoogleParts: candidates[].content.parts inline data.
+	//
 	images, text := extractGoogleImageParts(raw)
 	finishReason, finishMessage := extractFinishSignal(raw, provider)
 	return ImageResponse{
@@ -931,17 +931,17 @@ func parseImageResponse(imgCfg *providers.ImageGenDef, provider string, body []b
 	}, nil
 }
 
-// parseImageResponseDataArray walks the data[] array shape used by both
-// OpenAI's and xAI's image APIs:
 //
-//   - data[i].b64_json → ImageData.Bytes (decoded). MimeType honors
-//     data[i].mime_type when echoed back (xAI does so; OpenAI does not),
-//     otherwise defaults to image/png.
-//   - data[i].revised_prompt strings are concatenated into Text so callers
-//     can audit prompt revisions without parsing the raw response.
-//   - inputPath / outputPath are the dotted paths to extract from `usage`.
-//     Pass empty strings when the provider doesn't report token counts
-//     (xAI reports usage.cost_in_usd_ticks instead).
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
 func parseImageResponseDataArray(raw map[string]any, inputPath, outputPath string) ImageResponse {
 	data, _ := raw["data"].([]any)
 	var images []ImageData
@@ -957,11 +957,11 @@ func parseImageResponseDataArray(raw map[string]any, inputPath, outputPath strin
 				mime = echoed
 			}
 			if decoded, err := base64.StdEncoding.DecodeString(b64); err == nil {
-				// Vector providers (Recraft recraftv3_vector) return SVG bytes
-				// in the same b64_json slot without echoing a mime_type. Sniff
-				// the leading bytes so SVG is labeled image/svg+xml rather than
-				// the image/png default. Raster bytes (PNG/JPEG/WebP) never
-				// start with '<', so the sniff is a no-op for them.
+				//
+				//
+				//
+				//
+				//
 				if mime == "image/png" && looksLikeSVG(decoded) {
 					mime = "image/svg+xml"
 				}
@@ -986,10 +986,10 @@ func parseImageResponseDataArray(raw map[string]any, inputPath, outputPath strin
 	}
 }
 
-// parseVertexImageResponse decodes Vertex AI Imagen :predict responses.
-// Shape: {"predictions": [{"bytesBase64Encoded": "...", "mimeType": "..."}]}.
-// Vertex does not return token counts in the predict response, so Usage
-// stays zero.
+//
+//
+//
+//
 func parseVertexImageResponse(raw map[string]any) ImageResponse {
 	preds, _ := raw["predictions"].([]any)
 	var images []ImageData
@@ -1021,8 +1021,8 @@ func parseVertexImageResponse(raw map[string]any) ImageResponse {
 	return ImageResponse{Images: images, FinishReason: finishReason}
 }
 
-// extractGoogleImageParts walks candidates[0].content.parts, returning every
-// inlineData part as a decoded ImageData and concatenating text parts.
+//
+//
 func extractGoogleImageParts(raw map[string]any) ([]ImageData, string) {
 	candidates, _ := raw["candidates"].([]any)
 	if len(candidates) == 0 {

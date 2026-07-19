@@ -1,12 +1,12 @@
-// Caching: opt a prompt into provider-side prompt caching with the
-// .Caching() chain method. On a cache hit the system prompt is billed at
-// the cheaper cache-read rate; resp.Usage.CacheRead / CacheWrite report
-// the token split.
 //
-// Run with: ANTHROPIC_API_KEY=sk-... go run ./examples/caching
 //
-// Anthropic explicit caching only kicks in for a sizable prefix (roughly
-// 1K+ tokens), so the system prompt below is intentionally long.
+//
+//
+//
+//
+//
+//
+//
 package main
 
 import (

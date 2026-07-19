@@ -13,28 +13,28 @@ import (
 	"github.com/aktagon/llmkit-go/v2/providers"
 )
 
-// TestIntegrationGoogleResourceCaching verifies Google's ResourceCaching
-// creates a cachedContents resource and the generate call references it.
 //
-// The system prompt is made unique per run (timestamp suffix) to rule out
-// Gemini's automatic implicit caching: implicit caching only hits when a
-// matching prefix was seen in a prior request, so a unique prefix eliminates
-// it as an explanation. With that guarantee, cache_read > 0 on the FIRST
-// Prompt call can only come from our explicit applyResourceCaching path
-// having created a resource and referenced it.
 //
-// Requires a system prompt exceeding the minimum token threshold (1,024 for
-// Gemini 2.5 Flash, 4,096 for Gemini 2.5 Pro).
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
 func TestIntegrationGoogleResourceCaching(t *testing.T) {
 	key := os.Getenv("GOOGLE_API_KEY")
 	if key == "" {
 		t.Skip("GOOGLE_API_KEY not set")
 	}
 
-	// Unique-per-run prefix: prevents implicit-cache carryover across runs.
+	//
 	uniq := fmt.Sprintf("Run %d: ", time.Now().UnixNano())
 
-	// Build a system prompt exceeding 1,024 tokens so caching activates.
+	//
 	longSystem := uniq + "You are an expert assistant. " +
 		"Your task is to carefully analyze questions and provide accurate answers. " +
 		"Below is a comprehensive reference document you must use when answering:\n\n"
@@ -49,8 +49,8 @@ func TestIntegrationGoogleResourceCaching(t *testing.T) {
 			"channel capacity theorems.\n"
 	}
 
-	// First call: our code creates the cachedContents resource, then the
-	// generate call references it. cache_read must be > 0 here.
+	//
+	//
 	c := llmkit.New(providers.Google, key)
 	resp1, err := c.Text.System(longSystem).Caching().Prompt(context.Background(), "What is entropy in one sentence?")
 	if err != nil {
@@ -66,7 +66,7 @@ func TestIntegrationGoogleResourceCaching(t *testing.T) {
 		resp1.Tokens.CacheRead, resp1.Tokens.CacheWrite,
 		resp1.Tokens.Input, resp1.Tokens.Output)
 
-	// Second call with same system prompt: should also hit the cache.
+	//
 	resp2, err := c.Text.System(longSystem).Caching().Prompt(context.Background(), "Summarize Shannon's 1948 result.")
 	if err != nil {
 		t.Fatal(err)
@@ -82,9 +82,9 @@ func TestIntegrationGoogleResourceCaching(t *testing.T) {
 		resp2.Tokens.Input, resp2.Tokens.Output)
 }
 
-// TestIntegrationSubmitBatchAnthropic verifies the batch submission path:
-// request body passes Anthropic's validation (custom_id + params wrapping)
-// and returns a valid BatchHandle. Fast — does not wait for completion.
+//
+//
+//
 func TestIntegrationSubmitBatchAnthropic(t *testing.T) {
 	key := os.Getenv("ANTHROPIC_API_KEY")
 	if key == "" {
@@ -102,9 +102,9 @@ func TestIntegrationSubmitBatchAnthropic(t *testing.T) {
 	t.Logf("batch submitted: id=%s", handle.ID)
 }
 
-// TestIntegrationSubmitWaitBatchAnthropic tests the full async batch path:
-// SubmitBatch + WaitBatch polling until results are ready. Gated by
-// LLMKIT_RUN_SLOW_BATCH — Anthropic batches can take minutes to hours.
+//
+//
+//
 func TestIntegrationSubmitWaitBatchAnthropic(t *testing.T) {
 	key := os.Getenv("ANTHROPIC_API_KEY")
 	if key == "" {
@@ -136,9 +136,9 @@ func TestIntegrationSubmitWaitBatchAnthropic(t *testing.T) {
 	}
 }
 
-// TestIntegrationSubmitBatchOpenAI verifies the file-reference submission path:
-// JSONL upload via Files API, batch create with input_file_id. Returns a valid
-// handle without waiting for completion. Fast — exercises the upload + create paths.
+//
+//
+//
 func TestIntegrationSubmitBatchOpenAI(t *testing.T) {
 	key := os.Getenv("OPENAI_API_KEY")
 	if key == "" {
@@ -156,10 +156,10 @@ func TestIntegrationSubmitBatchOpenAI(t *testing.T) {
 	t.Logf("batch submitted: id=%s", handle.ID)
 }
 
-// TestIntegrationPromptBatchOpenAI tests the synchronous batch path with
-// file-reference input: JSONL upload, batch create, poll, download results.
-// OpenAI batches can take 5+ minutes to complete even for tiny payloads,
-// so this test is gated by LLMKIT_RUN_SLOW_BATCH to avoid make-integration timeouts.
+//
+//
+//
+//
 func TestIntegrationPromptBatchOpenAI(t *testing.T) {
 	key := os.Getenv("OPENAI_API_KEY")
 	if key == "" {
@@ -189,9 +189,9 @@ func TestIntegrationPromptBatchOpenAI(t *testing.T) {
 	}
 }
 
-// TestIntegrationSubmitWaitBatchOpenAI tests the async batch path for OpenAI:
-// SubmitBatch uploads JSONL + creates batch, WaitBatch polls + downloads results.
-// Gated by LLMKIT_RUN_SLOW_BATCH — OpenAI batches can take 5+ minutes.
+//
+//
+//
 func TestIntegrationSubmitWaitBatchOpenAI(t *testing.T) {
 	key := os.Getenv("OPENAI_API_KEY")
 	if key == "" {

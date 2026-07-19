@@ -13,55 +13,55 @@ import (
 	"github.com/aktagon/llmkit-go/v2/providers"
 )
 
-// Telemetry is the opt-in observability config (ADR-059, superseding ADR-054's
-// transport half). Attach it with Client.AddTelemetry: on every provider call —
-// success and rejection — llmkit builds an OTEL GenAI-aligned OTLP span (proto3
-// JSON) and hands the finished bytes to Export. llmkit performs no telemetry
-// network I/O and spawns no goroutine; what Export does with the bytes (enqueue
-// into an OTEL SDK, POST, drop) and all batching/backpressure/shutdown is the
-// caller's concern. Off unless attached; a nil Export is a ValidationError (the
-// honest-contract lineage — no enabled-but-no-sink state). Use HTTPExport for a
-// batteries POST. A sibling of the ADR-052 baseURL / custom-header runtime
-// overrides — a handwritten config value, not modelled in the ontology.
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
 type Telemetry struct {
-	// Export receives the finished OTLP/HTTP proto3-JSON bytes for one span,
-	// called synchronously on the post phase. Mandatory. Use HTTPExport for the
-	// batteries POST, or supply your own to bridge into an existing OTEL stack.
+	//
+	//
+	//
 	Export func([]byte)
-	// CaptureContent gates tier-2 message payloads (default false for privacy).
-	// The middleware Event does not carry payloads yet, so this reserves the
-	// semantics; content-log emission is a deferred follow-up (ADR-054 tier 2).
+	//
+	//
+	//
 	CaptureContent bool
 }
 
-// AddTelemetry enables opt-in telemetry on this client. The builder rides the
-// middleware seam, so every capability path that fires middleware emits one OTEL
-// span on the post phase. A nil Export is fail-loud: the first call is vetoed
-// with a ValidationError naming the field (Go defers construction-time
-// validation to first use, the resolveModel idiom). Returns the same *Client
-// for chaining.
+//
+//
+//
+//
+//
+//
 func (c *Client) AddTelemetry(t Telemetry) *Client {
 	mw := makeTelemetryMiddleware(t)
-	// Inject into every builder prototype that carries a middleware seam.
-	// Chain clones copy the prototype's slice, so this reaches every call.
-	// Speech/Transcription have no middleware runtime yet (ADR-049/051) and
-	// are covered when that seam lands.
+	//
+	//
+	//
+	//
 	c.Text.middleware = append(c.Text.middleware, mw)
 	c.Image.middleware = append(c.Image.middleware, mw)
 	c.Music.middleware = append(c.Music.middleware, mw)
 	c.Video.middleware = append(c.Video.middleware, mw)
 	c.Agent.middleware = append(c.Agent.middleware, mw)
 	c.Upload.middleware = append(c.Upload.middleware, mw)
-	// Client-scoped seam: the models/catalogue runtime has no per-builder
-	// middleware chain, so it fires the client list (HANDOFF-036 A3).
+	//
+	//
 	c.middleware = append(c.middleware, mw)
 	return c
 }
 
-// makeTelemetryMiddleware builds the export hook. Nil Export -> pre-phase veto
-// (fail-loud, TEL-017). Otherwise the post phase builds the OTLP payload and
-// calls Export SYNCHRONOUSLY — no goroutine, no thread (TEL-013/016). A panicking
-// callback is recovered so telemetry never surfaces to the caller (fail-open).
+//
+//
+//
+//
 func makeTelemetryMiddleware(t Telemetry) MiddlewareFn {
 	return func(ctx context.Context, e providers.Event) error {
 		if t.Export == nil {
@@ -82,11 +82,11 @@ func makeTelemetryMiddleware(t Telemetry) MiddlewareFn {
 	}
 }
 
-// buildTelemetryPayloadAt is the PURE event-level payload builder: span
-// identity + timing are injected so the parity goldens can drive a real
-// post-phase Event with fixed values. It reads e.ErrType verbatim — the kind
-// was stamped at the firePost seam, where the typed error still exists
-// (ADR-071); no classification happens here.
+//
+//
+//
+//
+//
 func buildTelemetryPayloadAt(e providers.Event, traceID, spanID, startNano, endNano string) []byte {
 	op, ok := providers.TelemetryOperationName[e.Op]
 	if !ok {
@@ -98,8 +98,8 @@ func buildTelemetryPayloadAt(e providers.Event, traceID, spanID, startNano, endN
 	)
 }
 
-// buildTelemetryPayload is the production wrapper: fresh span identity + the
-// wall clock around the pure builder.
+//
+//
 func buildTelemetryPayload(e providers.Event) []byte {
 	now := strconv.FormatInt(time.Now().UnixNano(), 10)
 	return buildTelemetryPayloadAt(e, randHex(16), randHex(8), now, now)
@@ -107,14 +107,14 @@ func buildTelemetryPayload(e providers.Event) []byte {
 
 var telemetryHTTPClient = &http.Client{Timeout: 5 * time.Second}
 
-// HTTPExport returns an Export callback that POSTs each OTLP payload to
-// endpoint + "/v1/traces" with a bounded timeout, fail-open (every network
-// error is swallowed). It spawns no background worker and needs no Close.
 //
-// Low-volume only: the POST is SYNCHRONOUS on the request path, so a slow or
-// hung collector adds up to the client timeout of latency to the call. For high
-// volume, hand your own Export callback that enqueues into your OTEL SDK's batch
-// processor instead.
+//
+//
+//
+//
+//
+//
+//
 func HTTPExport(endpoint string, headers map[string]string) func([]byte) {
 	url := strings.TrimRight(endpoint, "/") + providers.TelemetryTracesPath
 	return func(payload []byte) {
@@ -132,10 +132,10 @@ func randHex(n int) string {
 	return hex.EncodeToString(b)
 }
 
-// --- OTLP/HTTP JSON encoding (ExportTraceServiceRequest, proto3-JSON) ---
-// int64 fields (times, token counts) render as strings; traceId/spanId as hex;
-// this matches the OTLP/JSON spec and is asserted byte/value-identical across
-// all four SDKs by codegen/test_cross_sdk_telemetry_wire.py (TEL-011).
+//
+//
+//
+//
 
 type otlpAnyValue struct {
 	StringValue *string `json:"stringValue,omitempty"`
@@ -195,10 +195,10 @@ func intAttr(key string, val int) otlpKeyValue {
 	return otlpKeyValue{Key: key, Value: otlpAnyValue{IntValue: &s}}
 }
 
-// buildOTLPTraces is the PURE, deterministic OTLP-payload builder. Given the
-// call's primitives plus injectable span identity + timing, it returns the
-// exact JSON the exporter POSTs — the parity fixture calls it with fixed inputs
-// so all four SDKs are asserted value-identical.
+//
+//
+//
+//
 func buildOTLPTraces(operationName, provider, model string, inputTokens, outputTokens int, errorType, traceID, spanID, startNano, endNano string) []byte {
 	attrs := []otlpKeyValue{
 		stringAttr(providers.OtelAttrOp, operationName),

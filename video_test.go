@@ -17,7 +17,7 @@ import (
 
 const grokVideoModel = "grok-imagine-video"
 
-// fastVideoPoll shrinks the poll interval for tests and restores it on cleanup.
+//
 func fastVideoPoll(t *testing.T) {
 	t.Helper()
 	prevInterval, prevTimeout := videoPollInterval, videoPollTimeout
@@ -29,8 +29,8 @@ func fastVideoPoll(t *testing.T) {
 	})
 }
 
-// grokVideoServer serves the Grok submit + poll endpoints. The poll returns
-// `pending` for the first pendingPolls calls, then the supplied done body.
+//
+//
 func grokVideoServer(t *testing.T, pendingPolls int32, doneBody map[string]any) *httptest.Server {
 	t.Helper()
 	var polls int32
@@ -106,11 +106,11 @@ func TestSubmitAndWaitVideoGrok(t *testing.T) {
 
 const zhipuVideoModel = "cogvideox-3"
 
-// zhipuVideoServer serves the Zhipu CogVideoX submit + async-result endpoints.
-// Submit returns the poll handle as the top-level `id` (Zhipu's own
-// `request_id` is present but is NOT the poll key); the async-result poll
-// returns `task_status: PROCESSING` for the first pendingPolls calls, then the
-// supplied done body.
+//
+//
+//
+//
+//
 func zhipuVideoServer(t *testing.T, pendingPolls int32, doneBody map[string]any) *httptest.Server {
 	t.Helper()
 	var polls int32
@@ -201,12 +201,12 @@ func TestVideoWaitFailedZhipu(t *testing.T) {
 
 const viduVideoModel = "viduq3-pro"
 
-// viduVideoServer serves the Vidu (Shengshu) submit + poll endpoints. Submit
-// POST /ent/v2/text2video returns the poll handle as the top-level `task_id`
-// with state=created; the poll GET /ent/v2/tasks/{id}/creations returns
-// state=processing for the first pendingPolls calls, then the supplied done
-// body. Vidu auth uses the non-standard scheme word `Token` (Authorization:
-// Token <key>), not Bearer — asserted in-driver.
+//
+//
+//
+//
+//
+//
 func viduVideoServer(t *testing.T, pendingPolls int32, doneBody map[string]any) *httptest.Server {
 	t.Helper()
 	var polls int32
@@ -294,9 +294,9 @@ func TestVideoWaitFailedVidu(t *testing.T) {
 	}
 }
 
-// TestVideoViduRejectsImagePart asserts the text-to-video-only gate: Vidu's
-// models set supportsImageToVideo false, so an image part is rejected
-// pre-flight (image-to-video / reference2video is the deferred BUG-010 slice).
+//
+//
+//
 func TestVideoViduRejectsImagePart(t *testing.T) {
 	c := New(providers.Vidu, "test-token")
 	_, err := c.Video.Model(viduVideoModel).Image("image/png", []byte{0x89, 0x50}).Submit(context.Background(), "animate this")
@@ -307,12 +307,12 @@ func TestVideoViduRejectsImagePart(t *testing.T) {
 
 const pixverseVideoModel = "v4.5"
 
-// pixverseVideoServer serves the PixVerse submit + poll endpoints. Submit POST
-// /openapi/v2/video/text/generate returns the poll handle as the integer
-// Resp.video_id; the poll GET /openapi/v2/video/result/{id} returns numeric
-// status 5 (generating) for the first pendingPolls calls, then the supplied
-// done body. PixVerse auth uses the API-KEY header and a per-request UUID
-// Ai-trace-id header on BOTH submit and poll — both asserted in-driver.
+//
+//
+//
+//
+//
+//
 func pixverseVideoServer(t *testing.T, pendingPolls int32, doneBody map[string]any) *httptest.Server {
 	t.Helper()
 	var polls int32
@@ -409,9 +409,9 @@ func TestVideoWaitFailedPixVerse(t *testing.T) {
 	}
 }
 
-// TestVideoPixVerseRejectsImagePart asserts the text-to-video-only gate:
-// PixVerse models set supportsImageToVideo false (the img2video endpoint is not
-// wired this slice), so an image part is rejected pre-flight.
+//
+//
+//
 func TestVideoPixVerseRejectsImagePart(t *testing.T) {
 	c := New(providers.Pixverse, "test-token")
 	_, err := c.Video.Model(pixverseVideoModel).Image("image/png", []byte{0x89, 0x50}).Submit(context.Background(), "animate this")
@@ -422,10 +422,10 @@ func TestVideoPixVerseRejectsImagePart(t *testing.T) {
 
 const togetherVideoModel = "minimax/video-01-director"
 
-// togetherVideoServer serves the Together submit + poll endpoints. Submit
-// returns the poll handle as the top-level `id` with status=queued; the poll
-// GET /v2/videos/{id} returns status=in_progress for the first pendingPolls
-// calls, then the supplied done body.
+//
+//
+//
+//
 func togetherVideoServer(t *testing.T, pendingPolls int32, doneBody map[string]any) *httptest.Server {
 	t.Helper()
 	var polls int32
@@ -516,12 +516,12 @@ func TestVideoWaitCancelledTogether(t *testing.T) {
 
 const qwenVideoModel = "wan2.2-t2v-plus"
 
-// qwenVideoServer serves the DashScope (Qwen) submit + poll endpoints. Submit
-// returns the poll handle as output.task_id (the dotted-path handle) with
-// output.task_status=PENDING and asserts the nested {model, input:{prompt}}
-// body plus the required X-DashScope-Async: enable header. The poll GET
-// /api/v1/tasks/{id} returns output.task_status=RUNNING for the first
-// pendingPolls calls, then the supplied done body.
+//
+//
+//
+//
+//
+//
 func qwenVideoServer(t *testing.T, pendingPolls int32, doneBody map[string]any) *httptest.Server {
 	t.Helper()
 	var polls int32
@@ -626,10 +626,10 @@ func TestVideoWaitFailedQwen(t *testing.T) {
 
 const minimaxVideoModel = "MiniMax-Hailuo-2.3"
 
-// minimaxVideoServer serves the MiniMax two-hop flow: submit -> {task_id};
-// query poll returns Processing for the first pendingPolls calls, then
-// {status:Success, file_id}; the file-retrieve hop returns the download URL.
-// file_id is served as a JSON number (minimax encodes it as an integer).
+//
+//
+//
+//
 func minimaxVideoServer(t *testing.T, pendingPolls int32, downloadURL string, failStatus bool) *httptest.Server {
 	t.Helper()
 	var polls int32
@@ -720,14 +720,14 @@ func TestVideoWaitFailedMinimax(t *testing.T) {
 
 const veoVideoModel = "veo-3.1-generate-preview"
 
-// veoVideoServer serves the Google Veo LRO flow: submit ->
-// {name:"models/.../operations/op-1"}; operation poll returns {done:false} for
-// the first pendingPolls calls, then a done op whose response carries the
-// Files-API video.uri (download delivery). The download hop GETs that uri and
-// returns raw mp4 bytes. Every hop must carry the ?key= query-param auth (Google
-// is the first video provider that is NOT bearer-header). The download uri is
-// served with a pre-existing ?alt=media query so the test also witnesses the
-// ?->& auth-append branch. When failOp is set the done op carries an error.
+//
+//
+//
+//
+//
+//
+//
+//
 func veoVideoServer(t *testing.T, pendingPolls int32, videoBytes []byte, failOp bool) *httptest.Server {
 	t.Helper()
 	var polls int32
@@ -844,13 +844,13 @@ func TestVideoWaitFailedVeo(t *testing.T) {
 
 const vertexOperationName = "projects/test-project/locations/us-central1/operations/op-1"
 
-// vertexVideoServer serves the Vertex Veo predictLongRunning + fetchPredictOperation
-// endpoints. Vertex is the FIRST POST-poll provider (every other provider GETs
-// the poll): the operation is fetched with a POST to {model}:fetchPredictOperation
-// carrying {operationName}. Delivery is download with NO fetch hop — the bytes
-// arrive inline as base64 in the poll body (response.videos[0].bytesBase64Encoded).
-// The poll returns done=false for the first pendingPolls calls, then either the
-// finished video (videoBytes) or, when failOp is set, a done op carrying an error.
+//
+//
+//
+//
+//
+//
+//
 func vertexVideoServer(t *testing.T, pendingPolls int32, videoBytes []byte, failOp bool, omitBytes bool) *httptest.Server {
 	t.Helper()
 	var polls int32
@@ -990,13 +990,13 @@ const novaReelModel = "amazon.nova-reel-v1:0"
 const novaReelARN = "arn:aws:bedrock:us-east-1:123456789012:async-invoke/abc123def456"
 const novaReelOutputURI = "s3://my-bucket/out/"
 
-// bedrockVideoServer serves the Nova Reel start-async-invoke + get-async-invoke
-// endpoints. Bedrock is the FIRST SigV4-signed video provider (every other is a
-// bearer header) and the FIRST output-uri delivery (the provider writes the mp4
-// to the caller's S3 bucket; the SDK never downloads). Submit returns the poll
-// handle as the top-level `invocationArn`; the poll returns status=InProgress
-// for the first pendingPolls calls, then the supplied done body. When failMsg is
-// non-empty the poll returns a Failed status carrying it.
+//
+//
+//
+//
+//
+//
+//
 func bedrockVideoServer(t *testing.T, pendingPolls int32, doneBody map[string]any, failMsg string) *httptest.Server {
 	t.Helper()
 	var polls int32
@@ -1026,9 +1026,9 @@ func bedrockVideoServer(t *testing.T, pendingPolls int32, doneBody map[string]an
 			}
 			json.NewEncoder(w).Encode(map[string]any{"invocationArn": novaReelARN})
 		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/async-invoke/"):
-			// The ARN is percent-encoded as one path segment on the wire; the
-			// server's decoded Path restores the ':' and '/'. Witness that the
-			// full ARN round-trips so the encoding is not lossy.
+			//
+			//
+			//
 			if !strings.Contains(r.URL.Path, novaReelARN) {
 				t.Errorf("expected the ARN to round-trip in the poll path, got %q", r.URL.Path)
 			}
@@ -1089,8 +1089,8 @@ func TestSubmitAndWaitVideoBedrock(t *testing.T) {
 }
 
 func TestVideoBedrockRequiresOutputURI(t *testing.T) {
-	// VID-005: an output-uri provider must reject a submit that omits the caller
-	// S3 URI before any HTTP call. No server: validation fails pre-flight.
+	//
+	//
 	c := New(providers.Bedrock, "test-token")
 
 	_, err := c.Video.Model(novaReelModel).Submit(context.Background(), "a drone shot over the alps")
@@ -1129,8 +1129,8 @@ func TestVideoWaitFailedBedrock(t *testing.T) {
 
 func TestVideoBedrockCompletedNoURI(t *testing.T) {
 	fastVideoPoll(t)
-	// A Completed invocation that echoes no output s3 uri must error, not return
-	// a silent empty success (mirrors the Veo done+no-uri guard).
+	//
+	//
 	server := bedrockVideoServer(t, 0, map[string]any{"status": "Completed"}, "")
 	defer server.Close()
 
@@ -1218,12 +1218,12 @@ func TestVideoUnknownModel(t *testing.T) {
 	}
 }
 
-// TestMaxInputImagesArity locks the BUG-011 contract: MaxInputImages is the
-// image count llmkit serializes when the wire shape fixes it (an llmkit-side
-// arity fact), queryable through the config. Grok image-to-video has a single
-// seed slot -> 1. Image-edit takes an array of references, so no image model
-// imposes an llmkit limit -> 0 (the provider decides volume; we do NOT assert
-// unverified provider policy maxima).
+//
+//
+//
+//
+//
+//
 func TestMaxInputImagesArity(t *testing.T) {
 	byModel := func(models []providers.VideoModelDef, id string) int {
 		for _, m := range models {
@@ -1272,13 +1272,13 @@ func TestVideoRejectsLyricsPart(t *testing.T) {
 	}
 }
 
-// The fixed 1x1 PNG seed frame (single brick-red pixel), shared with the
-// image-edit wire fixture. base64 of the bytes the image-to-video path inlines.
+//
+//
 const grokSeedPNGBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGM4YWQEAALyAS2saifrAAAAAElFTkSuQmCC"
 
-// TestVideoGrokImageToVideoSubmitBody exercises the BUG-010 seed path end to
-// end through the builder: .Image(...) on Video appends an image Part, Submit
-// inlines it as image.url, and the round-trip reaches a done video.
+//
+//
+//
 func TestVideoGrokImageToVideoSubmitBody(t *testing.T) {
 	fastVideoPoll(t)
 	png, err := base64.StdEncoding.DecodeString(grokSeedPNGBase64)
@@ -1333,10 +1333,10 @@ func TestVideoGrokImageToVideoSubmitBody(t *testing.T) {
 	}
 }
 
-// TestVideoRejectsImagePartOnTextOnlyModel pins the BUG-010 capability gate: a
-// model whose VideoModelDef does not set SupportsImageToVideo (every model but
-// grok-imagine-video this slice) rejects an image part pre-flight rather than
-// dropping it at wire time.
+//
+//
+//
+//
 func TestVideoRejectsImagePartOnTextOnlyModel(t *testing.T) {
 	png, err := base64.StdEncoding.DecodeString(grokSeedPNGBase64)
 	if err != nil {
@@ -1351,8 +1351,8 @@ func TestVideoRejectsImagePartOnTextOnlyModel(t *testing.T) {
 	}
 }
 
-// TestVideoRejectsMultipleSeedFrames pins the single-seed contract: Grok
-// Imagine animates one seed frame, so a second image part is a caller error.
+//
+//
 func TestVideoRejectsMultipleSeedFrames(t *testing.T) {
 	png, err := base64.StdEncoding.DecodeString(grokSeedPNGBase64)
 	if err != nil {
@@ -1370,11 +1370,11 @@ func TestVideoRejectsMultipleSeedFrames(t *testing.T) {
 func TestVideoXOR(t *testing.T) {
 	c := New(providers.Grok, "test-token")
 	p := c.provider.toProvider(grokVideoModel)
-	// neither
+	//
 	if _, err := submitVideo(context.Background(), p, VideoRequest{Model: grokVideoModel}); err == nil {
 		t.Error("expected error when neither Prompt nor Parts set")
 	}
-	// both
+	//
 	both := VideoRequest{Model: grokVideoModel, Prompt: "x", Parts: []Part{{Text: "y"}}}
 	if _, err := submitVideo(context.Background(), p, both); err == nil {
 		t.Error("expected error when both Prompt and Parts set")
@@ -1390,8 +1390,8 @@ func TestVideoTextChainMethod(t *testing.T) {
 	c := New(providers.Grok, "test-token")
 	c.provider.baseURL = server.URL
 
-	// Exercises the *Video.Text chain method (Parts accumulator) with an empty
-	// finalText, rather than the finalText sugar the other tests use.
+	//
+	//
 	h, err := c.Video.Model(grokVideoModel).Text("a calm lake at dawn").Submit(context.Background(), "")
 	if err != nil {
 		t.Fatal(err)

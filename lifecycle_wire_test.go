@@ -11,24 +11,24 @@ import (
 	"testing"
 )
 
-// Cross-SDK LIFECYCLE conformance (ADR-062 slice 1 / HANDOFF-032 step 5).
-// The request-wire suite (request_wire_test.go) asserts the OUTBOUND bytes are
-// identical across SDKs; this suite asserts the INBOUND classification is: given
-// the same provider poll response, every SDK's job engine normalizes it to the
-// same terminal JobStatus. It is the parity floor for the ADR-062 poll engine —
-// the seam the four hand-written runtimes converge on.
 //
-// One golden per scenario, shared by all four SDKs:
-//   codegen/testdata/wire/lifecycle/v1/<fixture>.json
-// Each SDK drops target/wire/lifecycle/<fixture>/{sdk}.json by running handle.Poll
-// (ONE round-trip — deterministic, no loop timing) against a scripted mock, then
-// normalizing the JobStatus to {state, hasResult, rawStatus, cause}. Message is
-// intentionally omitted: batch carries no error-message path, so asserting it
-// would test absence, not parity. codegen/test_cross_sdk_lifecycle.py compares.
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
 
-// lifecycleArtifact is the normalized, cross-SDK-comparable projection of a
-// terminal JobStatus. Booleans/strings only — no provider payload — so the four
-// SDKs can agree byte-for-byte regardless of their internal result types.
+//
+//
+//
 type lifecycleArtifact struct {
 	State     string                  `json:"state"`
 	HasResult bool                    `json:"hasResult"`
@@ -41,8 +41,8 @@ type lifecycleArtifactCause struct {
 	TimedOut bool   `json:"timedOut"`
 }
 
-// lifecycleMockServer serves the OpenAI two-hop batch shape: GET the batch
-// status, and (for the succeeded fixture) GET the result file content as JSONL.
+//
+//
 func lifecycleMockServer(t *testing.T, status, outputFileID string) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -54,7 +54,7 @@ func lifecycleMockServer(t *testing.T, status, outputFileID string) *httptest.Se
 			}
 			_ = json.NewEncoder(w).Encode(body)
 		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/v1/files/"):
-			// One JSONL result line, body wrapped at response.body (OpenAI shape).
+			//
 			line := `{"custom_id":"req-0","response":{"body":{"choices":[{"message":{"role":"assistant","content":"ok"}}],"usage":{"prompt_tokens":1,"completion_tokens":1}}}}`
 			_, _ = w.Write([]byte(line + "\n"))
 		default:

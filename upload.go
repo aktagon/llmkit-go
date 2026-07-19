@@ -10,14 +10,14 @@ import (
 	"github.com/aktagon/llmkit-go/v2/providers"
 )
 
-// Run uploads the configured file to the client's provider and
-// returns a File reference suitable for inclusion in a *Text.File()
-// chain. Path and Bytes are mutually exclusive — Run validates
-// exactly one is set. When Path is used, the filename in the
-// multipart form is derived from filepath.Base(path) unless
-// Filename() overrides it. When Bytes is used, Filename() is
-// required (no path to derive a name from). MimeType() overrides
-// the default detection when set.
+//
+//
+//
+//
+//
+//
+//
+//
 func (b *Upload) Run(ctx context.Context) (File, error) {
 	hasPath := b.path != ""
 	hasBytes := len(b.bytes) > 0
@@ -29,8 +29,8 @@ func (b *Upload) Run(ctx context.Context) (File, error) {
 	}
 
 	provider := b.client.provider.toProvider("")
-	// Validate provider first — keeps "unknown provider" / "no upload"
-	// failures cheap and offline (no file read on the failure path).
+	//
+	//
 	if err := validateProvider(provider); err != nil {
 		return File{}, err
 	}
@@ -45,10 +45,10 @@ func (b *Upload) Run(ctx context.Context) (File, error) {
 	var name string
 
 	if hasPath {
-		// Stat first so we can reject pathologically large files before
-		// allocating. The 1GB cap is well above any provider's actual
-		// upload limit (OpenAI: 512MB, Anthropic: 32MB) and prevents
-		// trivial OOM via `c.Upload().Path("/dev/zero").Run(ctx)`.
+		//
+		//
+		//
+		//
 		const maxUploadBytes = 1 << 30 // 1GB
 		info, err := os.Stat(b.path)
 		if err != nil {

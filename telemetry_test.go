@@ -16,7 +16,7 @@ import (
 	"github.com/aktagon/llmkit-go/v2/providers"
 )
 
-// Fixed span identity + timing for the deterministic parity fixtures (TEL-011).
+//
 const (
 	telTraceID   = "5b8efff798038103d269b633813fc60c"
 	telSpanID    = "eee19b7ec3c1b174"
@@ -24,9 +24,9 @@ const (
 	telEndNano   = "1700000001000000000"
 )
 
-// assertTelemetryWireGolden drops the per-SDK OTLP artifact for the cross-SDK
-// comparator (codegen/test_cross_sdk_telemetry_wire.py) and asserts it is
-// JSON-value-equal to the shared golden.
+//
+//
+//
 func assertTelemetryWireGolden(t *testing.T, fixture string, payload []byte) {
 	t.Helper()
 	repoRoot := mustRepoRoot(t)
@@ -75,10 +75,10 @@ func TestTelemetryWire_Rejection(t *testing.T) {
 	assertTelemetryWireGolden(t, "telemetry-rejection", payload)
 }
 
-// TestTelemetryWire_Error exercises classification end-to-end (ADR-071
-// ETY-004): a typed API error routes through the REAL firePost stamping seam,
-// and the stamped event renders to the shared telemetry-error golden via the
-// pure builder — no error.type is hand-fed anywhere.
+//
+//
+//
+//
 func TestTelemetryWire_Error(t *testing.T) {
 	base := providers.Event{
 		Op:       providers.OpLLMRequest,
@@ -100,9 +100,9 @@ func TestTelemetryWire_Error(t *testing.T) {
 	assertTelemetryWireGolden(t, "telemetry-error", payload)
 }
 
-// TestEventErrType pins the structural classification contract (ADR-071):
-// APIError-kind -> api_error, ValidationError-kind (including wrapped) ->
-// validation_error, everything else -> error.
+//
+//
+//
 func TestEventErrType(t *testing.T) {
 	cases := []struct {
 		name string
@@ -121,9 +121,9 @@ func TestEventErrType(t *testing.T) {
 	}
 }
 
-// TestTelemetry_ExportInvokedSynchronously asserts the post phase builds the
-// OTLP payload and hands it to Export exactly once, synchronously — no goroutine
-// is spawned (ADR-059 TEL-013/016). The pre phase never exports.
+//
+//
+//
 func TestTelemetry_ExportInvokedSynchronously(t *testing.T) {
 	var got [][]byte
 	mw := makeTelemetryMiddleware(Telemetry{Export: func(b []byte) { got = append(got, b) }})
@@ -143,7 +143,7 @@ func TestTelemetry_ExportInvokedSynchronously(t *testing.T) {
 		Model:    "gpt-4o",
 		Usage:    providers.Usage{Input: 10, Output: 20},
 	}
-	// Synchronous export must not grow the goroutine count across N calls.
+	//
 	before := runtime.NumGoroutine()
 	const n = 50
 	for i := 0; i < n; i++ {
@@ -166,10 +166,10 @@ func TestTelemetry_ExportInvokedSynchronously(t *testing.T) {
 	}
 }
 
-// TestTelemetry_HTTPExportPostsToCollector asserts the batteries HTTPExport
-// convenience POSTs the OTLP payload to <endpoint>/v1/traces with caller headers.
-// The POST is synchronous, so the collector has received it by the time the
-// middleware returns.
+//
+//
+//
+//
 func TestTelemetry_HTTPExportPostsToCollector(t *testing.T) {
 	var (
 		gotURL string
@@ -213,9 +213,9 @@ func TestTelemetry_HTTPExportPostsToCollector(t *testing.T) {
 	}
 }
 
-// TestTelemetry_NilExportFailsLoud asserts the honest-contract lineage (TEL-017):
-// a telemetry config with no Export callback vetoes the call (pre phase) with a
-// ValidationError naming the field.
+//
+//
+//
 func TestTelemetry_NilExportFailsLoud(t *testing.T) {
 	mw := makeTelemetryMiddleware(Telemetry{Export: nil})
 	err := mw(context.Background(), providers.Event{Phase: providers.PhasePre, Op: providers.OpLLMRequest})
@@ -231,8 +231,8 @@ func TestTelemetry_NilExportFailsLoud(t *testing.T) {
 	}
 }
 
-// TestTelemetry_AddTelemetryInjects asserts AddTelemetry attaches the exporter
-// to every builder prototype that carries a middleware seam, so calls emit.
+//
+//
 func TestTelemetry_AddTelemetryInjects(t *testing.T) {
 	c := Openai("k")
 	before := len(c.Text.middleware)
@@ -254,8 +254,8 @@ func TestTelemetry_AddTelemetryInjects(t *testing.T) {
 	}
 }
 
-// TestTelemetry_HTTPExportFailsOpen asserts the batteries POST swallows a dead
-// endpoint: the middleware never surfaces a telemetry transport error.
+//
+//
 func TestTelemetry_HTTPExportFailsOpen(t *testing.T) {
 	mw := makeTelemetryMiddleware(Telemetry{Export: HTTPExport("http://127.0.0.1:1", nil)})
 	ev := providers.Event{Op: providers.OpLLMRequest, Phase: providers.PhasePost, Provider: "openai", Model: "gpt-4o"}

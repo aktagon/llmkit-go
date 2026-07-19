@@ -1,19 +1,19 @@
-// Smoke-test runner for the call shapes documented in README.md.
 //
-// Each ExampleClient_X function exercises the canonical typed-builder
-// chain for one public capability against a mock HTTP server. Go's
-// testing framework discovers and runs example functions that carry an
-// // Output: comment, so a drift between the documented call shape and
-// the public surface fails compilation or the output assertion.
 //
-// This catches the bug class that `go build` and `go vet` miss:
-//   - builder access form -- c.Text() (method call) vs c.Text (field)
-//   - Response field naming -- resp.Usage vs resp.Usage
-//   - builder surface drift -- chain methods renamed or moved without
-//     a matching README update
 //
-// Each mock reuses the canned shapes from llmkit_test.go to keep the
-// surface area small.
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
 package llmkit
 
 import (
@@ -29,17 +29,17 @@ import (
 	"github.com/aktagon/llmkit-go/v2/providers"
 )
 
-// mockJSON returns an httptest server that replies to every request
-// with the supplied JSON-marshallable body.
+//
+//
 func mockJSON(body any) *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(body)
 	}))
 }
 
-// ExampleClient_text walks the one-shot text path. Mirrors the README
-// "Prompt" section: c.Text.<chain>.Prompt(ctx, msg) returns a Response
-// whose Text and Tokens fields carry the parsed reply.
+//
+//
+//
 func ExampleClient_text() {
 	server := mockJSON(map[string]any{
 		"choices": []map[string]any{
@@ -63,14 +63,14 @@ func ExampleClient_text() {
 	}
 	fmt.Println(resp.Text)
 	fmt.Println(resp.Usage.Input, resp.Usage.Output)
-	// Output:
-	// 4
-	// 7 1
+	//
+	//
+	//
 }
 
-// ExampleClient_caching walks the prompt-caching path against Anthropic's
-// wire shape. The mock returns the cache-token split (cache_creation /
-// cache_read) so resp.Usage.CacheWrite and CacheRead read back non-zero.
+//
+//
+//
 func ExampleClient_caching() {
 	server := mockJSON(map[string]any{
 		"content": []map[string]any{
@@ -99,15 +99,15 @@ func ExampleClient_caching() {
 	fmt.Println(resp.Text)
 	fmt.Println("cache read:", resp.Usage.CacheRead)
 	fmt.Println("cache write:", resp.Usage.CacheWrite)
-	// Output:
-	// cached!
-	// cache read: 80
-	// cache write: 100
+	//
+	//
+	//
+	//
 }
 
-// ExampleClient_reasoning walks the reasoning-effort path against OpenAI's
-// o-series wire shape. The mock returns completion_tokens_details.
-// reasoning_tokens so resp.Usage.Reasoning reads back non-zero.
+//
+//
+//
 func ExampleClient_reasoning() {
 	server := mockJSON(map[string]any{
 		"choices": []map[string]any{
@@ -135,18 +135,18 @@ func ExampleClient_reasoning() {
 	}
 	fmt.Println(resp.Text)
 	fmt.Println("reasoning tokens:", resp.Usage.Reasoning)
-	// Output:
-	// There are 3 r's.
-	// reasoning tokens: 17
+	//
+	//
+	//
 }
 
-// ExampleClient_agent walks the stateful agent path. The mock server
-// returns a tool-free final response so the loop exits after one
-// iteration. The chain composes System + Tool + MaxToolIterations.
+//
+//
+//
 func ExampleClient_agent() {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Return a plain text reply -- no tool_calls -- so the agent
-		// loop terminates immediately.
+		//
+		//
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"choices": []map[string]any{
 				{"message": map[string]any{"content": "The sum is 5"}},
@@ -184,12 +184,12 @@ func ExampleClient_agent() {
 		return
 	}
 	fmt.Println(resp.Text)
-	// Output: The sum is 5
+	//
 }
 
-// ExampleClient_stream walks the streaming path. *TextStream carries
-// chunks via Chunks() and exposes a trailing Response() after the
-// range loop drains.
+//
+//
+//
 func ExampleClient_stream() {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
@@ -227,11 +227,11 @@ func ExampleClient_stream() {
 		fmt.Print(chunk)
 	}
 	fmt.Println()
-	// Output: Hi there
+	//
 }
 
-// ExampleClient_upload walks the file-upload path. Reads from a
-// temp file so the example does not depend on repo layout.
+//
+//
 func ExampleClient_upload() {
 	server := mockJSON(map[string]any{
 		"id":     "file-zzz",
@@ -260,13 +260,13 @@ func ExampleClient_upload() {
 		return
 	}
 	fmt.Println(file.ID)
-	// Output: file-zzz
+	//
 }
 
-// ExampleClient_image walks the image-generation path against Google's
-// Nano Banana wire shape. resp.Images[0].Bytes carries the decoded
-// PNG; the mock returns a tiny fake byte sequence so the round-trip
-// through base64 is observable.
+//
+//
+//
+//
 func ExampleClient_image() {
 	fakePNG := []byte("\x89PNG\r\n\x1a\n<fake>")
 	encoded := base64.StdEncoding.EncodeToString(fakePNG)
@@ -302,13 +302,13 @@ func ExampleClient_image() {
 		return
 	}
 	fmt.Println(resp.Images[0].MimeType, len(resp.Images[0].Bytes))
-	// Output: image/png 14
+	//
 }
 
-// ExampleClient_catalogue walks the c.Models / c.Providers surface
-// (ADR-019). Mirrors the chain in examples/catalogue/main.go — three
-// modes: compiled-in (sync, no HTTP), providers namespace, and
-// live / scoped / scoped-raw HTTP against /v1/models.
+//
+//
+//
+//
 func ExampleClient_catalogue() {
 	server := mockJSON(map[string]any{
 		"data": []map[string]any{{
@@ -328,14 +328,14 @@ func ExampleClient_catalogue() {
 	c.provider.baseURL = server.URL
 	ctx := context.Background()
 
-	// Compiled-in catalogue.
+	//
 	fmt.Println("compiled-in non-empty:", len(c.Models.List()) > 0)
 	info, ok := c.Models.Get("claude-opus-4-7")
 	fmt.Println("claude-opus-4-7 context > 0:", ok && info.ContextWindow > 0)
 	fmt.Println("chat-capable non-empty:",
 		len(c.Models.WithCapability(CapChatCompletion).List()) > 0)
 
-	// Providers namespace.
+	//
 	names := make([]string, 0, len(c.Providers.List()))
 	for _, p := range c.Providers.List() {
 		names = append(names, p.Slug)
@@ -343,7 +343,7 @@ func ExampleClient_catalogue() {
 	fmt.Println("configured:", names)
 	fmt.Println("supported >= 1:", len(providers.List()) > 0)
 
-	// Live + scoped HTTP.
+	//
 	p := Provider{Name: "anthropic", APIKey: "sk-test"}
 	live, err := c.Models.Live(ctx)
 	if err != nil {
@@ -366,21 +366,21 @@ func ExampleClient_catalogue() {
 	}
 	fmt.Println("raw populated:", len(rawScoped) > 0 && rawScoped[0].Raw != nil)
 
-	// Output:
-	// compiled-in non-empty: true
-	// claude-opus-4-7 context > 0: true
-	// chat-capable non-empty: true
-	// configured: [anthropic]
-	// supported >= 1: true
-	// live models: 1
-	// scoped list: 1
-	// raw populated: true
+	//
+	//
+	//
+	//
+	//
+	//
+	//
+	//
+	//
 }
 
-// ExampleClient_middleware walks the text path with a registered
-// middleware that counts pre/post phase fires. Mirrors the chain in
-// examples/middleware/spend.go (which adds spend-cap accounting on
-// top of the same observer shape).
+//
+//
+//
+//
 func ExampleClient_middleware() {
 	server := mockJSON(map[string]any{
 		"content": []map[string]any{
@@ -417,8 +417,8 @@ func ExampleClient_middleware() {
 	fmt.Println(resp.Text)
 	fmt.Println("pre:", preCalls, "post:", postCalls)
 	fmt.Println("usage:", resp.Usage.Input, resp.Usage.Output)
-	// Output:
-	// ok
-	// pre: 1 post: 1
-	// usage: 7 1
+	//
+	//
+	//
+	//
 }

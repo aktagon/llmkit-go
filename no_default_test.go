@@ -6,10 +6,10 @@ import (
 	"testing"
 )
 
-// ADR-031 honest no-default contract: local daemons declare no registry
-// default — what a daemon serves is runtime inventory — so a missing model
-// choice surfaces an instructive ValidationError instead of guessing a model
-// the daemon may not have pulled (the BUG-009 guess-then-404).
+//
+//
+//
+//
 func TestNoDefaultContractLocalDaemons(t *testing.T) {
 	ctx := context.Background()
 
@@ -25,8 +25,8 @@ func TestNoDefaultContractLocalDaemons(t *testing.T) {
 		t.Errorf("message %q does not name the provider", ve.Message)
 	}
 
-	// Registry facts behind the contract: the five locals declare no
-	// default; every cloud provider declares one.
+	//
+	//
 	locals := map[string]bool{"ollama": true, "vllm": true, "llamacpp": true, "lmstudio": true, "jan": true}
 	for name, cfg := range providerSpecs() {
 		if locals[name] && cfg.DefaultModel != "" {

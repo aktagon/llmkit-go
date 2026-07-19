@@ -10,8 +10,8 @@ import (
 	"github.com/aktagon/llmkit-go/v2/providers"
 )
 
-// applyCaching mutates the request body to enable caching based on the provider's mode.
-// Dispatches on CachingDef.Mode — each branch follows the behavioral spec in rdfs:comment.
+//
+//
 func applyCaching(ctx context.Context, body map[string]any, p Provider, o *options, cfg providerSpec) error {
 	cc := providers.CachingConfig(p.Name)
 	if cc == nil {
@@ -20,7 +20,7 @@ func applyCaching(ctx context.Context, body map[string]any, p Provider, o *optio
 
 	switch cc.Mode {
 	case providers.CachingAutomatic:
-		// No request mutation needed — provider handles caching automatically.
+		//
 		return nil
 
 	case providers.CachingExplicit:
@@ -34,15 +34,15 @@ func applyCaching(ctx context.Context, body map[string]any, p Provider, o *optio
 	}
 }
 
-// applyExplicitCaching adds cache_control annotation to the system message.
-// Behavioral spec from rdfs:comment on llm:ExplicitCaching:
-//  1. Find the last content block in the system message array.
-//  2. Add cache_control: {type: CachingDef.ControlType} to that block.
-//  3. If no system message, skip silently.
+//
+//
+//
+//
+//
 func applyExplicitCaching(body map[string]any, cc *providers.CachingDef, cfg providerSpec) error {
 	switch cfg.SystemPlacement {
 	case providers.PlacementTopLevelField:
-		// Anthropic: system is a top-level string. Wrap it as content blocks with cache_control.
+		//
 		sys, ok := body["system"]
 		if !ok || sys == "" {
 			return nil
@@ -63,7 +63,7 @@ func applyExplicitCaching(body map[string]any, cc *providers.CachingDef, cfg pro
 		return nil
 
 	case providers.PlacementMessageInArray:
-		// System in messages array: find the system message and annotate its content.
+		//
 		msgs, ok := body["messages"].([]any)
 		if !ok || len(msgs) == 0 {
 			return nil
@@ -96,20 +96,20 @@ func applyExplicitCaching(body map[string]any, cc *providers.CachingDef, cfg pro
 	}
 }
 
-// applyResourceCaching creates a cached content resource via the provider's lifecycle API.
-// Behavioral spec from rdfs:comment on llm:ResourceCaching:
-//  1. POST system prompt + model + TTL to Lifecycle.CreateEndpoint.
-//  2. Extract resource ID from response at Lifecycle.ResponseIdPath.
-//  3. Set body[Lifecycle.ReferenceField] = resource ID.
-//  4. Remove system prompt from main request body.
+//
+//
+//
+//
+//
+//
 func applyResourceCaching(ctx context.Context, body map[string]any, p Provider, o *options, cc *providers.CachingDef, cfg providerSpec) error {
 	lc := cc.Lifecycle
 	if lc == nil {
 		return fmt.Errorf("resource caching requires lifecycle config")
 	}
 
-	// Determine model. Both-empty is rejected by resolveModel at every
-	// entry point before caching applies.
+	//
+	//
 	model, _ := resolveModel(p, cfg)
 
 	baseEvent := providers.Event{
@@ -122,19 +122,19 @@ func applyResourceCaching(ctx context.Context, body map[string]any, p Provider, 
 		return err
 	}
 
-	// Determine TTL
+	//
 	ttl := cc.DefaultTTL
 	if o.cacheTTL > 0 {
 		ttl = strconv.Itoa(int(o.cacheTTL.Seconds()))
 	}
 
-	// Build cached content creation request
+	//
 	createBody := map[string]any{
 		"model": "models/" + model,
 		"ttl":   ttl + "s",
 	}
 
-	// Extract system prompt from body
+	//
 	if sysInstr, ok := body["system_instruction"]; ok {
 		createBody["contents"] = []map[string]any{
 			{"role": "user", "parts": []map[string]any{{"text": "cache"}}},
@@ -152,7 +152,7 @@ func applyResourceCaching(ctx context.Context, body map[string]any, p Provider, 
 		return wrapped
 	}
 
-	// Build URL
+	//
 	base := p.BaseURL
 	if base == "" {
 		base = cfg.BaseURL
@@ -172,11 +172,11 @@ func applyResourceCaching(ctx context.Context, body map[string]any, p Provider, 
 
 	respBody, err := doPost(ctx, o.httpClient, createURL, createJSON, headers)
 	if err != nil {
-		// Surface the provider's own error envelope (e.g. Gemini's
-		// "Cached content is too small ... min_total_token_count=1024")
-		// rather than the raw body. Caching is optional but must fail
-		// honestly: llmkit never invents the provider's size floor, it
-		// reports whatever the provider rejected with.
+		//
+		//
+		//
+		//
+		//
 		if apiErr, ok := err.(*APIError); ok && respBody != nil {
 			err = parseError(p.Name, apiErr.StatusCode, respBody, nil)
 		}
@@ -208,7 +208,7 @@ func applyResourceCaching(ctx context.Context, body map[string]any, p Provider, 
 		return err
 	}
 
-	// Set reference field and remove system instruction from main body
+	//
 	body[lc.ReferenceField] = resourceID
 	delete(body, "system_instruction")
 
@@ -218,7 +218,7 @@ func applyResourceCaching(ctx context.Context, body map[string]any, p Provider, 
 	return nil
 }
 
-// extractCacheUsage extracts cache token counts from a provider response.
+//
 func extractCacheUsage(raw map[string]any, provider string) (creation, read int) {
 	creationPath, readPath := providers.CacheUsagePaths(provider)
 	if creationPath != "" {

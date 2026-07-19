@@ -8,19 +8,19 @@ import (
 	"github.com/aktagon/llmkit-go/v2/providers"
 )
 
-// =============================================================================
-// Transform selection — derive which transform to use from ProviderSpec
-// =============================================================================
+//
+//
+//
 
-// Transform selection switches on the ChatWireShape discriminant (ADR-055):
-// a single declared fact per provider replaces the old isBedrock/SystemPlacement
-// inference (ADR-047), which permitted the SigV4+non-Bedrock illegal state. The
-// OpenAI and Anthropic families share the flat {messages} envelope, so they fall
-// through to the default arm; the OpenAI-vs-Anthropic split (tool arg format,
-// content-part encoding) stays keyed on its own ToolCallConfig/ChatWireShape
-// facts, not on system placement. ChatResponsesOpenAI has no arm yet (Phase B).
+//
+//
+//
+//
+//
+//
+//
 
-// selectMessageTransform picks the message builder based on the chat wire shape.
+//
 func selectMessageTransform(cfg providerSpec) messageTransformFunc {
 	switch cfg.ChatWireShape {
 	case providers.ChatBedrock:
@@ -34,15 +34,15 @@ func selectMessageTransform(cfg providerSpec) messageTransformFunc {
 	}
 }
 
-// selectToolDefTransform picks the tool definition builder.
+//
 func selectToolDefTransform(cfg providerSpec) toolDefTransformFunc {
 	switch cfg.ChatWireShape {
 	case providers.ChatBedrock:
 		return transformBedrockToolDefs
 	case providers.ChatGoogle:
-		// Google carries tool params under a per-provider wire field
-		// (ADR-025): "parametersJsonSchema" to accept native JSON Schema
-		// verbatim, vs the OpenAPI-3.0-subset "parameters" default.
+		//
+		//
+		//
 		field := "parameters"
 		if tc := providers.ToolCallConfig(cfg.Name); tc != nil && tc.ParamsWireField != "" {
 			field = tc.ParamsWireField
@@ -58,7 +58,7 @@ func selectToolDefTransform(cfg providerSpec) toolDefTransformFunc {
 	return transformOpenAIFunctions
 }
 
-// selectToolCallTransform picks the tool call message builder.
+//
 func selectToolCallTransform(cfg providerSpec) toolCallTransformFunc {
 	switch cfg.ChatWireShape {
 	case providers.ChatBedrock:
@@ -73,7 +73,7 @@ func selectToolCallTransform(cfg providerSpec) toolCallTransformFunc {
 	return transformOpenAIToolCallMsg
 }
 
-// selectToolResultTransform picks the tool result message builder.
+//
 func selectToolResultTransform(cfg providerSpec) toolResultTransformFunc {
 	switch cfg.ChatWireShape {
 	case providers.ChatBedrock:
@@ -88,7 +88,7 @@ func selectToolResultTransform(cfg providerSpec) toolResultTransformFunc {
 	return transformOpenAIToolResultMsg
 }
 
-// selectToolCallExtractor picks the tool call parser for responses.
+//
 func selectToolCallExtractor(cfg providerSpec) toolCallExtractFunc {
 	switch cfg.ChatWireShape {
 	case providers.ChatBedrock:
@@ -103,16 +103,16 @@ func selectToolCallExtractor(cfg providerSpec) toolCallExtractFunc {
 	return extractOpenAIToolCalls
 }
 
-// =============================================================================
-// Internal message sum (ADR-026 PIPE-007/008)
-// =============================================================================
+//
+//
+//
 
-// msg is the internal message representation: a sum that is *exactly one of*
-// text, tool-calls, or tool-result. The public Message (structs.go) is a flat
-// product that can encode an illegal multi-carrier combination; this union
-// cannot, so the transforms below dispatch on the concrete type with no
-// silent-drop branch. The unexported marker keeps the variant set sealed to
-// this package.
+//
+//
+//
+//
+//
+//
 type msg interface{ isMsg() }
 
 type msgText struct {
@@ -132,12 +132,12 @@ func (msgText) isMsg()   {}
 func (msgCalls) isMsg()  {}
 func (msgResult) isMsg() {}
 
-// toInternal converts the public, untrusted []Message into the internal sum.
-// This is the single carrier-validation boundary (PIPE-008): a message carrying
-// more than one of {content, tool calls, tool result} is rejected here, not
-// silently mis-serialized downstream. The Text/batch/stream paths feed
-// user-supplied Message lists through here; the Agent builds the sum directly
-// from its trusted history (agentHistoryToMsgs) and so skips this check.
+//
+//
+//
+//
+//
+//
 func toInternal(messages []Message) ([]msg, error) {
 	out := make([]msg, 0, len(messages))
 	for i, m := range messages {
@@ -169,9 +169,9 @@ func toInternal(messages []Message) ([]msg, error) {
 	return out, nil
 }
 
-// =============================================================================
-// Message transforms — build the messages/contents array in request body
-// =============================================================================
+//
+//
+//
 
 type messageTransformFunc func(body map[string]any, msgs []msg, req Request, cfg providerSpec)
 
@@ -179,17 +179,17 @@ func transformFlatContent(body map[string]any, msgs []msg, req Request, cfg prov
 	body["messages"] = buildFlatMessageArray(msgs, req, cfg)
 }
 
-// transformResponsesInput builds the OpenAI Responses envelope (ADR-055): the
-// SAME flat {role, content} array as Chat Completions, but under the "input"
-// key instead of "messages" and POSTed to /v1/responses. The array shape is
-// shared with transformFlatContent via buildFlatMessageArray, so the golden
-// witnesses that the only wire delta is the envelope key + endpoint.
+//
+//
+//
+//
+//
 func transformResponsesInput(body map[string]any, msgs []msg, req Request, cfg providerSpec) {
 	body["input"] = buildFlatMessageArray(msgs, req, cfg)
 }
 
-// buildFlatMessageArray builds the shared flat message array used by both the
-// Chat Completions ("messages") and Responses ("input") envelopes.
+//
+//
 func buildFlatMessageArray(msgs []msg, req Request, cfg providerSpec) []map[string]any {
 	out := []map[string]any{}
 
@@ -237,7 +237,7 @@ func buildFlatMessageArray(msgs []msg, req Request, cfg providerSpec) []map[stri
 	return out
 }
 
-// buildFlatContentParts builds a content array for OpenAI/Anthropic with files and images.
+//
 func buildFlatContentParts(req Request, cfg providerSpec) []map[string]any {
 	parts := []map[string]any{}
 
@@ -260,7 +260,7 @@ func buildFlatContentParts(req Request, cfg providerSpec) []map[string]any {
 	for _, img := range req.Images {
 		if isAnthropic {
 			if strings.HasPrefix(img.URL, "data:") {
-				// base64 data URI
+				//
 				mimeType, data := parseDataURI(img.URL)
 				parts = append(parts, map[string]any{
 					"type": "image",
@@ -301,14 +301,14 @@ func transformGoogleParts(body map[string]any, msgs []msg, req Request, cfg prov
 	if len(msgs) > 0 {
 		callT := selectToolCallTransform(cfg)
 		resultT := selectToolResultTransform(cfg)
-		// Google's wire identifies a tool result by the function NAME, but the
-		// universal ToolResult carries only ToolUseID. Recover id->name from the
-		// call turns, which always precede their result in a valid history, and
-		// resolve the result's name from it (overwriting the local copy's
-		// ToolUseID, which transformGoogleToolResultMsg emits as the wire name).
-		// The map is nil until the first tool call, so plain-text conversations
-		// allocate nothing; the agent path is unaffected (its extractor sets
-		// id==name), and an unmatched id passes through unchanged.
+		//
+		//
+		//
+		//
+		//
+		//
+		//
+		//
 		var idToName map[string]string
 		for _, m := range msgs {
 			switch m := m.(type) {
@@ -346,7 +346,7 @@ func transformGoogleParts(body map[string]any, msgs []msg, req Request, cfg prov
 	body["contents"] = contents
 }
 
-// buildGoogleContentParts builds a parts array for Google with files and images.
+//
 func buildGoogleContentParts(req Request) []map[string]any {
 	parts := []map[string]any{}
 
@@ -387,9 +387,9 @@ func buildGoogleContentParts(req Request) []map[string]any {
 	return parts
 }
 
-// parseDataURI extracts mime type and base64 data from a data URI.
+//
 func parseDataURI(uri string) (mimeType, data string) {
-	// data:image/png;base64,iVBOR...
+	//
 	if !strings.HasPrefix(uri, "data:") {
 		return "", uri
 	}
@@ -404,9 +404,9 @@ func parseDataURI(uri string) (mimeType, data string) {
 	return mimeType, data
 }
 
-// =============================================================================
-// Tool definition transforms — add tool schemas to request body
-// =============================================================================
+//
+//
+//
 
 type toolDefTransformFunc func(body map[string]any, tools []Tool)
 
@@ -449,16 +449,16 @@ func transformGoogleFunctionDeclarations(body map[string]any, tools []Tool, para
 	body["tools"] = []map[string]any{{"functionDeclarations": decls}}
 }
 
-// =============================================================================
-// Tool call message transforms — format assistant messages with tool calls
-// =============================================================================
+//
+//
+//
 
-// Tool-message transforms operate on the public ToolCall / ToolResult shapes
-// (ADR-020). The Agent converts its internal history to []Message via
-// toPublicMessage before building a request, so these run on the same types
-// the Text/batch path would carry on a tool-bearing history (ADR-026). Input
-// is a json.RawMessage; embedding it in the body map marshals the argument
-// JSON inline (and emits null for a nil/empty RawMessage).
+//
+//
+//
+//
+//
+//
 type toolCallTransformFunc func(calls []ToolCall, roleMappings map[string]string) map[string]any
 
 func transformOpenAIToolCallMsg(calls []ToolCall, roleMappings map[string]string) map[string]any {
@@ -512,9 +512,9 @@ func transformGoogleToolCallMsg(calls []ToolCall, roleMappings map[string]string
 	}
 }
 
-// =============================================================================
-// Tool result message transforms — format tool execution results
-// =============================================================================
+//
+//
+//
 
 type toolResultTransformFunc func(result ToolResult, roleMappings map[string]string) map[string]any
 
@@ -549,9 +549,9 @@ func transformGoogleToolResultMsg(result ToolResult, _ map[string]string) map[st
 	}
 }
 
-// =============================================================================
-// Tool call extraction — parse tool calls from provider responses
-// =============================================================================
+//
+//
+//
 
 type toolCallExtractFunc func(raw map[string]any, tcConfig *providers.ToolCallDef) []toolCall
 
@@ -612,13 +612,13 @@ func extractAnthropicToolCalls(raw map[string]any, _ *providers.ToolCallDef) []t
 	return calls
 }
 
-// =============================================================================
-// Bedrock Converse transforms — 4th API shape
-// Content wrapped in [{text: "..."}] arrays, tools in toolConfig.tools
-// =============================================================================
+//
+//
+//
+//
 
 func transformBedrockConverse(body map[string]any, msgs []msg, req Request, cfg providerSpec) {
-	// System as array of text blocks (different from Anthropic's string)
+	//
 	if req.System != "" {
 		body["system"] = []map[string]any{{"text": req.System}}
 	}
@@ -657,9 +657,9 @@ func transformBedrockConverse(body map[string]any, msgs []msg, req Request, cfg 
 	body["messages"] = out
 }
 
-// buildBedrockContentParts builds a Converse content array with image blocks
-// (ADR-060). Each image emits {image:{format,source:{bytes}}}; the prompt text
-// follows as a trailing {text} block, preserving caller order among images.
+//
+//
+//
 func buildBedrockContentParts(req Request) []map[string]any {
 	parts := []map[string]any{}
 	for _, img := range req.Images {
@@ -678,8 +678,8 @@ func buildBedrockContentParts(req Request) []map[string]any {
 	return parts
 }
 
-// bedrockImageFormat derives the Converse `format` token from a MIME type
-// (image/png -> "png"). Converse accepts png/jpeg/gif/webp.
+//
+//
 func bedrockImageFormat(mimeType string) string {
 	if i := strings.LastIndex(mimeType, "/"); i >= 0 {
 		return mimeType[i+1:]

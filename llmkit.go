@@ -12,21 +12,21 @@ import (
 	"github.com/aktagon/llmkit-go/v2/providers"
 )
 
-// StreamCallback is called with each text chunk during streaming.
+//
 type StreamCallback func(chunk string)
 
-// BaseURL and AddHeader (Client-scoped config setters, ADR-052) are
-// generated into builders.go from the api:ClientConfigMethod manifest.
+//
+//
 
-// Supports reports whether an explicit request for cap will not
-// hard-fail pre-flight on this client's provider (ADR-030). Gated
-// capabilities (caching, batching, file upload, image generation)
-// dispatch the same generated lookups their strict validation paths
-// use — never a parallel table — so the query and the error cannot
-// drift. Capabilities with no provider-level pre-flight gate return
-// true. Says nothing about per-model or per-option rejections — use
-// the catalogue's ModelInfo.Capabilities for model-level facts. Sync,
-// no IO, infallible.
+//
+//
+//
+//
+//
+//
+//
+//
+//
 func (c *Client) Supports(cap Capability) bool {
 	switch cap {
 	case CapCaching:
@@ -42,8 +42,8 @@ func (c *Client) Supports(cap Capability) bool {
 	}
 }
 
-// promptStream is the internal streaming implementation. The
-// public surface is (*Text).Stream in stream.go (plan-018 D1.3b).
+//
+//
 func promptStream(ctx context.Context, p Provider, req Request, callback StreamCallback, opts ...Option) (Response, error) {
 	o := resolveOptions(opts)
 
@@ -88,7 +88,7 @@ func promptStream(ctx context.Context, p Provider, req Request, callback StreamC
 
 	body, headers := buildRequest(p, req, msgs, o, cfg, nil)
 
-	// Apply caching mutations if enabled
+	//
 	if o.caching {
 		if err := applyCaching(ctx, body, p, o, cfg); err != nil {
 			postEv := baseEvent
@@ -99,11 +99,11 @@ func promptStream(ctx context.Context, p Provider, req Request, callback StreamC
 		}
 	}
 
-	// Enable streaming in request body
+	//
 	if streamCfg.Param != "" {
 		body[streamCfg.Param] = true
 	}
-	// BUG-028: opt into a streamed usage frame where the provider requires it.
+	//
 	if streamCfg.UsageOptIn {
 		body["stream_options"] = map[string]any{"include_usage": true}
 	}
@@ -117,7 +117,7 @@ func promptStream(ctx context.Context, p Provider, req Request, callback StreamC
 		return Response{}, fmt.Errorf("marshal request: %w", err)
 	}
 
-	// Use stream endpoint if different
+	//
 	url := buildURL(p, cfg)
 	if streamCfg.Endpoint != "" {
 		url = buildStreamURL(p, cfg, streamCfg)
@@ -146,7 +146,7 @@ func promptStream(ctx context.Context, p Provider, req Request, callback StreamC
 	}, nil
 }
 
-// buildStreamURL constructs the streaming endpoint URL.
+//
 func buildStreamURL(p Provider, cfg providerSpec, streamCfg *providers.StreamDef) string {
 	base := p.BaseURL
 	if base == "" {
@@ -154,13 +154,13 @@ func buildStreamURL(p Provider, cfg providerSpec, streamCfg *providers.StreamDef
 	}
 	endpoint := streamCfg.Endpoint
 
-	// Both-empty is rejected by resolveModel at every entry point before
-	// URL building runs, so the error is unreachable here.
+	//
+	//
 	model, _ := resolveModel(p, cfg)
 	endpoint = strings.ReplaceAll(endpoint, "{model}", model)
 	endpoint = strings.ReplaceAll(endpoint, "{apiKey}", p.APIKey)
 
-	// Handle query param auth
+	//
 	if cfg.AuthScheme == providers.AuthQueryParamKey {
 		if strings.Contains(endpoint, "?") {
 			endpoint = endpoint + "&" + cfg.AuthQueryParam + "=" + p.APIKey
@@ -172,11 +172,11 @@ func buildStreamURL(p Provider, cfg providerSpec, streamCfg *providers.StreamDef
 	return base + endpoint
 }
 
-// uploadFile is the internal upload implementation; the public
-// surface is (*Upload).Run in upload.go. Caller supplies bytes
-// directly along with the filename used in the multipart form and
-// (optionally) the explicit MIME type. If mime is empty,
-// Content-Type is derived from the filename extension.
+//
+//
+//
+//
+//
 func uploadFile(ctx context.Context, p Provider, data []byte, name, mime string, opts ...Option) (File, error) {
 	if err := validateProvider(p); err != nil {
 		return File{}, err
@@ -208,7 +208,7 @@ func uploadFile(ctx context.Context, p Provider, data []byte, name, mime string,
 		return File{}, err
 	}
 
-	// Build upload URL
+	//
 	base := p.BaseURL
 	if base == "" {
 		base = cfg.BaseURL
@@ -218,7 +218,7 @@ func uploadFile(ctx context.Context, p Provider, data []byte, name, mime string,
 		uploadURL += "?" + cfg.AuthQueryParam + "=" + p.APIKey
 	}
 
-	// Build headers
+	//
 	headers := map[string]string{}
 	switch cfg.AuthScheme {
 	case providers.AuthBearerToken:
@@ -234,7 +234,7 @@ func uploadFile(ctx context.Context, p Provider, data []byte, name, mime string,
 	}
 	mergeCallerHeaders(headers, p) // ADR-052: additive; never clobbers the SDK headers above.
 
-	// Parse extra form fields
+	//
 	extraFields := map[string]string{}
 	if fuDef.ExtraFields != "" {
 		var ef map[string]string
@@ -243,7 +243,7 @@ func uploadFile(ctx context.Context, p Provider, data []byte, name, mime string,
 		}
 	}
 
-	// Google needs metadata as a JSON form field
+	//
 	if cfg.ChatWireShape == providers.ChatGoogle {
 		metadata := map[string]any{"file": map[string]any{"display_name": name}}
 		metaJSON, _ := json.Marshal(metadata)
@@ -268,7 +268,7 @@ func uploadFile(ctx context.Context, p Provider, data []byte, name, mime string,
 		return File{}, apiErr
 	}
 
-	// Parse response using configured paths
+	//
 	var raw map[string]any
 	if err := json.Unmarshal(respBody, &raw); err != nil {
 		postEv := baseEvent
@@ -304,7 +304,7 @@ func uploadFile(ctx context.Context, p Provider, data []byte, name, mime string,
 	return file, nil
 }
 
-// validateProvider checks that provider is properly configured.
+//
 func validateProvider(p Provider) error {
 	if p.APIKey == "" {
 		return &ValidationError{Field: "api_key", Message: "required"}
@@ -312,10 +312,10 @@ func validateProvider(p Provider) error {
 	return nil
 }
 
-// validateRequest checks that required fields are present. Accepts
-// any of: a User string, a Messages history, or at least one Image
-// part — image-only multimodal calls are valid even when no text is
-// supplied.
+//
+//
+//
+//
 func validateRequest(req Request) error {
 	if req.User == "" && len(req.Messages) == 0 && len(req.Images) == 0 {
 		return &ValidationError{
@@ -323,13 +323,13 @@ func validateRequest(req Request) error {
 			Message: "set Text(), Parts, History, or Image() before calling Prompt",
 		}
 	}
-	// The carrier invariant (ADR-026: each message holds at most one of
-	// {text content, tool calls, tool result}) is enforced at the single
-	// toInternal boundary (PIPE-008), not here.
+	//
+	//
+	//
 	return nil
 }
 
-// validateOptions checks that requested options are supported by the provider.
+//
 func validateOptions(p Provider, o *options) error {
 	supported := providers.SupportedOptions(p.Name)
 	if supported == nil {
@@ -367,7 +367,7 @@ func validateOptions(p Provider, o *options) error {
 		}
 	}
 
-	// Validate option values against ontology-defined allowedValues
+	//
 	overrides := providers.OptionOverrides(p.Name)
 	if o.reasoningEffort != "" && overrides != nil {
 		if ov, ok := overrides[providers.OptionReasoningEffort]; ok && ov.AllowedValues != "" {
@@ -383,7 +383,7 @@ func validateOptions(p Provider, o *options) error {
 	return nil
 }
 
-// containsValue checks if a CSV string contains the given value.
+//
 func containsValue(csv, value string) bool {
 	for _, v := range strings.Split(csv, ",") {
 		if v == value {
@@ -393,15 +393,15 @@ func containsValue(csv, value string) bool {
 	return false
 }
 
-// Responses is the ADR-055 opt-in chat-protocol token for OpenAI's Responses
-// API. Pass it to Text.Protocol to POST the {input} envelope to /v1/responses
-// instead of the default Chat Completions {messages} envelope to
-// /v1/chat/completions. It is a plain string; c.Text.Protocol("responses") is
-// equivalent (per-SDK idiom note, ADR-055 — Go adds this ergonomic const).
+//
+//
+//
+//
+//
 const Responses = "responses"
 
-// protocolWireShape maps a public Protocol token to its llm:ChatWireShape.
-// An empty token keeps the provider's default protocol.
+//
+//
 func protocolWireShape(token string) string {
 	switch token {
 	case Responses:
@@ -410,12 +410,12 @@ func protocolWireShape(token string) string {
 	return ""
 }
 
-// rejectNonDefaultProtocol enforces that Protocol (e.g. Responses) is opt-in
-// only on the sync prompt terminal (ADR-055 slice 1). The batch and stream
-// terminals raise a loud ValidationError rather than silently sending the
-// default Chat Completions request — a silent drop of an explicit opt-in is a
-// footgun, and the four SDKs stay uniform (streaming/batch Responses is a
-// documented follow-up slice).
+//
+//
+//
+//
+//
+//
 func rejectNonDefaultProtocol(protocol, terminal string) error {
 	if protocol == "" {
 		return nil
@@ -426,11 +426,11 @@ func rejectNonDefaultProtocol(protocol, terminal string) error {
 	}
 }
 
-// resolveChatProtocol returns cfg with Endpoint + ChatWireShape overridden for a
-// non-default chat protocol opt-in (ADR-055 Protocol(...)). An empty token keeps
-// the default (cfg unchanged). A provider that does not expose the requested
-// protocol raises ValidationError(field:"protocol") — the loud, uniform error
-// the ADR requires. cfg is a value, so the override never leaks to other calls.
+//
+//
+//
+//
+//
 func resolveChatProtocol(cfg providerSpec, token string) (providerSpec, error) {
 	if token == "" {
 		return cfg, nil
@@ -452,7 +452,7 @@ func resolveChatProtocol(cfg providerSpec, token string) (providerSpec, error) {
 	}
 }
 
-// buildURL constructs the full API URL for a provider.
+//
 func buildURL(p Provider, cfg providerSpec) string {
 	base := p.BaseURL
 	if base == "" {
@@ -460,18 +460,18 @@ func buildURL(p Provider, cfg providerSpec) string {
 	}
 	endpoint := cfg.Endpoint
 
-	// Handle query param auth (Google)
+	//
 	if cfg.AuthScheme == providers.AuthQueryParamKey {
 		endpoint = endpoint + "?" + cfg.AuthQueryParam + "=" + p.APIKey
 	}
 
-	// Handle endpoint template placeholders. Both-empty is rejected by
-	// resolveModel at every entry point before URL building runs.
+	//
+	//
 	model, _ := resolveModel(p, cfg)
 	endpoint = strings.ReplaceAll(endpoint, "{model}", model)
 	endpoint = strings.ReplaceAll(endpoint, "{apiKey}", p.APIKey)
 
-	// Handle {region} placeholder (Bedrock)
+	//
 	if cfg.RegionEnvVar != "" {
 		region := os.Getenv(cfg.RegionEnvVar)
 		base = strings.ReplaceAll(base, "{region}", region)
@@ -480,13 +480,13 @@ func buildURL(p Provider, cfg providerSpec) string {
 	return base + endpoint
 }
 
-// resolveOptionKey returns the wire (JSON) key for param on (provider, model).
 //
-// Per-model overrides (ADR-024) outrank the provider default table: an exact
-// ModelID match wins outright, otherwise the longest-prefix glob wins, and
-// failing any override the provider's default supported-options key is used.
-// This is the single resolution path; both the MaxTokens site and the general
-// option loop call it (OPT-005).
+//
+//
+//
+//
+//
+//
 func resolveOptionKey(provider, model string, param providers.OptionKey, supported map[providers.OptionKey]string) (string, bool) {
 	bestKey := ""
 	bestLen := -1
@@ -513,54 +513,54 @@ func resolveOptionKey(provider, model string, param providers.OptionKey, support
 	return key, ok
 }
 
-// buildRequest constructs the provider-specific request body and headers.
 //
-// msgs is the internal message sum (ADR-026 PIPE-007) — the Text/batch/stream
-// paths convert their public Message list via toInternal at the single
-// carrier-validation boundary (PIPE-008); the Agent builds it directly from its
-// trusted history (agentHistoryToMsgs), with no lossy public-Message hop.
 //
-// Deliberate scope limit (vs the TS slice): only multi-turn history flows
-// through the sum. The single-turn req.User path — which also carries media
-// (req.Files/req.Images) — is handled directly in each message transform's
-// else-branch, because msgText carries only {role, text}. Unifying it (a
-// media-carrying variant so single-turn input also flows through toInternal)
-// is tracked as a follow-up; see CLAUDE.md.
 //
-// tools is the Agent's tool set; the Text/batch paths pass nil, so the
-// tool-def step is a no-op there and their wire body stays byte-identical
-// (ADR-026 PIPE-005).
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
 func buildRequest(p Provider, req Request, msgs []msg, o *options, cfg providerSpec, tools []Tool) (map[string]any, map[string]string) {
 	body := map[string]any{}
 	headers := map[string]string{}
 
-	// Model. Both-empty is rejected by resolveModel at every entry point
-	// before the shared builder runs (ADR-031 honest no-default contract).
+	//
+	//
 	model, _ := resolveModel(p, cfg)
 	if cfg.ModelInBody {
 		body["model"] = model
 	}
 
-	// Max tokens
+	//
 	maxTokens := cfg.DefaultMaxTokens
 	if o.maxTokens != nil {
 		maxTokens = *o.maxTokens
 	}
 
-	// Provider-specific max tokens key (per-model override aware, ADR-024)
+	//
 	supported := providers.SupportedOptions(p.Name)
 	if key, ok := resolveOptionKey(p.Name, model, providers.OptionMaxTokens, supported); ok {
 		body[key] = maxTokens
 	}
 
-	// System message placement
+	//
 	switch cfg.SystemPlacement {
 	case providers.PlacementTopLevelField:
 		if req.System != "" {
 			body["system"] = req.System
 		}
 	case providers.PlacementMessageInArray:
-		// system handled below in message transform
+		//
 	case providers.PlacementSiblingObject:
 		if req.System != "" {
 			body["system_instruction"] = map[string]any{
@@ -569,20 +569,20 @@ func buildRequest(p Provider, req Request, msgs []msg, o *options, cfg providerS
 		}
 	}
 
-	// Message transform — derived from config, builds the messages/contents array
+	//
 	msgTransform := selectMessageTransform(cfg)
 	msgTransform(body, msgs, req, cfg)
 
-	// Tool definitions (Agent path). nil tools on Text/batch is a no-op.
+	//
 	if len(tools) > 0 {
 		selectToolDefTransform(cfg)(body, tools)
 	}
 
-	// Generation options — may be nested under a wrapper key (e.g., generationConfig for Google)
+	//
 	if cfg.WrapsOptionsIn != "" {
 		optBody := map[string]any{}
 		addOptions(body, optBody, o, p.Name, model)
-		// Also move max tokens into the wrapper
+		//
 		if key, ok := resolveOptionKey(p.Name, model, providers.OptionMaxTokens, supported); ok {
 			setNestedField(optBody, key, maxTokens)
 			delete(body, strings.SplitN(key, ".", 2)[0])
@@ -594,8 +594,8 @@ func buildRequest(p Provider, req Request, msgs []msg, o *options, cfg providerS
 		addOptions(body, body, o, p.Name, model)
 	}
 
-	// Safety settings — top-level field for Gemini (safetySettings array).
-	// cfg.SafetySettingsWirePath is empty for every other provider.
+	//
+	//
 	if cfg.SafetySettingsWirePath != "" && len(o.safetySettings) > 0 {
 		ss := make([]map[string]any, len(o.safetySettings))
 		for i, s := range o.safetySettings {
@@ -604,21 +604,21 @@ func buildRequest(p Provider, req Request, msgs []msg, o *options, cfg providerS
 		body[cfg.SafetySettingsWirePath] = ss
 	}
 
-	// Structured output
+	//
 	if req.Schema != "" {
 		addStructuredOutput(body, headers, req.Schema, p.Name, cfg)
 	}
 
-	// Files API beta (BUG-017): a document/source:file block referencing an
-	// uploaded file requires the same anthropic-beta the upload used. Compose
-	// with any existing value (e.g. structured output) rather than overwrite.
+	//
+	//
+	//
 	if len(req.Files) > 0 {
 		if fu := providers.FileUploadConfig(p.Name); fu != nil && fu.BetaHeader != "" {
 			headers["anthropic-beta"] = appendBeta(headers["anthropic-beta"], fu.BetaHeader)
 		}
 	}
 
-	// Auth headers
+	//
 	switch cfg.AuthScheme {
 	case providers.AuthBearerToken:
 		headers[cfg.AuthHeader] = cfg.AuthPrefix + " " + p.APIKey
@@ -626,22 +626,22 @@ func buildRequest(p Provider, req Request, msgs []msg, o *options, cfg providerS
 		headers[cfg.AuthHeader] = p.APIKey
 	}
 
-	// Required headers
+	//
 	if cfg.RequiredHeader != "" {
 		headers[cfg.RequiredHeader] = cfg.RequiredHeaderValue
 	}
 
-	// Caller custom headers (Client.AddHeader, ADR-052) — added AFTER the
-	// provider auth + required header so those can never be clobbered (HTTP
-	// header names are case-insensitive); a gateway header (cf-aig-authorization)
-	// still rides alongside the provider key.
+	//
+	//
+	//
+	//
 	mergeCallerHeaders(headers, p)
 
-	// ADR-055 Responses wire-shape body fixup: the Responses API names the
-	// output-token cap max_output_tokens and rejects max_tokens with a 400
-	// (live-verified 2026-07-02). Every other body field is shared with Chat
-	// Completions, so this single rename is the only option-key divergence in
-	// slice 1. Behavior held by responses-openai.json, not the ontology.
+	//
+	//
+	//
+	//
+	//
 	if cfg.ChatWireShape == providers.ChatResponsesOpenAI {
 		if v, ok := body["max_tokens"]; ok {
 			body["max_output_tokens"] = v
@@ -652,7 +652,7 @@ func buildRequest(p Provider, req Request, msgs []msg, o *options, cfg providerS
 	return body, headers
 }
 
-// mapRole translates a canonical role to a provider-specific role.
+//
 func mapRole(role string, mappings map[string]string) string {
 	if mapped, ok := mappings[role]; ok {
 		return mapped
@@ -660,17 +660,17 @@ func mapRole(role string, mappings map[string]string) string {
 	return role
 }
 
-// addOptions adds generation parameters to the request body.
 //
-// JSON keys may be dotted (e.g. "thinking.budget_tokens") for providers that
-// require nested objects. Each option's per-provider OptionOverrideDef may
-// also carry ExtraFields — sibling JSON to merge into the same parent path
-// (e.g. {"type":"enabled"} alongside Anthropic's thinking.budget_tokens) —
-// and RootExtraFields (ADR-029 THK-003) — JSON deep-merged at the request
-// body ROOT, for options that imply a sibling object elsewhere in the body
-// (e.g. {"thinking":{"type":"adaptive"}} alongside Anthropic's
-// output_config.effort). root is the true body root; for providers that wrap
-// options (WrapsOptionsIn), target is the wrapper object and root differs.
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
 func addOptions(root, target map[string]any, o *options, provider, model string) {
 	supported := providers.SupportedOptions(provider)
 	overrides := providers.OptionOverrides(provider)
@@ -726,10 +726,10 @@ func addOptions(root, target map[string]any, o *options, provider, model string)
 	}
 }
 
-// deepMerge merges src into dst recursively: when both sides hold an object
-// at the same key the objects merge, otherwise src overwrites. Used for
-// RootExtraFields (ADR-029) so e.g. {"thinking":{"type":"adaptive"}} composes
-// with an existing thinking object rather than replacing it.
+//
+//
+//
+//
 func deepMerge(dst, src map[string]any) {
 	for k, v := range src {
 		if sv, ok := v.(map[string]any); ok {
@@ -742,9 +742,9 @@ func deepMerge(dst, src map[string]any) {
 	}
 }
 
-// mergeIntoParent merges extras into the map containing the leaf of path.
-// For a dotted path "a.b.c", extras land in target["a"]["b"]; for a top-level
-// path "x", they land in target.
+//
+//
+//
 func mergeIntoParent(target map[string]any, path string, extras map[string]any) {
 	parts := strings.Split(path, ".")
 	if len(parts) == 1 {
@@ -766,9 +766,9 @@ func mergeIntoParent(target map[string]any, path string, extras map[string]any) 
 	}
 }
 
-// appendBeta composes a comma-separated anthropic-beta header value so multiple
-// features that each require a beta (structured output, Files API) coexist
-// instead of clobbering one another. Idempotent on repeats.
+//
+//
+//
 func appendBeta(existing, add string) string {
 	if add == "" {
 		return existing
@@ -784,7 +784,7 @@ func appendBeta(existing, add string) string {
 	return existing + "," + add
 }
 
-// addStructuredOutput adds schema-based output format to the request.
+//
 func addStructuredOutput(body map[string]any, headers map[string]string, schema string, providerName string, cfg providerSpec) {
 	soDef := providers.StructuredOutput(providerName)
 	if soDef == nil {
@@ -796,45 +796,45 @@ func addStructuredOutput(body map[string]any, headers map[string]string, schema 
 		return
 	}
 
-	// OpenAI strict mode requires additionalProperties: false on all objects
+	//
 	if soDef.EnforceStrict {
 		setAdditionalPropertiesFalse(parsedSchema)
 	}
 
-	// Google requires removing additionalProperties entirely
+	//
 	if soDef.RemoveAdditionalProps {
 		removeAdditionalProperties(parsedSchema)
 	}
 
-	// Beta header if required
+	//
 	if soDef.BetaHeader != "" {
 		headers["anthropic-beta"] = soDef.BetaHeader
 	}
 
-	// SiblingOfFormat placement (Google): the format field carries the literal
-	// format type (responseMimeType: "application/json") and the schema is an
-	// independent sibling at SchemaPath (responseSchema), not nested inside a
-	// wrapper object.
+	//
+	//
+	//
+	//
 	if soDef.SchemaPlacement == "SiblingOfFormat" {
 		setNestedField(body, soDef.FormatField, soDef.FormatType)
 		setNestedField(body, soDef.SchemaPath, parsedSchema)
 		return
 	}
 
-	// Build the output format structure based on schema path
-	// Paths like "json_schema.schema" mean nested: {type: X, json_schema: {name: Y, schema: Z}}
-	// Paths like "schema" mean flat: {type: X, schema: Z}
+	//
+	//
+	//
 	pathParts := strings.Split(soDef.SchemaPath, ".")
 
 	if len(pathParts) == 1 {
-		// Flat: {type: "json_schema", schema: parsedSchema}
+		//
 		formatObj := map[string]any{
 			"type":       soDef.FormatType,
 			pathParts[0]: parsedSchema,
 		}
 		setNestedField(body, soDef.FormatField, formatObj)
 	} else {
-		// Nested: {type: "json_schema", json_schema: {name: "response", schema: parsedSchema, strict: true}}
+		//
 		inner := map[string]any{
 			"name":       "response",
 			pathParts[1]: parsedSchema,
@@ -850,15 +850,15 @@ func addStructuredOutput(body map[string]any, headers map[string]string, schema 
 	}
 }
 
-// setNestedField sets a value at a dot-notation path in a map.
-// "generationConfig.responseMimeType" sets body["generationConfig"]["responseMimeType"].
+//
+//
 func setNestedField(body map[string]any, path string, value any) {
 	parts := strings.Split(path, ".")
 	if len(parts) == 1 {
 		body[parts[0]] = value
 		return
 	}
-	// Nested path — create or get intermediate map
+	//
 	current := body
 	for _, part := range parts[:len(parts)-1] {
 		if existing, ok := current[part].(map[string]any); ok {
@@ -872,8 +872,8 @@ func setNestedField(body map[string]any, path string, value any) {
 	current[parts[len(parts)-1]] = value
 }
 
-// setAdditionalPropertiesFalse recursively sets "additionalProperties": false
-// and ensures "required" lists all property keys on all objects.
+//
+//
 func setAdditionalPropertiesFalse(schema any) {
 	m, ok := schema.(map[string]any)
 	if !ok {
@@ -882,7 +882,7 @@ func setAdditionalPropertiesFalse(schema any) {
 	if m["type"] == "object" {
 		m["additionalProperties"] = false
 		if props, ok := m["properties"].(map[string]any); ok {
-			// Auto-populate required with all property keys if not set
+			//
 			if _, hasRequired := m["required"]; !hasRequired {
 				keys := make([]any, 0, len(props))
 				for k := range props {
@@ -900,7 +900,7 @@ func setAdditionalPropertiesFalse(schema any) {
 	}
 }
 
-// removeAdditionalProperties recursively removes "additionalProperties" from JSON schema.
+//
 func removeAdditionalProperties(schema any) {
 	m, ok := schema.(map[string]any)
 	if !ok {
@@ -917,10 +917,10 @@ func removeAdditionalProperties(schema any) {
 	}
 }
 
-// parseResponse extracts text and usage from a provider response. chatWireShape
-// is the EFFECTIVE wire shape for this request (after Protocol(...) resolution,
-// ADR-055): only ChatResponsesOpenAI diverges (the output[] envelope); every
-// other value uses the provider's declared response paths.
+//
+//
+//
+//
 func parseResponse(provider, chatWireShape string, body []byte) (Response, error) {
 	var raw map[string]any
 	if err := json.Unmarshal(body, &raw); err != nil {
@@ -955,13 +955,13 @@ func parseResponse(provider, chatWireShape string, body []byte) (Response, error
 	}, nil
 }
 
-// parseResponsesEnvelope extracts text + usage from OpenAI's Responses reply
-// (ADR-055). Unlike Chat Completions (choices[].message.content), the reply is
-// an output[] array whose message item carries content[] blocks of type
-// "output_text"; usage is input_tokens/output_tokens with cached + reasoning
-// sub-details. Live-anchored 2026-07-02. Hand-coded per wire shape, symmetric
-// with the transformResponsesInput request arm (ADR-028: behavior held by tests,
-// not by declared response paths).
+//
+//
+//
+//
+//
+//
+//
 func parseResponsesEnvelope(raw map[string]any) Response {
 	resp := Response{
 		Text: extractResponsesText(raw),
@@ -978,9 +978,9 @@ func parseResponsesEnvelope(raw map[string]any) Response {
 	return resp
 }
 
-// extractResponsesText walks the Responses output[] array for the first
-// message item and returns its first output_text block. Iterating (rather than
-// a fixed output[0].content[0] path) tolerates a leading reasoning item.
+//
+//
+//
 func extractResponsesText(raw map[string]any) string {
 	output, ok := raw["output"].([]any)
 	if !ok {
@@ -1008,14 +1008,14 @@ func extractResponsesText(raw map[string]any) string {
 	return ""
 }
 
-// extractFinishSignal pulls the provider stop signal and free-text message
-// from the response using the per-provider JSON paths declared in the
-// ontology. Returns empty strings when the provider declares no path or
-// the path is not present in this response.
 //
-// Uses pathPresent before extractPath because extractPath stringifies a
-// missing value as "<nil>"; treating that as a finish signal would leak
-// a sentinel into user-facing messages.
+//
+//
+//
+//
+//
+//
+//
 func extractFinishSignal(raw map[string]any, provider string) (reason, message string) {
 	cfg, ok := providerSpecs()[provider]
 	if !ok {
@@ -1030,9 +1030,9 @@ func extractFinishSignal(raw map[string]any, provider string) (reason, message s
 	return reason, message
 }
 
-// pathPresent reports whether the given dot-path navigates to a non-nil
-// value in data. Mirrors extractPath's navigation but does not coerce the
-// final value to a string.
+//
+//
+//
 func pathPresent(data map[string]any, path string) bool {
 	parts := strings.Split(path, ".")
 	var current any = data
@@ -1065,9 +1065,9 @@ func pathPresent(data map[string]any, path string) bool {
 	return current != nil
 }
 
-// extractReasoningUsage pulls the reasoning token count if the provider
-// reports it separately (e.g., OpenAI o1/o3, Google Gemini 2.5+ thinking).
-// Returns zero when the provider does not expose a separate field.
+//
+//
+//
 func extractReasoningUsage(raw map[string]any, provider string) int {
 	cfg, ok := providerSpecs()[provider]
 	if !ok || cfg.ReasoningTokensPath == "" {
@@ -1076,14 +1076,14 @@ func extractReasoningUsage(raw map[string]any, provider string) int {
 	return extractIntPath(raw, cfg.ReasoningTokensPath)
 }
 
-// extractPath navigates a nested map using dot-notation paths with array index support.
-// Examples: "content[0].text", "choices[0].message.content", "usage.input_tokens"
+//
+//
 func extractPath(data map[string]any, path string) string {
 	parts := strings.Split(path, ".")
 	var current any = data
 
 	for _, part := range parts {
-		// Check for array index: "field[N]"
+		//
 		if idx := strings.Index(part, "["); idx != -1 {
 			field := part[:idx]
 			idxStr := part[idx+1 : len(part)-1]
@@ -1115,7 +1115,7 @@ func extractPath(data map[string]any, path string) string {
 	return fmt.Sprintf("%v", current)
 }
 
-// extractIntPath is like extractPath but returns an int.
+//
 func extractIntPath(data map[string]any, path string) int {
 	if path == "" {
 		return 0
@@ -1141,9 +1141,9 @@ func extractIntPath(data map[string]any, path string) int {
 	}
 }
 
-// extractFloatPath navigates a dotted path and returns the value as a float64,
-// or 0 when the path is empty or absent. Used for provider-reported USD cost
-// (ADR-027), which is fractional.
+//
+//
+//
 func extractFloatPath(data map[string]any, path string) float64 {
 	if path == "" {
 		return 0

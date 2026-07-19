@@ -16,7 +16,7 @@ import (
 
 func TestPromptOpenAI(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Verify request structure
+		//
 		body, _ := io.ReadAll(r.Body)
 		var req map[string]any
 		json.Unmarshal(body, &req)
@@ -25,7 +25,7 @@ func TestPromptOpenAI(t *testing.T) {
 			t.Errorf("expected default model, got %v", req["model"])
 		}
 
-		// Check system message is in messages array (MessageInArray placement)
+		//
 		msgs, ok := req["messages"].([]any)
 		if !ok || len(msgs) < 2 {
 			t.Fatalf("expected at least 2 messages, got %v", req["messages"])
@@ -38,12 +38,12 @@ func TestPromptOpenAI(t *testing.T) {
 			t.Errorf("expected system content, got %v", first["content"])
 		}
 
-		// Check auth header
+		//
 		if r.Header.Get("Authorization") != "Bearer test-key" {
 			t.Errorf("expected Bearer auth, got %v", r.Header.Get("Authorization"))
 		}
 
-		// Return OpenAI-shaped response
+		//
 		json.NewEncoder(w).Encode(map[string]any{
 			"choices": []map[string]any{
 				{"message": map[string]any{"content": "Hello!"}},
@@ -73,11 +73,11 @@ func TestPromptOpenAI(t *testing.T) {
 	}
 }
 
-// TestPromptWorkersAI verifies the response envelope for Cloudflare Workers AI
-// (prompt 043). The /ai/v1/ OpenAI-compat shim returns the standard OpenAI
-// chat shape, so the config-driven parser (hasResponseTextPath +
-// hasUsageMapping + OpenAI finish-reason path) reads text, usage, and
-// finish_reason with zero provider-specific code.
+//
+//
+//
+//
+//
 func TestPromptWorkersAI(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
@@ -127,12 +127,12 @@ func TestPromptAnthropic(t *testing.T) {
 		var req map[string]any
 		json.Unmarshal(body, &req)
 
-		// Check system is top-level field (TopLevelField placement)
+		//
 		if req["system"] != "You are helpful" {
 			t.Errorf("expected top-level system field, got %v", req["system"])
 		}
 
-		// Check messages do NOT contain system
+		//
 		msgs := req["messages"].([]any)
 		if len(msgs) != 1 {
 			t.Fatalf("expected 1 message (user only), got %d", len(msgs))
@@ -142,7 +142,7 @@ func TestPromptAnthropic(t *testing.T) {
 			t.Errorf("expected user role, got %v", first["role"])
 		}
 
-		// Check auth headers
+		//
 		if r.Header.Get("x-api-key") != "test-key" {
 			t.Errorf("expected x-api-key header, got %v", r.Header.Get("x-api-key"))
 		}
@@ -150,7 +150,7 @@ func TestPromptAnthropic(t *testing.T) {
 			t.Errorf("expected anthropic-version header, got %v", r.Header.Get("anthropic-version"))
 		}
 
-		// Return Anthropic-shaped response
+		//
 		json.NewEncoder(w).Encode(map[string]any{
 			"content": []map[string]any{
 				{"type": "text", "text": "Hello from Claude!"},
@@ -180,9 +180,9 @@ func TestPromptAnthropic(t *testing.T) {
 	}
 }
 
-// TestPromptSurfacesFinishReason confirms the per-provider finish_reason
-// path lifts onto Response.FinishReason. Uses Anthropic's stop_reason
-// because its location (top-level) makes the test small.
+//
+//
+//
 func TestPromptSurfacesFinishReason(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]any{
@@ -210,8 +210,8 @@ func TestPromptSurfacesFinishReason(t *testing.T) {
 	}
 }
 
-// TestPromptOmitsFinishReasonWhenAbsent verifies that providers which
-// don't return a stop signal on a normal completion leave the fields empty.
+//
+//
 func TestPromptOmitsFinishReasonWhenAbsent(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]any{
@@ -239,35 +239,35 @@ func TestPromptOmitsFinishReasonWhenAbsent(t *testing.T) {
 func TestPromptValidation(t *testing.T) {
 	ctx := context.Background()
 
-	// Missing API key
+	//
 	_, err := New("openai", "").Text.Prompt(ctx, "hi")
 	if err == nil {
 		t.Error("expected error for missing API key")
 	}
 
-	// Missing user message
+	//
 	_, err = New("openai", "key").Text.Prompt(ctx, "")
 	if err == nil {
 		t.Error("expected error for missing user message")
 	}
 
-	// Unknown provider
+	//
 	_, err = New("unknown", "key").Text.Prompt(ctx, "hi")
 	if err == nil {
 		t.Error("expected error for unknown provider")
 	}
 }
 
-// Option/body request-shape tests (TestPromptWithOptions,
-// TestPromptWithThinkingBudgetAnthropic, TestPerModelMaxTokensKeyOpenAI)
-// migrated to the wire-conformance suite (ADR-028 M2): the
-// options-openai-{gpt5,o-series,gpt4o}, options-anthropic, and
-// options-google* fixtures in request_wire_test.go now witness those bodies
-// byte-for-byte across all four SDKs.
+//
+//
+//
+//
+//
+//
 
-// TestUsageCostOpenRouter is the BUG-005 / ADR-027 regression: OpenRouter
-// reports usage.cost (USD), which must surface on resp.Usage.Cost. A provider
-// that reports no cost (OpenAI) stays 0.
+//
+//
+//
 func TestUsageCostOpenRouter(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]any{
@@ -288,10 +288,10 @@ func TestUsageCostOpenRouter(t *testing.T) {
 	}
 }
 
-// TestUsageCostGrokTicksToUSD covers the ADR-027 usageCostScale path: xAI
-// reports cost in usage.cost_in_usd_ticks where 1 USD = 1e10 ticks, so the
-// scale (1e-10) converts to USD. Live-verified 2026-05-25: 2856000 ticks =
-// $0.0002856.
+//
+//
+//
+//
 func TestUsageCostGrokTicksToUSD(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]any{
@@ -321,7 +321,7 @@ func TestUsageCostZeroForNoCostProvider(t *testing.T) {
 	}))
 	defer server.Close()
 
-	// OpenAI declares no usageCostPath, so a stray cost field is ignored.
+	//
 	c := New(providers.OpenAI, "k")
 	c.provider.baseURL = server.URL
 	resp, err := c.Text.Prompt(context.Background(), "hi")
@@ -333,13 +333,13 @@ func TestUsageCostZeroForNoCostProvider(t *testing.T) {
 	}
 }
 
-// TestAgentCachingAppliesToRequest is the BUG-004 / ADR-026 regression:
-// *Agent.caching() must annotate the request body with cache_control on every
-// turn, exactly as the Text path does. Before the pipeline fix, the agent
-// builder silently dropped caching, so a long stable prefix was never cached
-// (cache_read stayed 0 every turn). Asserting cache_control on the captured
-// request body is the by-construction proof; live cache_read>0 is the
-// integration check.
+//
+//
+//
+//
+//
+//
+//
 func TestAgentCachingAppliesToRequest(t *testing.T) {
 	var captured map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -358,8 +358,8 @@ func TestAgentCachingAppliesToRequest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Anthropic uses explicit caching: system becomes a content-block array
-	// carrying cache_control. A plain string means caching never applied.
+	//
+	//
 	sysBlocks, ok := captured["system"].([]any)
 	if !ok {
 		t.Fatalf("expected system as content-block array (caching applied), got %T", captured["system"])
@@ -371,7 +371,7 @@ func TestAgentCachingAppliesToRequest(t *testing.T) {
 }
 
 func TestUnsupportedOption(t *testing.T) {
-	// Anthropic doesn't support seed
+	//
 	_, err := New(providers.Anthropic, "key").Text.Seed(42).Prompt(context.Background(), "test")
 	if err == nil {
 		t.Error("expected error for unsupported seed option on Anthropic")
@@ -415,9 +415,9 @@ func TestPromptStreamOpenAI(t *testing.T) {
 	}
 }
 
-// BUG-028: OpenAI only emits streamed usage when the request opts in with
-// stream_options.include_usage. Assert llmkit sends it for OpenAI (usageOptIn
-// true) and NOT for a compat-fleet provider that has not been verified (Grok).
+//
+//
+//
 func TestStreamUsageOptIn(t *testing.T) {
 	cases := []struct {
 		name     string
@@ -505,9 +505,9 @@ func TestPromptStreamAnthropic(t *testing.T) {
 	if len(chunks) != 2 {
 		t.Errorf("expected 2 chunks, got %d: %v", len(chunks), chunks)
 	}
-	// Token assertion dropped: typed-builder Stream returns iter.Seq2[string,
-	// error] which has no slot for final Usage. A StreamWithUsage variant is
-	// deferred (see go/stream.go top-of-file note).
+	//
+	//
+	//
 }
 
 func TestPromptStreamWithCachingAnthropic(t *testing.T) {
@@ -516,7 +516,7 @@ func TestPromptStreamWithCachingAnthropic(t *testing.T) {
 		var req map[string]any
 		json.Unmarshal(body, &req)
 
-		// Verify system was converted to content blocks with cache_control
+		//
 		sys, ok := req["system"].([]any)
 		if !ok {
 			t.Fatalf("expected system as array of content blocks, got %T: %v", req["system"], req["system"])
@@ -533,7 +533,7 @@ func TestPromptStreamWithCachingAnthropic(t *testing.T) {
 			t.Errorf("expected cache_control type 'ephemeral', got %v", cc["type"])
 		}
 
-		// Verify streaming is also enabled
+		//
 		if req["stream"] != true {
 			t.Error("expected stream=true in request body")
 		}
@@ -589,7 +589,7 @@ func TestPromptStreamWithCachingUnsupported(t *testing.T) {
 	}
 }
 
-// ADR-013: stream-time finish-reason surfaces on the trailing TextStream.Response().
+//
 
 func TestStreamFinishReason_OpenAI(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -664,8 +664,8 @@ func TestStreamFinishReason_Google(t *testing.T) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(200)
 		flusher := w.(http.Flusher)
-		// First chunk has the unspecified sentinel — must NOT overwrite the
-		// real terminal value that arrives in the final chunk.
+		//
+		//
 		events := []string{
 			`data: {"candidates":[{"content":{"parts":[{"text":"Hi"}]},"finishReason":"FINISH_REASON_UNSPECIFIED"}]}`,
 			`data: {"candidates":[{"content":{"parts":[{"text":""}]},"finishReason":"STOP"}]}`,
@@ -692,11 +692,11 @@ func TestStreamFinishReason_Google(t *testing.T) {
 	}
 }
 
-// Negative case: a provider with no stream_finish_reason_path declared
-// must leave FinishReason empty even when the stream emits a frame that
-// would otherwise match (e.g., OpenAI-shaped wire). Guards against an
-// accidental "always-extract" regression that would fan out signals to
-// providers whose A-Box explicitly opted out.
+//
+//
+//
+//
+//
 func TestStreamFinishReason_NoPathLeavesEmpty(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
@@ -761,7 +761,7 @@ func TestStreamFinishReason_Grok(t *testing.T) {
 }
 
 func TestReasoningEffortValidation(t *testing.T) {
-	// Valid value should pass validation (will fail at HTTP level, but that's fine)
+	//
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]any{
 			"choices": []map[string]any{
@@ -779,7 +779,7 @@ func TestReasoningEffortValidation(t *testing.T) {
 		t.Fatalf("expected valid reasoning effort to pass, got: %v", err)
 	}
 
-	// Invalid value should fail validation
+	//
 	_, err = c.Text.ReasoningEffort("extreme").Prompt(context.Background(), "test")
 	if err == nil {
 		t.Error("expected error for invalid reasoning effort value")
@@ -798,7 +798,7 @@ func TestAgentWithTools(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		callCount++
 		if callCount == 1 {
-			// First call: respond with tool call
+			//
 			json.NewEncoder(w).Encode(map[string]any{
 				"choices": []map[string]any{{
 					"message": map[string]any{
@@ -815,7 +815,7 @@ func TestAgentWithTools(t *testing.T) {
 				"usage": map[string]any{"prompt_tokens": 10, "completion_tokens": 5},
 			})
 		} else {
-			// Second call: respond with text
+			//
 			json.NewEncoder(w).Encode(map[string]any{
 				"choices": []map[string]any{{
 					"message": map[string]any{"content": "The sum is 5"},
@@ -890,7 +890,7 @@ func TestWithCachingAnthropic(t *testing.T) {
 		var req map[string]any
 		json.Unmarshal(body, &req)
 
-		// Verify system was converted to content blocks with cache_control
+		//
 		sys, ok := req["system"].([]any)
 		if !ok {
 			t.Fatalf("expected system as array of content blocks, got %T: %v", req["system"], req["system"])
@@ -945,10 +945,10 @@ func TestWithCachingOpenAI(t *testing.T) {
 		var req map[string]any
 		json.Unmarshal(body, &req)
 
-		// OpenAI automatic caching: no request mutation expected
+		//
 		msgs := req["messages"].([]any)
 		first := msgs[0].(map[string]any)
-		// System should remain a plain string content, not annotated
+		//
 		if _, isArray := first["content"].([]any); isArray {
 			t.Error("OpenAI automatic caching should not modify request")
 		}
@@ -980,26 +980,26 @@ func TestWithCachingOpenAI(t *testing.T) {
 }
 
 func TestWithCachingUnsupported(t *testing.T) {
-	// Groq doesn't support caching — should fail at applyCaching
+	//
 	_, err := New(providers.Groq, "key").Text.Caching().Prompt(context.Background(), "Hi")
 	if err == nil {
 		t.Error("expected error for unsupported caching")
 	}
 }
 
-// TestResourceCachingCreateSurfacesProviderError is the BUG-016 regression.
-// When the ResourceCaching create (Google's POST /v1beta/cachedContents) is
-// rejected — e.g. Gemini's "Cached content is too small" 400 for content
-// below its per-model token floor — the caller must get a clean, typed
-// *APIError carrying the provider's OWN message, not an opaque raw-body wrap.
-// llmkit invents no size floor; it surfaces whatever the provider rejected
-// with. This typed, structured error (provider + status + message) is also
-// the substrate the opt-in capability telemetry will read from the Event.Err
-// channel to infer live what a model supports.
+//
+//
+//
+//
+//
+//
+//
+//
+//
 func TestResourceCachingCreateSurfacesProviderError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// The cachedContents create is the first call; reject it as Gemini
-		// does for sub-floor content.
+		//
+		//
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]any{
 			"error": map[string]any{
@@ -1039,8 +1039,8 @@ func TestPromptBatch(t *testing.T) {
 		callCount++
 		switch {
 		case r.Method == "POST":
-			// Batch creation — verify Anthropic's per-item wrapping:
-			// {"requests":[{"custom_id":"req-N","params":{...}}, ...]}
+			//
+			//
 			body, _ := io.ReadAll(r.Body)
 			var req map[string]any
 			json.Unmarshal(body, &req)
@@ -1066,20 +1066,20 @@ func TestPromptBatch(t *testing.T) {
 				"processing_status": "in_progress",
 			})
 		case r.Method == "GET" && callCount == 2:
-			// First poll — still in progress
+			//
 			json.NewEncoder(w).Encode(map[string]any{
 				"id":                "batch_123",
 				"processing_status": "in_progress",
 			})
 		case r.Method == "GET" && callCount == 3:
-			// Second poll — done
+			//
 			json.NewEncoder(w).Encode(map[string]any{
 				"id":                "batch_123",
 				"processing_status": "ended",
 			})
 		case r.Method == "GET" && callCount == 4:
-			// Results fetch — Anthropic's actual JSONL format:
-			// each line wraps the message at result.message
+			//
+			//
 			fmt.Fprintln(w, `{"custom_id":"req-0","result":{"type":"succeeded","message":{"content":[{"type":"text","text":"response 1"}],"usage":{"input_tokens":5,"output_tokens":3}}}}`)
 			fmt.Fprintln(w, `{"custom_id":"req-1","result":{"type":"succeeded","message":{"content":[{"type":"text","text":"response 2"}],"usage":{"input_tokens":7,"output_tokens":4}}}}`)
 		}
@@ -1107,12 +1107,12 @@ func TestPromptBatch(t *testing.T) {
 	}
 }
 
-// TestBatch_PropagatesChainSamplingOptions verifies ADR-012 REQ-PROP-003 for
-// the Go batch path: every chain field set on *Text reaches the per-request
-// wire body. Go threads options through `(req, opts) := b.buildRequest(...)`,
-// but this test makes the contract assertion explicit so any regression in
-// either the typed-builder layer or the underlying promptBatch signature
-// surfaces immediately rather than silently dropping options.
+//
+//
+//
+//
+//
+//
 func TestBatch_PropagatesChainSamplingOptions(t *testing.T) {
 	var captured map[string]any
 	callCount := 0
@@ -1225,7 +1225,7 @@ func TestPromptBatchOpenAI(t *testing.T) {
 		callCount++
 		switch {
 		case r.Method == "POST" && r.URL.Path == "/v1/files":
-			// File upload — capture the JSONL content
+			//
 			r.ParseMultipartForm(10 << 20)
 			file, _, _ := r.FormFile("file")
 			uploadedFile, _ = io.ReadAll(file)
@@ -1239,7 +1239,7 @@ func TestPromptBatchOpenAI(t *testing.T) {
 			})
 
 		case r.Method == "POST" && r.URL.Path == "/v1/batches":
-			// Batch creation — verify input_file_id
+			//
 			body, _ := io.ReadAll(r.Body)
 			var req map[string]any
 			json.Unmarshal(body, &req)
@@ -1258,14 +1258,14 @@ func TestPromptBatchOpenAI(t *testing.T) {
 			})
 
 		case r.Method == "GET" && r.URL.Path == "/v1/batches/batch_xyz" && callCount <= 4:
-			// Polling — still in progress
+			//
 			json.NewEncoder(w).Encode(map[string]any{
 				"id":     "batch_xyz",
 				"status": "in_progress",
 			})
 
 		case r.Method == "GET" && r.URL.Path == "/v1/batches/batch_xyz":
-			// Polling — completed with output_file_id
+			//
 			json.NewEncoder(w).Encode(map[string]any{
 				"id":             "batch_xyz",
 				"status":         "completed",
@@ -1273,7 +1273,7 @@ func TestPromptBatchOpenAI(t *testing.T) {
 			})
 
 		case r.Method == "GET" && r.URL.Path == "/v1/files/file-out456/content":
-			// Result file download — JSONL with wrapped responses
+			//
 			fmt.Fprintln(w, `{"custom_id":"req-0","response":{"status_code":200,"body":{"choices":[{"message":{"content":"pong 1"}}],"usage":{"prompt_tokens":5,"completion_tokens":3}}}}`)
 			fmt.Fprintln(w, `{"custom_id":"req-1","response":{"status_code":200,"body":{"choices":[{"message":{"content":"pong 2"}}],"usage":{"prompt_tokens":7,"completion_tokens":4}}}}`)
 
@@ -1307,7 +1307,7 @@ func TestPromptBatchOpenAI(t *testing.T) {
 		t.Errorf("expected input tokens=5, got %d", results[0].Usage.Input)
 	}
 
-	// Verify JSONL was uploaded
+	//
 	if len(uploadedFile) == 0 {
 		t.Fatal("no JSONL file was uploaded")
 	}
@@ -1317,7 +1317,7 @@ func TestPromptBatchOpenAI(t *testing.T) {
 	}
 }
 
-// splitJSONLLines splits JSONL bytes into non-empty trimmed lines.
+//
 func TestPromptSafetySettingsGoogle(t *testing.T) {
 	var captured map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1378,9 +1378,9 @@ func TestPromptSafetySettingsRejectedOnOpenAI(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// OpenAI has no safetySettingsWirePath — settings must be silently dropped,
-	// not cause an error, and not leak into the wire body (no validation at the
-	// text-gen layer, only on the image-gen layer for safety_filter).
+	//
+	//
+	//
 	if resp.Text != "ok" {
 		t.Errorf("expected text=ok, got %q", resp.Text)
 	}

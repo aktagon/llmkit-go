@@ -11,19 +11,19 @@ import (
 	"github.com/aktagon/llmkit-go/v2/providers"
 )
 
-// newCatalogueServer wires a stub server whose handler hands per-path
-// payloads back to the runtime. payloads is keyed by URL path; missing
-// paths return 404 so unexpected calls show up loudly in test failures.
+//
+//
+//
 func newCatalogueServer(t *testing.T, handler http.HandlerFunc) (*httptest.Server, func()) {
 	t.Helper()
 	srv := httptest.NewServer(handler)
 	return srv, srv.Close
 }
 
-// TestScopedModelsList_AnthropicCursorPagination drives the
-// cursor-by-last-id paginator across two pages and asserts the runtime
-// (a) loops until has_more=false and (b) carries after_id into the
-// follow-up request.
+//
+//
+//
+//
 func TestScopedModelsList_AnthropicCursorPagination(t *testing.T) {
 	page1 := `{
 		"data":[
@@ -72,7 +72,7 @@ func TestScopedModelsList_AnthropicCursorPagination(t *testing.T) {
 	if got, want := len(models), 3; got != want {
 		t.Fatalf("expected %d records across two pages, got %d", want, got)
 	}
-	// Capability enrichment: claude-opus-4-7 is in the ontology table.
+	//
 	var opus *ModelInfo
 	for i := range models {
 		if models[i].ID == "claude-opus-4-7" {
@@ -87,9 +87,9 @@ func TestScopedModelsList_AnthropicCursorPagination(t *testing.T) {
 	}
 }
 
-// TestScopedModelsList_GoogleOpaqueTokenPagination exercises the
-// nextPageToken paginator. The runtime must propagate the token from
-// page 1 into page 2's query string and stop when the field is absent.
+//
+//
+//
 func TestScopedModelsList_GoogleOpaqueTokenPagination(t *testing.T) {
 	page1 := `{
 		"models":[{"name":"models/gemini-2.5-flash","displayName":"Gemini 2.5 Flash","description":"Stable","inputTokenLimit":1048576,"outputTokenLimit":65536}],
@@ -134,15 +134,15 @@ func TestScopedModelsList_GoogleOpaqueTokenPagination(t *testing.T) {
 	if got, want := len(models), 2; got != want {
 		t.Fatalf("expected %d models across two pages, got %d", want, got)
 	}
-	// Google parser strips "models/" prefix from name.
+	//
 	if models[0].ID != "gemini-2.5-flash" {
 		t.Fatalf("expected models/ prefix stripped, got id=%q", models[0].ID)
 	}
 }
 
-// TestScopedModelsList_OpenAINonPaginated covers the single-call shape.
-// The runtime should not append any cursor query param when pagination
-// is PaginationNone.
+//
+//
+//
 func TestScopedModelsList_OpenAINonPaginated(t *testing.T) {
 	body := `{
 		"object":"list",
@@ -185,9 +185,9 @@ func TestScopedModelsList_OpenAINonPaginated(t *testing.T) {
 	}
 }
 
-// TestScopedModelsList_403ScopeMapsToErrModelsScope ensures the
-// classifier upgrades OpenAI-style scope rejections from the generic
-// Unavailable bucket to the documented Scope sentinel.
+//
+//
+//
 func TestScopedModelsList_403ScopeMapsToErrModelsScope(t *testing.T) {
 	srv, cleanup := newCatalogueServer(t, func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusForbidden)
@@ -206,10 +206,10 @@ func TestScopedModelsList_403ScopeMapsToErrModelsScope(t *testing.T) {
 	}
 }
 
-// TestScopedModelsList_503MapsToErrModelsUnavailable covers the generic
-// non-2xx path. Anything that is not 403+scope must surface
-// ErrModelsUnavailable so callers can fall back to the compiled-in
-// catalogue with a documented sentinel.
+//
+//
+//
+//
 func TestScopedModelsList_503MapsToErrModelsUnavailable(t *testing.T) {
 	srv, cleanup := newCatalogueServer(t, func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusServiceUnavailable)
@@ -231,9 +231,9 @@ func TestScopedModelsList_503MapsToErrModelsUnavailable(t *testing.T) {
 	}
 }
 
-// TestScopedModelsList_NotSupportedForEndpointlessProvider keeps the
-// endpointless-provider branch alive after Phase 3 (Vertex / Bedrock /
-// every OpenAI-compat backfill candidate hits this until plan 028).
+//
+//
+//
 func TestScopedModelsList_NotSupportedForEndpointlessProvider(t *testing.T) {
 	c := Cohere("test-key")
 	_, err := c.Models.Provider(Provider{Name: "cohere"}).List(context.Background())
@@ -242,8 +242,8 @@ func TestScopedModelsList_NotSupportedForEndpointlessProvider(t *testing.T) {
 	}
 }
 
-// TestScopedModelsGet_Anthropic round-trips a single-record /v1/models/{id}
-// response through the parser-reuse wrapInList logic.
+//
+//
 func TestScopedModelsGet_Anthropic(t *testing.T) {
 	body := `{"type":"model","id":"claude-opus-4-7","display_name":"Claude Opus 4.7","created_at":"2026-04-14T00:00:00Z","max_input_tokens":1000000,"max_tokens":128000}`
 	srv, cleanup := newCatalogueServer(t, func(w http.ResponseWriter, r *http.Request) {
@@ -270,12 +270,12 @@ func TestScopedModelsGet_Anthropic(t *testing.T) {
 	}
 }
 
-// TestModelsLive_PartialSuccess fans out across the one configured
-// provider plus a second simulated provider via a faked client; the
-// Go runtime only carries credentials for one provider per client, so
-// "partial success" here is the documented `n in {0,1}` reality —
-// success populates models, failure populates errors as a typed
-// ProviderError.
+//
+//
+//
+//
+//
+//
 func TestModelsLive_PartialSuccess(t *testing.T) {
 	body := `{"object":"list","data":[{"id":"gpt-5","object":"model","created":1715367049,"owned_by":"system"}]}`
 	srv, cleanup := newCatalogueServer(t, func(w http.ResponseWriter, r *http.Request) {
@@ -298,9 +298,9 @@ func TestModelsLive_PartialSuccess(t *testing.T) {
 	}
 }
 
-// TestModelsLive_TypedErrorOnFailure asserts Amendment 1's structured
-// ProviderError carries `Kind == "unavailable"` rather than the legacy
-// stringified message.
+//
+//
+//
 func TestModelsLive_TypedErrorOnFailure(t *testing.T) {
 	srv, cleanup := newCatalogueServer(t, func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusServiceUnavailable)
@@ -334,10 +334,10 @@ func modelIDs(models []ModelInfo) []string {
 	return out
 }
 
-// TestScopedModelsList_AppliesCapabilityFilter locks HANDOFF-036 A4:
-// WithCapability composes with Provider(p).List — the scoped live list
-// returns only models whose ontology-derived capabilities contain the
-// filter, while the unfiltered chain returns the full page.
+//
+//
+//
+//
 func TestScopedModelsList_AppliesCapabilityFilter(t *testing.T) {
 	body := `{"object":"list","data":[
 		{"id":"gpt-4o-mini","object":"model","created":1715367049,"owned_by":"system"},
@@ -370,10 +370,10 @@ func TestScopedModelsList_AppliesCapabilityFilter(t *testing.T) {
 	}
 }
 
-// TestScopedModelsList_FiresClientMiddleware locks HANDOFF-036 A3: client-
-// scoped hooks (the AddTelemetry seam) observe catalogue calls — pre fires
-// before the HTTP call, post fires after with a duration. The dead-site
-// regression class is also held by complete.middleware-fire-empty-hooks.
+//
+//
+//
+//
 func TestScopedModelsList_FiresClientMiddleware(t *testing.T) {
 	body := `{"object":"list","data":[{"id":"gpt-5","object":"model","created":1715367049,"owned_by":"system"}]}`
 	srv, cleanup := newCatalogueServer(t, func(w http.ResponseWriter, r *http.Request) {

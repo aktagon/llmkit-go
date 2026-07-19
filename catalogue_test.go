@@ -14,7 +14,7 @@ func TestModels_List_ReturnsCompiledInCatalogue(t *testing.T) {
 	if len(models) == 0 {
 		t.Fatal("expected non-empty compiled-in catalogue")
 	}
-	// Sorted by (provider, id): anthropic entries land first
+	//
 	if got := models[0].Provider.Name; got != "anthropic" {
 		t.Errorf("first record provider = %q, want anthropic", got)
 	}
@@ -48,8 +48,8 @@ func TestModels_WithCapability_DoesNotMutateParent(t *testing.T) {
 	c := Openai("test-key")
 	parent := c.Models
 	_ = parent.WithCapability(CapImageGeneration)
-	// Calling List() on the original prototype must NOT apply the filter
-	// that the forked chain installed (ADR-009 chain immutability).
+	//
+	//
 	all := parent.List()
 	imageOnly := parent.WithCapability(CapImageGeneration).List()
 	if len(all) == len(imageOnly) {
@@ -72,7 +72,7 @@ func TestModels_Get_HitAndMiss(t *testing.T) {
 }
 
 func TestProviders_List_SingleProviderClient(t *testing.T) {
-	// Anthropic has llm:hasModelsEndpoint -> Providers.List returns it.
+	//
 	c := Anthropic("test-key")
 	got := c.Providers.List()
 	if len(got) != 1 {
@@ -82,7 +82,7 @@ func TestProviders_List_SingleProviderClient(t *testing.T) {
 		t.Errorf("Providers.List[0] = %q, want anthropic", got[0].Slug)
 	}
 
-	// Cohere does NOT have llm:hasModelsEndpoint -> empty.
+	//
 	c2 := Cohere("test-key")
 	if got := c2.Providers.List(); len(got) != 0 {
 		t.Errorf("Providers.List for endpoint-less provider = %d, want 0", len(got))
@@ -90,8 +90,8 @@ func TestProviders_List_SingleProviderClient(t *testing.T) {
 }
 
 func TestProviders_StaticRosterReturnsAllSDKProviders(t *testing.T) {
-	// ADR-040 PSR-005: the static roster of every supported provider is the
-	// package-level providers.List(), independent of Client credentials.
+	//
+	//
 	supported := providers.List()
 	if len(supported) < 10 {
 		t.Errorf("providers.List = %d, expected >=10 (full SDK roster)", len(supported))
@@ -152,7 +152,7 @@ func TestModels_Live_CapturesUnavailableInLiveResultErrors(t *testing.T) {
 	if !ok {
 		t.Fatal("expected anthropic key in Errors map")
 	}
-	// ADR-019 Amendment 1: typed discriminant via ProviderError.Kind.
+	//
 	if got.Kind != "unavailable" {
 		t.Errorf("anthropic err.Kind = %q, want %q", got.Kind, "unavailable")
 	}

@@ -1,15 +1,15 @@
-// Example: text-to-image generation against Google Cloud Vertex AI's Imagen.
-// Demonstrates the caller-managed OAuth flow: SDK takes a bearer token
-// string; caller obtains the token externally (gcloud / service-account /
-// workload identity) and substitutes {location} and {project_id} into the
-// base URL.
 //
-// Run with:
 //
-//	VERTEX_BEARER_TOKEN=$(gcloud auth print-access-token) \
-//	GCP_PROJECT_ID=my-project \
-//	GCP_LOCATION=us-central1 \
-//	go run ./examples/vertex-imagen
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
 package main
 
 import (

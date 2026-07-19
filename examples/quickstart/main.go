@@ -1,10 +1,10 @@
-// Minimal one-shot text prompt.
 //
-// Run with: ANTHROPIC_API_KEY=sk-... go run ./examples/quickstart
 //
-// `c.Text` is a pointer field on *Client, not a method. Chain methods
-// clone the prototype, so each c.Text.System(...) call returns a fresh
-// *Text builder.
+//
+//
+//
+//
+//
 package main
 
 import (

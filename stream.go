@@ -5,25 +5,25 @@ import (
 	"iter"
 )
 
-// TextStream is the trailing-handle wrapper returned by *Text.Stream.
-// Range over Chunks() to consume deltas as they arrive; after iteration
-// completes (without a break), Response() returns the accumulated
-// Response carrying final token counts. Err() returns any error that
-// terminated the stream early.
 //
-//	stream := c.Text.System("...").Stream(ctx, "hi")
-//	for chunk, err := range stream.Chunks() {
-//	    if err != nil { return err }
-//	    fmt.Print(chunk)
-//	}
-//	resp := stream.Response()  // populated after the range loop ends
-//	fmt.Println(resp.Usage)
 //
-// Response() before iteration completes returns the zero value; Err()
-// returns nil. After iteration, both reflect the producer's final
-// outcome. Breaking the range loop cancels the producer; in that case
-// Response() reflects whatever was accumulated by the legacy callback
-// up to the break point and Err() returns nil.
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
 type TextStream struct {
 	ctx      context.Context
 	provider Provider
@@ -34,9 +34,9 @@ type TextStream struct {
 	consumed bool
 }
 
-// Stream begins a streaming chat completion call. The returned
-// *TextStream is a trailing-handle: chunks are produced lazily via
-// Chunks(); Response() is populated when iteration completes.
+//
+//
+//
 func (b *Text) Stream(ctx context.Context, finalText string) *TextStream {
 	req, opts := b.buildRequest(finalText)
 	provider := b.client.provider.toProvider(b.model)
@@ -46,29 +46,29 @@ func (b *Text) Stream(ctx context.Context, finalText string) *TextStream {
 		req:      req,
 		opts:     opts,
 	}
-	// ADR-055: Protocol (e.g. Responses) is prompt-only in slice 1; surface a
-	// loud error via the trailing handle rather than silently streaming Chat
-	// Completions. Chunks() yields it before starting the producer.
+	//
+	//
+	//
 	ts.err = rejectNonDefaultProtocol(b.protocol, "stream")
 	return ts
 }
 
-// Chunks returns an iter.Seq2[string, error] that yields chunk-string /
-// error pairs in producer order. Errors land at the end of iteration
-// (one final yield with chunk == ""). To stop early, break the range
-// loop; the producer goroutine is cancelled and any pending chunks are
-// drained so the goroutine exits cleanly.
+//
+//
+//
+//
+//
 func (s *TextStream) Chunks() iter.Seq2[string, error] {
 	return func(yield func(string, error) bool) {
 		if s.consumed {
-			// Defensive: re-iterating a consumed stream yields nothing.
-			// The handle's terminal state is already on Response()/Err().
+			//
+			//
 			return
 		}
 		s.consumed = true
 
-		// Pre-terminal error (e.g. ADR-055 Protocol on the stream terminal):
-		// surface it without starting the producer goroutine.
+		//
+		//
 		if s.err != nil {
 			yield("", s.err)
 			return
@@ -77,8 +77,8 @@ func (s *TextStream) Chunks() iter.Seq2[string, error] {
 		innerCtx, cancel := context.WithCancel(s.ctx)
 		defer cancel()
 
-		// Buffered: producer hands off chunks without blocking when the
-		// consumer is mid-yield. Capacity 64 matches TS/Python.
+		//
+		//
 		chunks := make(chan string, 64)
 		var streamResp *Response
 		var streamErr error
@@ -120,13 +120,13 @@ func (s *TextStream) Chunks() iter.Seq2[string, error] {
 	}
 }
 
-// Response returns the accumulated Response (text + token counts).
-// Populated after Chunks() iteration completes; the zero value is
-// returned before iteration starts or if the stream errored before the
-// provider sent any usage events.
+//
+//
+//
+//
 func (s *TextStream) Response() Response { return s.resp }
 
-// Err returns any error that terminated the stream. Errors are also
-// surfaced via the final Chunks() yield; Err() is the convenience
-// accessor for code that doesn't want to inspect every iteration.
+//
+//
+//
 func (s *TextStream) Err() error { return s.err }

@@ -10,22 +10,22 @@ import (
 	"github.com/aktagon/llmkit-go/v2/providers"
 )
 
-// Cross-SDK catalogue request-URL conformance (ADR-067 Fix B / CAT-006). The
-// REQUEST-side sibling of test-response-wire (which locks the /models PARSE
-// seam): for a fixed (provider, cursor), every SDK's catalogue-list path must
-// assemble a byte-identical {method, url, headers} — base URL, endpoint, the
-// QueryParamKey `?key=` splice, the generated cursorParam query field
-// (ADR-067 Fix A), and the auth headers.
 //
-// The driver calls the SAME URL/header-assembly seam the paginate loop uses
-// (buildCatalogueURL + appendCursor + buildCatalogueHeaders). The cursorParam
-// comes from the generated catalogueConfig for the provider, NOT from
-// inputs.json — so this exercises the generated config, not a hand-mirror.
 //
-// inputs.json supplies (provider, cursor) + the shared apiKey; each golden
-// codegen/testdata/wire/catalogue/v1/<case>.json is the expected outbound
-// request. Each SDK drops target/wire/catalogue/<case>/{sdk}.json and
-// codegen/test_cross_sdk_catalogue.py asserts value-equality across all five.
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
 
 type catalogueCase struct {
 	Provider string `json:"provider"`
