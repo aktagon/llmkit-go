@@ -41,12 +41,21 @@ type TranscriptionOption func(*transcriptionOptions)
 
 type transcriptionOptions struct {
 	httpClient *http.Client
+	middleware []providers.MiddlewareFn
 }
 
 //
 //
 func WithTranscriptionHTTPClient(c *http.Client) TranscriptionOption {
 	return func(o *transcriptionOptions) { o.httpClient = c }
+}
+
+//
+//
+//
+//
+func WithTranscriptionMiddleware(fns ...providers.MiddlewareFn) TranscriptionOption {
+	return func(o *transcriptionOptions) { o.middleware = append(o.middleware, fns...) }
 }
 
 func resolveTranscriptionOptions(opts []TranscriptionOption) *transcriptionOptions {
@@ -91,6 +100,12 @@ func submitTranscription(ctx context.Context, p Provider, req TranscriptionReque
 		return TranscriptionHandle{}, err
 	}
 
+	//
+	//
+	if audioBytes != nil && tcCfg.UploadEndpoint == "" {
+		return TranscriptionHandle{}, &ValidationError{Field: "parts", Message: p.Name + " does not accept audio bytes; pass a public audio URL"}
+	}
+
 	client := o.httpClient
 	if client == nil {
 		client = http.DefaultClient
@@ -98,45 +113,75 @@ func submitTranscription(ctx context.Context, p Provider, req TranscriptionReque
 	base := transcriptionBaseURL(p, cfg)
 	headers := buildAuthHeaders(p, cfg)
 
+	baseEvent := providers.Event{
+		Op:       providers.OpTranscription,
+		Provider: p.Name,
+		Model:    req.Model,
+	}
+	start := time.Now()
+	if err := firePre(ctx, o.middleware, baseEvent); err != nil {
+		return TranscriptionHandle{}, err
+	}
+
+	id, err := dispatchTranscriptionSubmit(ctx, client, base, tcCfg, headers, audioURL, audioBytes)
+	postEv := baseEvent
+	postEv.Err = err
+	postEv.Duration = time.Since(start)
+	firePost(ctx, o.middleware, postEv)
+	if err != nil {
+		return TranscriptionHandle{}, err
+	}
+	return TranscriptionHandle{ID: id, Provider: p}, nil
+}
+
+//
+//
+//
+func dispatchTranscriptionSubmit(
+	ctx context.Context,
+	client *http.Client,
+	base string,
+	tcCfg *providers.TranscriptionDef,
+	headers map[string]string,
+	audioURL string,
+	audioBytes []byte,
+) (string, error) {
 	//
 	//
 	if audioBytes != nil {
-		if tcCfg.UploadEndpoint == "" {
-			return TranscriptionHandle{}, &ValidationError{Field: "parts", Message: p.Name + " does not accept audio bytes; pass a public audio URL"}
-		}
 		uploadHeaders := cloneStringMap(headers)
 		uploadHeaders["Content-Type"] = "application/octet-stream"
 		uploadBody, uploadErr := doPost(ctx, client, base+tcCfg.UploadEndpoint, audioBytes, uploadHeaders)
 		if uploadErr != nil {
-			return TranscriptionHandle{}, fmt.Errorf("transcription upload: %w", uploadErr)
+			return "", fmt.Errorf("transcription upload: %w", uploadErr)
 		}
 		var up map[string]any
 		if err := json.Unmarshal(uploadBody, &up); err != nil {
-			return TranscriptionHandle{}, fmt.Errorf("unmarshal transcription upload response: %w", err)
+			return "", fmt.Errorf("unmarshal transcription upload response: %w", err)
 		}
 		audioURL = lookupHandleField(up, "upload_url")
 		if audioURL == "" {
-			return TranscriptionHandle{}, fmt.Errorf("transcription upload: response carried no upload_url")
+			return "", fmt.Errorf("transcription upload: response carried no upload_url")
 		}
 	}
 
 	jsonBody, err := json.Marshal(map[string]any{"audio_url": audioURL})
 	if err != nil {
-		return TranscriptionHandle{}, fmt.Errorf("marshal transcription request: %w", err)
+		return "", fmt.Errorf("marshal transcription request: %w", err)
 	}
 	respBody, err := doPost(ctx, client, base+tcCfg.SubmitEndpoint, jsonBody, headers)
 	if err != nil {
-		return TranscriptionHandle{}, err
+		return "", err
 	}
 	var raw map[string]any
 	if err := json.Unmarshal(respBody, &raw); err != nil {
-		return TranscriptionHandle{}, fmt.Errorf("unmarshal transcription submit response: %w", err)
+		return "", fmt.Errorf("unmarshal transcription submit response: %w", err)
 	}
 	id := lookupHandleField(raw, tcCfg.SubmitHandleField)
 	if id == "" {
-		return TranscriptionHandle{}, fmt.Errorf("transcription submit: empty handle field %q", tcCfg.SubmitHandleField)
+		return "", fmt.Errorf("transcription submit: empty handle field %q", tcCfg.SubmitHandleField)
 	}
-	return TranscriptionHandle{ID: id, Provider: p}, nil
+	return id, nil
 }
 
 //
@@ -285,15 +330,40 @@ func transcribeSync(ctx context.Context, p Provider, req TranscriptionRequest, o
 		return TranscriptionResponse{}, err
 	}
 	headers["Content-Type"] = contentType
+
+	baseEvent := providers.Event{
+		Op:       providers.OpTranscription,
+		Provider: p.Name,
+		Model:    req.Model,
+	}
+	start := time.Now()
+	if err := firePre(ctx, o.middleware, baseEvent); err != nil {
+		return TranscriptionResponse{}, err
+	}
+
 	respBody, err := doPost(ctx, client, base+tcCfg.SubmitEndpoint, body, headers)
 	if err != nil {
+		postEv := baseEvent
+		postEv.Err = err
+		postEv.Duration = time.Since(start)
+		firePost(ctx, o.middleware, postEv)
 		return TranscriptionResponse{}, err
 	}
 	var raw map[string]any
 	if err := json.Unmarshal(respBody, &raw); err != nil {
-		return TranscriptionResponse{}, fmt.Errorf("unmarshal transcription response: %w", err)
+		parseErr := fmt.Errorf("unmarshal transcription response: %w", err)
+		postEv := baseEvent
+		postEv.Err = parseErr
+		postEv.Duration = time.Since(start)
+		firePost(ctx, o.middleware, postEv)
+		return TranscriptionResponse{}, parseErr
 	}
-	return transcriptionResultFromOpenAI(raw), nil
+	resp := transcriptionResultFromOpenAI(raw)
+	postEv := baseEvent
+	postEv.Usage = resp.Usage
+	postEv.Duration = time.Since(start)
+	firePost(ctx, o.middleware, postEv)
+	return resp, nil
 }
 
 //

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/aktagon/llmkit-go/v2/providers"
 )
@@ -27,12 +28,35 @@ type SpeechRequest struct {
 //
 
 //
+type SpeechOption func(*speechOptions)
+
+type speechOptions struct {
+	middleware []providers.MiddlewareFn
+}
+
+//
+//
+func WithSpeechMiddleware(fns ...providers.MiddlewareFn) SpeechOption {
+	return func(o *speechOptions) { o.middleware = append(o.middleware, fns...) }
+}
+
+func resolveSpeechOptions(opts []SpeechOption) *speechOptions {
+	o := &speechOptions{}
+	for _, fn := range opts {
+		fn(o)
+	}
+	return o
+}
+
 //
 //
 //
 //
 //
-func generateSpeech(ctx context.Context, p Provider, req SpeechRequest) (SpeechResponse, error) {
+//
+func generateSpeech(ctx context.Context, p Provider, req SpeechRequest, opts ...SpeechOption) (SpeechResponse, error) {
+	o := resolveSpeechOptions(opts)
+
 	if err := validateProvider(p); err != nil {
 		return SpeechResponse{}, err
 	}
@@ -62,18 +86,38 @@ func generateSpeech(ctx context.Context, p Provider, req SpeechRequest) (SpeechR
 		return SpeechResponse{}, &ValidationError{Field: "voice", Message: req.Voice + " is not a known voice for " + p.Name}
 	}
 
+	baseEvent := providers.Event{
+		Op:       providers.OpSpeechGeneration,
+		Provider: p.Name,
+		Model:    req.Model,
+	}
+	start := time.Now()
+	if err := firePre(ctx, o.middleware, baseEvent); err != nil {
+		return SpeechResponse{}, err
+	}
+
 	client := http.DefaultClient
 	headers := imageAuthHeaders(p, cfg)
 
 	respBody, err := dispatchSpeechHTTP(ctx, client, p, cfg, sgCfg, req, headers)
 	if err != nil {
+		postEv := baseEvent
+		postEv.Err = err
+		postEv.Duration = time.Since(start)
+		firePost(ctx, o.middleware, postEv)
 		if apiErr, ok := err.(*APIError); ok && respBody != nil {
 			return SpeechResponse{}, parseError(p.Name, apiErr.StatusCode, respBody, nil)
 		}
 		return SpeechResponse{}, err
 	}
 
-	return parseSpeechResponse(p.Name, sgCfg.AudioEncoding, model.OutputMime, respBody)
+	resp, parseErr := parseSpeechResponse(p.Name, sgCfg.AudioEncoding, model.OutputMime, respBody)
+	postEv := baseEvent
+	postEv.Usage = resp.Usage
+	postEv.Err = parseErr
+	postEv.Duration = time.Since(start)
+	firePost(ctx, o.middleware, postEv)
+	return resp, parseErr
 }
 
 //

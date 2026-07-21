@@ -53,6 +53,10 @@ const (
 	OpVideoGeneration MiddlewareOp = "video_generation"
 	//
 	OpModelsList MiddlewareOp = "models_list"
+	//
+	OpSpeechGeneration MiddlewareOp = "speech_generation"
+	//
+	OpTranscription MiddlewareOp = "transcription"
 )
 
 //
