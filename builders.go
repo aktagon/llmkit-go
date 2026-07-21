@@ -322,11 +322,17 @@ func (b *Music) Text(s string) *Music {
 // call. Chain methods return new instances (immutable); skipped
 // terminals live in hand-written text.go / image.go.
 type Speech struct {
-	client *Client
-	model  string
-	voice  string
+	client     *Client
+	middleware []MiddlewareFn
+	model      string
+	voice      string
 }
 
+func (b *Speech) AddMiddleware(fns ...MiddlewareFn) *Speech {
+	out := *b
+	out.middleware = append(append([]MiddlewareFn{}, b.middleware...), fns...)
+	return &out
+}
 func (b *Speech) Model(name string) *Speech { out := *b; out.model = name; return &out }
 func (b *Speech) Voice(id string) *Speech   { out := *b; out.voice = id; return &out }
 
@@ -336,10 +342,16 @@ func (b *Speech) Voice(id string) *Speech   { out := *b; out.voice = id; return 
 // call. Chain methods return new instances (immutable); skipped
 // terminals live in hand-written text.go / image.go.
 type Transcription struct {
-	client *Client
-	model  string
+	client     *Client
+	middleware []MiddlewareFn
+	model      string
 }
 
+func (b *Transcription) AddMiddleware(fns ...MiddlewareFn) *Transcription {
+	out := *b
+	out.middleware = append(append([]MiddlewareFn{}, b.middleware...), fns...)
+	return &out
+}
 func (b *Transcription) Model(name string) *Transcription { out := *b; out.model = name; return &out }
 
 // === *Video — VideoGeneration builder ===

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/aktagon/llmkit-go/v2/providers"
 )
@@ -26,13 +27,36 @@ type SpeechRequest struct {
 
 // AudioData and SpeechResponse are declared in go/structs.go (ADR-018).
 
+// SpeechOption configures Generate.
+type SpeechOption func(*speechOptions)
+
+type speechOptions struct {
+	middleware []providers.MiddlewareFn
+}
+
+// WithSpeechMiddleware registers pre/post hooks that fire around the speech
+// request. Op is providers.OpSpeechGeneration. Pre-phase can veto.
+func WithSpeechMiddleware(fns ...providers.MiddlewareFn) SpeechOption {
+	return func(o *speechOptions) { o.middleware = append(o.middleware, fns...) }
+}
+
+func resolveSpeechOptions(opts []SpeechOption) *speechOptions {
+	o := &speechOptions{}
+	for _, fn := range opts {
+		fn(o)
+	}
+	return o
+}
+
 // generateSpeech synthesizes speech audio from text. Pre-flight validation
 // rejects an unknown model and a voice outside the provider's catalogue before
 // any HTTP call (the music model-validation discipline). The audio is returned
 // as a single decoded AudioData (one synthesis, one clip — ADR-049 OQ-4).
 //
 // Internal helper — the public surface is (*Speech).Generate in speech_builder.go.
-func generateSpeech(ctx context.Context, p Provider, req SpeechRequest) (SpeechResponse, error) {
+func generateSpeech(ctx context.Context, p Provider, req SpeechRequest, opts ...SpeechOption) (SpeechResponse, error) {
+	o := resolveSpeechOptions(opts)
+
 	if err := validateProvider(p); err != nil {
 		return SpeechResponse{}, err
 	}
@@ -62,18 +86,38 @@ func generateSpeech(ctx context.Context, p Provider, req SpeechRequest) (SpeechR
 		return SpeechResponse{}, &ValidationError{Field: "voice", Message: req.Voice + " is not a known voice for " + p.Name}
 	}
 
+	baseEvent := providers.Event{
+		Op:       providers.OpSpeechGeneration,
+		Provider: p.Name,
+		Model:    req.Model,
+	}
+	start := time.Now()
+	if err := firePre(ctx, o.middleware, baseEvent); err != nil {
+		return SpeechResponse{}, err
+	}
+
 	client := http.DefaultClient
 	headers := imageAuthHeaders(p, cfg)
 
 	respBody, err := dispatchSpeechHTTP(ctx, client, p, cfg, sgCfg, req, headers)
 	if err != nil {
+		postEv := baseEvent
+		postEv.Err = err
+		postEv.Duration = time.Since(start)
+		firePost(ctx, o.middleware, postEv)
 		if apiErr, ok := err.(*APIError); ok && respBody != nil {
 			return SpeechResponse{}, parseError(p.Name, apiErr.StatusCode, respBody, nil)
 		}
 		return SpeechResponse{}, err
 	}
 
-	return parseSpeechResponse(p.Name, sgCfg.AudioEncoding, model.OutputMime, respBody)
+	resp, parseErr := parseSpeechResponse(p.Name, sgCfg.AudioEncoding, model.OutputMime, respBody)
+	postEv := baseEvent
+	postEv.Usage = resp.Usage
+	postEv.Err = parseErr
+	postEv.Duration = time.Since(start)
+	firePost(ctx, o.middleware, postEv)
+	return resp, parseErr
 }
 
 // dispatchSpeechHTTP picks a wire shape per provider config (never by provider
