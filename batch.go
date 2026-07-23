@@ -414,7 +414,7 @@ func parseBatchResults(provider string, data []byte, bc *providers.BatchDef, raw
 
 		// Batch is Chat-Completions-only (ADR-055): empty wire shape selects the
 		// provider's declared response paths, not the Responses output[] arm.
-		resp, err := parseResponse(provider, "", responseBytes)
+		resp, err := DecodeResponse(provider, "", responseBytes)
 		if err != nil {
 			continue
 		}
