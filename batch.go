@@ -414,7 +414,7 @@ func parseBatchResults(provider string, data []byte, bc *providers.BatchDef, raw
 
 		//
 		//
-		resp, err := parseResponse(provider, "", responseBytes)
+		resp, err := DecodeResponse(provider, "", responseBytes)
 		if err != nil {
 			continue
 		}

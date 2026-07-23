@@ -921,7 +921,13 @@ func removeAdditionalProperties(schema any) {
 //
 //
 //
-func parseResponse(provider, chatWireShape string, body []byte) (Response, error) {
+//
+//
+//
+//
+//
+//
+func DecodeResponse(provider, chatWireShape string, body []byte) (Response, error) {
 	var raw map[string]any
 	if err := json.Unmarshal(body, &raw); err != nil {
 		return Response{}, fmt.Errorf("unmarshal response: %w", err)
@@ -953,6 +959,155 @@ func parseResponse(provider, chatWireShape string, body []byte) (Response, error
 		FinishReason:  finishReason,
 		FinishMessage: finishMessage,
 	}, nil
+}
+
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+func EncodeResponse(provider, chatWireShape string, resp Response) ([]byte, error) {
+	if err := guardOneWayFields(provider, resp); err != nil {
+		return nil, err
+	}
+	if chatWireShape == providers.ChatResponsesOpenAI {
+		return json.Marshal(encodeResponsesEnvelope(resp))
+	}
+
+	raw := map[string]any{}
+	setWirePath(raw, providers.ResponseTextPath(provider), resp.Text)
+	inputPath, outputPath := providers.UsagePaths(provider)
+	setWirePath(raw, inputPath, resp.Usage.Input)
+	setWirePath(raw, outputPath, resp.Usage.Output)
+	cacheWritePath, cacheReadPath := providers.CacheUsagePaths(provider)
+	setWirePath(raw, cacheWritePath, resp.Usage.CacheWrite)
+	setWirePath(raw, cacheReadPath, resp.Usage.CacheRead)
+	if scale := providers.UsageCostScale(provider); scale != 0 {
+		setWirePath(raw, providers.UsageCostPath(provider), resp.Usage.Cost/scale)
+	}
+	if cfg, ok := providerSpecs()[provider]; ok {
+		setWirePath(raw, cfg.ReasoningTokensPath, resp.Usage.Reasoning)
+		setWirePath(raw, cfg.FinishReasonPath, resp.FinishReason)
+		setWirePath(raw, cfg.FinishMessagePath, resp.FinishMessage)
+	}
+	return json.Marshal(raw)
+}
+
+//
+//
+//
+//
+//
+//
+//
+//
+func guardOneWayFields(provider string, resp Response) error {
+	if provider == string(providers.Vertex) && resp.FinishReason != "" {
+		return &ValidationError{
+			Field:   "response.finish_reason",
+			Message: "Vertex carries no finish-reason field. Its path reads predictions[0].raiFilteredReason — a safety-filter explanation surfaced AS the finish reason. Extraction is a deliberate fusion, so the reverse leg cannot decide whether a given canonical finish_reason originated as a safety verdict, and writing an ordinary stop signal into that field would fabricate one.",
+		}
+	}
+	return nil
+}
+
+//
+//
+//
+//
+//
+//
+//
+//
+func setWirePath(data map[string]any, path string, val any) {
+	if path == "" || isEmptyWireValue(val) {
+		return
+	}
+	parts := strings.Split(path, ".")
+	current := data
+	for i, part := range parts {
+		last := i == len(parts)-1
+		field, idx := part, -1
+		if b := strings.Index(part, "["); b != -1 {
+			field = part[:b]
+			idx, _ = strconv.Atoi(part[b+1 : len(part)-1])
+		}
+		if idx == -1 {
+			if last {
+				current[field] = val
+				return
+			}
+			current = childMap(current, field)
+			continue
+		}
+		arr, _ := current[field].([]any)
+		for len(arr) <= idx {
+			arr = append(arr, nil)
+		}
+		current[field] = arr
+		if last {
+			arr[idx] = val
+			return
+		}
+		elem, ok := arr[idx].(map[string]any)
+		if !ok {
+			elem = map[string]any{}
+			arr[idx] = elem
+		}
+		current = elem
+	}
+}
+
+//
+func childMap(m map[string]any, field string) map[string]any {
+	child, ok := m[field].(map[string]any)
+	if !ok {
+		child = map[string]any{}
+		m[field] = child
+	}
+	return child
+}
+
+//
+//
+//
+func isEmptyWireValue(val any) bool {
+	switch v := val.(type) {
+	case string:
+		return v == ""
+	case int:
+		return v == 0
+	case float64:
+		return v == 0
+	}
+	return val == nil
+}
+
+//
+//
+//
+//
+//
+//
+func encodeResponsesEnvelope(resp Response) map[string]any {
+	raw := map[string]any{}
+	if resp.Text != "" {
+		raw["output"] = []any{map[string]any{
+			"type":    "message",
+			"content": []any{map[string]any{"type": "output_text", "text": resp.Text}},
+		}}
+	}
+	setWirePath(raw, "usage.input_tokens", resp.Usage.Input)
+	setWirePath(raw, "usage.output_tokens", resp.Usage.Output)
+	setWirePath(raw, "usage.input_tokens_details.cached_tokens", resp.Usage.CacheRead)
+	setWirePath(raw, "usage.output_tokens_details.reasoning_tokens", resp.Usage.Reasoning)
+	setWirePath(raw, "status", resp.FinishReason)
+	return raw
 }
 
 //

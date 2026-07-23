@@ -107,7 +107,7 @@ func (b *Text) Prompt(ctx context.Context, finalText string) (Response, error) {
 		return Response{}, err
 	}
 
-	resp, parseErr := parseResponse(p.Name, cfg.ChatWireShape, respBody)
+	resp, parseErr := DecodeResponse(p.Name, cfg.ChatWireShape, respBody)
 	if o.raw && parseErr == nil {
 		resp.Raw = append(json.RawMessage(nil), respBody...)
 	}
