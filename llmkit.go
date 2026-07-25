@@ -938,27 +938,35 @@ func DecodeResponse(provider, chatWireShape string, body []byte) (Response, erro
 	}
 
 	text := extractPath(raw, providers.ResponseTextPath(provider))
-	inputPath, outputPath := providers.UsagePaths(provider)
-	input := extractIntPath(raw, inputPath)
-	output := extractIntPath(raw, outputPath)
-	cacheWrite, cacheRead := extractCacheUsage(raw, provider)
-	reasoning := extractReasoningUsage(raw, provider)
-	cost := extractFloatPath(raw, providers.UsageCostPath(provider)) * providers.UsageCostScale(provider)
 	finishReason, finishMessage := extractFinishSignal(raw, provider)
 
 	return Response{
-		Text: text,
-		Usage: Usage{
-			Input:      input,
-			Output:     output,
-			CacheWrite: cacheWrite,
-			CacheRead:  cacheRead,
-			Reasoning:  reasoning,
-			Cost:       cost,
-		},
+		Text:          text,
+		Usage:         decodeUsage(raw, provider),
 		FinishReason:  finishReason,
 		FinishMessage: finishMessage,
 	}, nil
+}
+
+// decodeUsage reads all six dimensions out of a parsed provider body. The ONE
+// usage reader (ADR-076 SYM-004): DecodeResponse and the agent tool loop both
+// call it, so a loop cannot re-derive a subset of what the reader already
+// produces — which is exactly how Go, Python and TypeScript came to accumulate
+// three dimensions of six (BUG-045).
+func decodeUsage(raw map[string]any, provider string) Usage {
+	inputPath, outputPath := providers.UsagePaths(provider)
+	cacheWrite, cacheRead := extractCacheUsage(raw, provider)
+	return Usage{
+		Input:      optIntPath(raw, inputPath),
+		Output:     optIntPath(raw, outputPath),
+		CacheWrite: cacheWrite,
+		CacheRead:  cacheRead,
+		Reasoning:  extractReasoningUsage(raw, provider),
+		Cost: scaleCost(
+			optFloatPath(raw, providers.UsageCostPath(provider)),
+			providers.UsageCostScale(provider),
+		),
+	}
 }
 
 // EncodeResponse is DecodeResponse's inverse: it renders a canonical Response
@@ -987,8 +995,8 @@ func EncodeResponse(provider, chatWireShape string, resp Response) ([]byte, erro
 	cacheWritePath, cacheReadPath := providers.CacheUsagePaths(provider)
 	setWirePath(raw, cacheWritePath, resp.Usage.CacheWrite)
 	setWirePath(raw, cacheReadPath, resp.Usage.CacheRead)
-	if scale := providers.UsageCostScale(provider); scale != 0 {
-		setWirePath(raw, providers.UsageCostPath(provider), resp.Usage.Cost/scale)
+	if scale := providers.UsageCostScale(provider); scale != 0 && resp.Usage.Cost != nil {
+		setWirePath(raw, providers.UsageCostPath(provider), *resp.Usage.Cost/scale)
 	}
 	if cfg, ok := providerSpecs()[provider]; ok {
 		setWirePath(raw, cfg.ReasoningTokensPath, resp.Usage.Reasoning)
@@ -1007,7 +1015,7 @@ func EncodeResponse(provider, chatWireShape string, resp Response) ([]byte, erro
 // stays usable and only the lying path fails. Field and Message carry the
 // mapping's canonicalPath and invertibilityNote verbatim.
 func guardOneWayFields(provider string, resp Response) error {
-	if provider == string(providers.Vertex) && resp.FinishReason != "" {
+	if provider == string(providers.Vertex) && stringValue(resp.FinishReason) != "" {
 		return &ValidationError{
 			Field:   "response.finish_reason",
 			Message: "Vertex carries no finish-reason field. Its path reads predictions[0].raiFilteredReason — a safety-filter explanation surfaced AS the finish reason. Extraction is a deliberate fusion, so the reverse leg cannot decide whether a given canonical finish_reason originated as a safety verdict, and writing an ordinary stop signal into that field would fabricate one.",
@@ -1025,7 +1033,8 @@ func guardOneWayFields(provider string, resp Response) error {
 // value is a no-op: there is nothing to write, and materializing a zero would
 // invent a field the provider never sent.
 func setWirePath(data map[string]any, path string, val any) {
-	if path == "" || isEmptyWireValue(val) {
+	val, ok := derefWireValue(val)
+	if path == "" || !ok || isEmptyWireValue(val) {
 		return
 	}
 	parts := strings.Split(path, ".")
@@ -1077,15 +1086,40 @@ func childMap(m map[string]any, field string) map[string]any {
 // Empty values are skipped rather than written, so the encoder never claims a
 // provider reported zero tokens when the canonical Response simply had none.
 func isEmptyWireValue(val any) bool {
-	switch v := val.(type) {
-	case string:
-		return v == ""
-	case int:
-		return v == 0
-	case float64:
-		return v == 0
+	if s, ok := val.(string); ok {
+		return s == ""
 	}
 	return val == nil
+}
+
+// derefWireValue unwraps an optional canonical field. ok is false when the
+// field was NOT REPORTED, which is the one case EncodeResponse must not write:
+// materializing a value there would invent a field the provider never sent.
+//
+// A reported ZERO is written, and that is the change ADR-081 forces here. The
+// old rule dropped every zero because the type could not tell the two apart, so
+// a provider that genuinely reported `cached_tokens: 0` round-tripped to a body
+// that omitted the field — an asymmetry the SYM-006 fixed point could not see,
+// because decoding the omission produced the same 0 it started from.
+func derefWireValue(val any) (any, bool) {
+	switch v := val.(type) {
+	case *string:
+		if v == nil {
+			return nil, false
+		}
+		return *v, true
+	case *int:
+		if v == nil {
+			return nil, false
+		}
+		return *v, true
+	case *float64:
+		if v == nil {
+			return nil, false
+		}
+		return *v, true
+	}
+	return val, true
 }
 
 // encodeResponsesEnvelope mirrors parseResponsesEnvelope: it rebuilds OpenAI's
@@ -1121,14 +1155,14 @@ func parseResponsesEnvelope(raw map[string]any) Response {
 	resp := Response{
 		Text: extractResponsesText(raw),
 		Usage: Usage{
-			Input:     extractIntPath(raw, "usage.input_tokens"),
-			Output:    extractIntPath(raw, "usage.output_tokens"),
-			CacheRead: extractIntPath(raw, "usage.input_tokens_details.cached_tokens"),
-			Reasoning: extractIntPath(raw, "usage.output_tokens_details.reasoning_tokens"),
+			Input:     optIntPath(raw, "usage.input_tokens"),
+			Output:    optIntPath(raw, "usage.output_tokens"),
+			CacheRead: optIntPath(raw, "usage.input_tokens_details.cached_tokens"),
+			Reasoning: optIntPath(raw, "usage.output_tokens_details.reasoning_tokens"),
 		},
 	}
 	if pathPresent(raw, "status") {
-		resp.FinishReason = extractPath(raw, "status")
+		resp.FinishReason = optString(extractPath(raw, "status"))
 	}
 	return resp
 }
@@ -1171,16 +1205,16 @@ func extractResponsesText(raw map[string]any) string {
 // Uses pathPresent before extractPath because extractPath stringifies a
 // missing value as "<nil>"; treating that as a finish signal would leak
 // a sentinel into user-facing messages.
-func extractFinishSignal(raw map[string]any, provider string) (reason, message string) {
+func extractFinishSignal(raw map[string]any, provider string) (reason, message *string) {
 	cfg, ok := providerSpecs()[provider]
 	if !ok {
-		return "", ""
+		return nil, nil
 	}
 	if cfg.FinishReasonPath != "" && pathPresent(raw, cfg.FinishReasonPath) {
-		reason = extractPath(raw, cfg.FinishReasonPath)
+		reason = optString(extractPath(raw, cfg.FinishReasonPath))
 	}
 	if cfg.FinishMessagePath != "" && pathPresent(raw, cfg.FinishMessagePath) {
-		message = extractPath(raw, cfg.FinishMessagePath)
+		message = optString(extractPath(raw, cfg.FinishMessagePath))
 	}
 	return reason, message
 }
@@ -1223,12 +1257,12 @@ func pathPresent(data map[string]any, path string) bool {
 // extractReasoningUsage pulls the reasoning token count if the provider
 // reports it separately (e.g., OpenAI o1/o3, Google Gemini 2.5+ thinking).
 // Returns zero when the provider does not expose a separate field.
-func extractReasoningUsage(raw map[string]any, provider string) int {
+func extractReasoningUsage(raw map[string]any, provider string) *int {
 	cfg, ok := providerSpecs()[provider]
-	if !ok || cfg.ReasoningTokensPath == "" {
-		return 0
+	if !ok {
+		return nil
 	}
-	return extractIntPath(raw, cfg.ReasoningTokensPath)
+	return optIntPath(raw, cfg.ReasoningTokensPath)
 }
 
 // extractPath navigates a nested map using dot-notation paths with array index support.
@@ -1268,6 +1302,122 @@ func extractPath(data map[string]any, path string) string {
 		return s
 	}
 	return fmt.Sprintf("%v", current)
+}
+
+// optIntPath is extractIntPath's honest form: it returns nil when the provider
+// declares no location for this dimension (empty path) or the location is
+// absent from the body, and a pointer to the value — which may be a genuine
+// zero — when the provider reported one.
+//
+// This is where the ambiguity used to be manufactured. extractIntPath answers
+// "unreported" and "reported as zero" with the same 0, and every Usage
+// dimension in every capability flowed through it, so the lie was created once
+// and copied everywhere. ADR-081 AVAIL-001.
+func optIntPath(data map[string]any, path string) *int {
+	if path == "" || !pathPresent(data, path) {
+		return nil
+	}
+	v := extractIntPath(data, path)
+	return &v
+}
+
+// optFloatPath is optIntPath for the fractional ADR-027 cost field.
+func optFloatPath(data map[string]any, path string) *float64 {
+	if path == "" || !pathPresent(data, path) {
+		return nil
+	}
+	v := extractFloatPath(data, path)
+	return &v
+}
+
+// optString wraps a finish signal, treating the empty string as not reported.
+// The provider either sent a signal or it did not; an empty one is not a third
+// state any provider produces.
+func optString(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
+// scaleCost applies the provider's USD conversion while preserving absence: an
+// unreported cost stays unreported rather than becoming 0 × scale.
+func scaleCost(cost *float64, scale float64) *float64 {
+	if cost == nil {
+		return nil
+	}
+	v := *cost * scale
+	return &v
+}
+
+// addOptInt sums one dimension across two responses. Absence is ABSORBING
+// (ADR-081 AVAIL-005): if either side did not report the dimension, neither does
+// the sum. Summing what is present and calling it a total is the defect at
+// aggregate scale — nine reported turns would hide the tenth unreported one, and
+// the answer gets less trustworthy the longer the loop runs while looking more
+// authoritative.
+func addOptInt(a, b *int) *int {
+	if a == nil || b == nil {
+		return nil
+	}
+	v := *a + *b
+	return &v
+}
+
+// addOptFloat is addOptInt for the cost dimension.
+func addOptFloat(a, b *float64) *float64 {
+	if a == nil || b == nil {
+		return nil
+	}
+	v := *a + *b
+	return &v
+}
+
+// accumulateUsage folds one turn's usage into a run's running total, every
+// dimension, absorbing. Named and single so there is exactly one place per SDK
+// where "add a turn's usage to a run's usage" is defined — three of the seven
+// SDKs hand-wrote this with three of the six dimensions (BUG-045), which is
+// what having no such place produces.
+//
+// The caller seeds from the first turn rather than from a zero value: the
+// identity for absorbing addition is a REPORTED zero, and seeding with an
+// all-unreported Usage would absorb every subsequent turn to nothing.
+func accumulateUsage(total, turn providers.Usage) providers.Usage {
+	return providers.Usage{
+		Input:      addOptInt(total.Input, turn.Input),
+		Output:     addOptInt(total.Output, turn.Output),
+		CacheWrite: addOptInt(total.CacheWrite, turn.CacheWrite),
+		CacheRead:  addOptInt(total.CacheRead, turn.CacheRead),
+		Reasoning:  addOptInt(total.Reasoning, turn.Reasoning),
+		Cost:       addOptFloat(total.Cost, turn.Cost),
+	}
+}
+
+// intValue reads an optional dimension for arithmetic that has already
+// established the value is reported. Callers that must distinguish absence test
+// the pointer instead; this exists so they are not forced to write the same
+// three-line unwrap at every reporting site.
+func intValue(p *int) int {
+	if p == nil {
+		return 0
+	}
+	return *p
+}
+
+// stringValue is intValue for the finish signals.
+func stringValue(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return *p
+}
+
+// floatValue is intValue for the cost dimension.
+func floatValue(p *float64) float64 {
+	if p == nil {
+		return 0
+	}
+	return *p
 }
 
 // extractIntPath is like extractPath but returns an int.

@@ -84,12 +84,22 @@ resp, err := c.Text.
     Temperature(0.7).
     Prompt(ctx, "What is 2+2?")
 
-fmt.Println(resp.Text)               // "4"
-fmt.Println(resp.Usage.Input)       // prompt tokens
-fmt.Println(resp.Usage.Output)      // completion tokens
-fmt.Println(resp.Usage.CacheRead)   // tokens served from cache (all caching modes)
-fmt.Println(resp.Usage.CacheWrite)  // tokens written to cache (Anthropic explicit caching)
-fmt.Println(resp.Usage.Reasoning)   // internal reasoning tokens (OpenAI o1/o3/o4, Gemini 2.5+ thinking)
+fmt.Println(resp.Text) // "4"
+
+// Every Usage dimension is optional. nil means the provider did not report
+// the value, which is NOT the same as reporting zero: a provider that says it
+// used no cached tokens and one that never mentions caching are different
+// facts, and a plain 0 cannot tell you which you have.
+resp.Usage.Input      // *int — prompt tokens
+resp.Usage.Output     // *int — completion tokens
+resp.Usage.CacheRead  // *int — tokens served from cache (all caching modes)
+resp.Usage.CacheWrite // *int — tokens written to cache (Anthropic explicit caching)
+resp.Usage.Reasoning  // *int — internal reasoning tokens (OpenAI o-series, Gemini 2.5+ thinking)
+resp.Usage.Cost       // *float64 — provider-reported USD; nil is unreported, never "free"
+
+if v := resp.Usage.CacheRead; v != nil {
+	fmt.Println(*v, "tokens served from cache")
+}
 ```
 
 Capability-scoped fields (`CacheRead`, `CacheWrite`, `Reasoning`) are zero when the provider doesn't report them separately.
@@ -111,8 +121,16 @@ for chunk, err := range stream.Chunks() {
 }
 fmt.Println()
 final := stream.Response()
-fmt.Printf("input=%d output=%d finish_reason=%s\n",
-	final.Usage.Input, final.Usage.Output, final.FinishReason)
+// Token counts and the finish reason are optional: nil means the provider
+// did not report the value, which is not the same as reporting zero.
+if final.Usage.Input != nil && final.Usage.Output != nil {
+	fmt.Printf("input=%d output=%d\n", *final.Usage.Input, *final.Usage.Output)
+} else {
+	fmt.Println("this provider did not report token counts")
+}
+if final.FinishReason != nil {
+	fmt.Println("finish_reason:", *final.FinishReason)
+}
 ```
 
 Breaking the range loop cancels the producer goroutine cleanly.
@@ -489,9 +507,14 @@ import (
 // Observation: log token usage after every LLM request.
 func logUsage(ctx context.Context, e providers.Event) error {
     if e.Op == providers.OpLLMRequest && e.Phase == providers.PhasePost {
-        fmt.Printf("%s/%s: %d in, %d out, took %s\n",
-            e.Provider, e.Model,
-            e.Usage.Input, e.Usage.Output, e.Duration)
+        // Both dimensions are optional; a middleware that prints or bills on
+        // them must decide what an unreported turn means rather than treat it
+        // as zero.
+        if e.Usage.Input != nil && e.Usage.Output != nil {
+            fmt.Printf("%s/%s: %d in, %d out, took %s\n",
+                e.Provider, e.Model,
+                *e.Usage.Input, *e.Usage.Output, e.Duration)
+        }
     }
     return nil
 }

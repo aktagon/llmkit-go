@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **BREAKING — an unreported usage dimension or finish signal is now absent, not zero.**
+  The six `Usage` dimensions (input, output, cache read, cache write, reasoning,
+  cost) and the finish reason / finish message on every response container are
+  now `*int` / `*float64` / `*string`. Previously a provider that reported no
+  cached tokens and one that never mentioned caching both produced `0`, and an
+  unreported cost read as a free request.
+
+  Migration: `resp.Usage.Input` is now `*int`; dereference after a nil check, or use the value only when reported.
+
+  Aggregation across agent turns is **absorbing** — a total is reported only when
+  every turn reported that dimension, so a partial sum is never presented as a
+  total. Telemetry now exports a usage attribute when the value is *reported*,
+  zero included, instead of when it is greater than zero.
+
 ## [2.0.1] — 2026-07-19
 
 ### Security

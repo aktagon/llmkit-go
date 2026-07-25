@@ -9,16 +9,18 @@ import (
 
 // Usage tracks token consumption for an LLM call.
 //
-// Capability-scoped dimensions (e.g., CacheWrite, Reasoning) are zero
-// when the corresponding capability is inactive or unreported.
+// A dimension is either reported — carrying a value that may legitimately be
+// zero — or not reported at all. The two are different claims: a provider
+// that says it used no cached tokens and a provider that never mentions
+// caching are not the same fact, and neither is a zero.
 type Usage struct {
-	Input      int // universal
-	Output     int // universal
-	CacheWrite int // scoped to Caching
-	CacheRead  int // scoped to Caching
-	Reasoning  int // scoped to Reasoning
-	// Cost is the provider-reported request cost in USD (ADR-027). Not a TokenDimension — a distinct monetary field. Only OpenRouter (the request must opt in with usage: {include: true}) and xAI report it. 0 is ambiguous: unreported or genuinely free — providers whose usageCostPath is empty never report cost.
-	Cost float64
+	Input      *int // universal
+	Output     *int // universal
+	CacheWrite *int // scoped to Caching
+	CacheRead  *int // scoped to Caching
+	Reasoning  *int // scoped to Reasoning
+	// Cost is the provider-reported request cost in USD (ADR-027). Not a TokenDimension — a distinct monetary field. Only OpenRouter (the request must opt in with usage: {include: true}) and xAI report it. Providers whose usageCostPath is empty never report cost, and the field is then ABSENT, not 0.0 — an unreported cost is not a free request (ADR-081 AVAIL-007).
+	Cost *float64
 }
 
 // MiddlewarePhase indicates when a middleware fires relative to the operation.
@@ -76,7 +78,7 @@ type Event struct {
 	Args map[string]any
 	// Result — Only set when Op=tool_call, Phase=post. Internal-only.
 	Result string
-	// Usage — Set for Op=llm_request, Phase=post. Expanded to gen_ai.usage.* via otelUsageAttribute on each TokenDimension, not a single attribute.
+	// Usage — Set for Op=llm_request, Phase=post. Expanded to gen_ai.usage.* via otelUsageAttribute on each TokenDimension, not a single attribute. Its optional dimensions are SHARED with the response the middleware observes (ADR-081): read them, do not write through them — mutating one rewrites what the caller receives.
 	Usage Usage
 	// Err — Set in Phase=post when the operation failed. Human-readable; telemetry never re-parses it (ADR-071).
 	Err error

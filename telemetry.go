@@ -199,17 +199,21 @@ func intAttr(key string, val int) otlpKeyValue {
 // call's primitives plus injectable span identity + timing, it returns the
 // exact JSON the exporter POSTs — the parity fixture calls it with fixed inputs
 // so all four SDKs are asserted value-identical.
-func buildOTLPTraces(operationName, provider, model string, inputTokens, outputTokens int, errorType, traceID, spanID, startNano, endNano string) []byte {
+// The emission test is REPORTED-NESS, not magnitude (ADR-081 AVAIL-006). OTEL
+// asks that UNSET attributes be omitted, not zero-valued ones, and the old
+// `> 0` guard read the wrong signal in both directions: it suppressed a
+// genuinely observed zero and would have emitted an invented one.
+func buildOTLPTraces(operationName, provider, model string, inputTokens, outputTokens *int, errorType, traceID, spanID, startNano, endNano string) []byte {
 	attrs := []otlpKeyValue{
 		stringAttr(providers.OtelAttrOp, operationName),
 		stringAttr(providers.OtelAttrProvider, provider),
 		stringAttr(providers.OtelAttrModel, model),
 	}
-	if inputTokens > 0 {
-		attrs = append(attrs, intAttr(providers.OtelUsageInput, inputTokens))
+	if inputTokens != nil {
+		attrs = append(attrs, intAttr(providers.OtelUsageInput, *inputTokens))
 	}
-	if outputTokens > 0 {
-		attrs = append(attrs, intAttr(providers.OtelUsageOutput, outputTokens))
+	if outputTokens != nil {
+		attrs = append(attrs, intAttr(providers.OtelUsageOutput, *outputTokens))
 	}
 	var status *otlpStatus
 	if errorType != "" {
