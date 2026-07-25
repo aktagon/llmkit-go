@@ -77,7 +77,11 @@ func (a *legacyAgent) runToolLoop(ctx context.Context) (Response, error) {
 		return Response{}, err
 	}
 
+	// Seeded from the first turn, not from a zero value: absorbing addition's
+	// identity is a REPORTED zero, and an all-unreported seed would absorb every
+	// turn to nothing (ADR-081 AVAIL-005).
 	var totalUsage Usage
+	usageSeeded := false
 
 	for i := 0; i < a.opts.maxToolIterations; i++ {
 		// Build the request through the shared builder (ADR-026 PIPE-001/004):
@@ -154,17 +158,16 @@ func (a *legacyAgent) runToolLoop(ctx context.Context) (Response, error) {
 			return Response{}, wrapped
 		}
 
-		// Accumulate usage
-		inputPath, outputPath := providers.UsagePaths(a.provider.Name)
-		turnInput := extractIntPath(raw, inputPath)
-		turnOutput := extractIntPath(raw, outputPath)
-		turnCost := extractFloatPath(raw, providers.UsageCostPath(a.provider.Name)) * providers.UsageCostScale(a.provider.Name)
-		totalUsage.Input += turnInput
-		totalUsage.Output += turnOutput
-		totalUsage.Cost += turnCost
+		// Accumulate usage through the shared reader, all six dimensions.
+		turnUsage := decodeUsage(raw, a.provider.Name)
+		if usageSeeded {
+			totalUsage = accumulateUsage(totalUsage, turnUsage)
+		} else {
+			totalUsage, usageSeeded = turnUsage, true
+		}
 
 		postEv := llmEvent
-		postEv.Usage = providers.Usage{Input: turnInput, Output: turnOutput}
+		postEv.Usage = turnUsage
 		postEv.Duration = time.Since(llmStart)
 		firePost(ctx, a.opts.middleware, postEv)
 

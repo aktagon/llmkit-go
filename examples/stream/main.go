@@ -33,7 +33,15 @@ func main() {
 	}
 	fmt.Println()
 	final := stream.Response()
-	fmt.Printf("input=%d output=%d finish_reason=%s\n",
-		final.Usage.Input, final.Usage.Output, final.FinishReason)
+	// Token counts and the finish reason are optional: nil means the provider
+	// did not report the value, which is not the same as reporting zero.
+	if final.Usage.Input != nil && final.Usage.Output != nil {
+		fmt.Printf("input=%d output=%d\n", *final.Usage.Input, *final.Usage.Output)
+	} else {
+		fmt.Println("this provider did not report token counts")
+	}
+	if final.FinishReason != nil {
+		fmt.Println("finish_reason:", *final.FinishReason)
+	}
 	// #endregion
 }

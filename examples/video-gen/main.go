@@ -46,7 +46,16 @@ func main() {
 		log.Fatal(err)
 	}
 	if len(resp.Videos) == 0 {
-		log.Fatalf("no video returned (finish: %s %s)", resp.FinishReason, resp.FinishMessage)
+		// Both finish signals are optional: nil means the provider reported
+		// nothing, which is not the same as reporting an empty string.
+		reason, msg := "unreported", "unreported"
+		if resp.FinishReason != nil {
+			reason = *resp.FinishReason
+		}
+		if resp.FinishMessage != nil {
+			msg = *resp.FinishMessage
+		}
+		log.Fatalf("no video returned (finish: %s %s)", reason, msg)
 	}
 
 	v := resp.Videos[0]

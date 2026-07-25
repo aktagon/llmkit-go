@@ -923,8 +923,8 @@ func parseImageResponse(imgCfg *providers.ImageGenDef, provider string, body []b
 		Images: images,
 		Text:   text,
 		Usage: Usage{
-			Input:  extractIntPath(raw, imgCfg.UsageInputPath),
-			Output: extractIntPath(raw, imgCfg.UsageOutputPath),
+			Input:  optIntPath(raw, imgCfg.UsageInputPath),
+			Output: optIntPath(raw, imgCfg.UsageOutputPath),
 		},
 		FinishReason:  finishReason,
 		FinishMessage: finishMessage,
@@ -972,12 +972,9 @@ func parseImageResponseDataArray(raw map[string]any, inputPath, outputPath strin
 			revised = append(revised, rp)
 		}
 	}
-	tokens := Usage{}
-	if inputPath != "" {
-		tokens.Input = extractIntPath(raw, inputPath)
-	}
-	if outputPath != "" {
-		tokens.Output = extractIntPath(raw, outputPath)
+	tokens := Usage{
+		Input:  optIntPath(raw, inputPath),
+		Output: optIntPath(raw, outputPath),
 	}
 	return ImageResponse{
 		Images: images,
@@ -1018,7 +1015,7 @@ func parseVertexImageResponse(raw map[string]any) ImageResponse {
 		}
 		images = append(images, ImageData{MimeType: mime, Bytes: decoded})
 	}
-	return ImageResponse{Images: images, FinishReason: finishReason}
+	return ImageResponse{Images: images, FinishReason: optString(finishReason)}
 }
 
 // extractGoogleImageParts walks candidates[0].content.parts, returning every

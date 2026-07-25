@@ -219,13 +219,7 @@ func applyResourceCaching(ctx context.Context, body map[string]any, p Provider, 
 }
 
 // extractCacheUsage extracts cache token counts from a provider response.
-func extractCacheUsage(raw map[string]any, provider string) (creation, read int) {
+func extractCacheUsage(raw map[string]any, provider string) (creation, read *int) {
 	creationPath, readPath := providers.CacheUsagePaths(provider)
-	if creationPath != "" {
-		creation = extractIntPath(raw, creationPath)
-	}
-	if readPath != "" {
-		read = extractIntPath(raw, readPath)
-	}
-	return
+	return optIntPath(raw, creationPath), optIntPath(raw, readPath)
 }

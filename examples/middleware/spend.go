@@ -54,7 +54,14 @@ func (s *SpendCap) Middleware(ctx context.Context, e providers.Event) error {
 	if !ok {
 		return nil // no price entry — skip silently, or log in real code
 	}
-	s.spent += float64(e.Usage.Input)*p.Input/1e6 + float64(e.Usage.Output)*p.Output/1e6
+	// A spend cap must not charge for tokens nobody reported. Both dimensions
+	// are optional (ADR-081): unreported is not zero, so a turn that reported
+	// no counts contributes nothing rather than a confident $0.00 — and a
+	// budget built on those silent zeroes would never trip.
+	if e.Usage.Input == nil || e.Usage.Output == nil {
+		return nil
+	}
+	s.spent += float64(*e.Usage.Input)*p.Input/1e6 + float64(*e.Usage.Output)*p.Output/1e6
 	return nil
 }
 
