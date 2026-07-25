@@ -327,11 +327,11 @@ func doSigV4Get(ctx context.Context, client *http.Client, url string,
 // (event-typed SSE — Anthropic message_stop) or bare `json.path`
 // (data-only SSE — OpenAI / Grok / Google). Empty disables capture.
 func doStreamPost(ctx context.Context, client *http.Client, url string, body []byte, headers map[string]string,
-	streamCfg *providers.StreamDef, finishReasonPath string, callback func(string)) (Usage, string, error) {
+	streamCfg *providers.StreamDef, finishReasonPath string, callback func(string)) (Usage, *string, error) {
 
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
 	if err != nil {
-		return Usage{}, "", redactURLError(err)
+		return Usage{}, nil, redactURLError(err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -341,13 +341,13 @@ func doStreamPost(ctx context.Context, client *http.Client, url string, body []b
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return Usage{}, "", redactURLError(err)
+		return Usage{}, nil, redactURLError(err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
 		data, _ := io.ReadAll(resp.Body)
-		return Usage{}, "", &APIError{
+		return Usage{}, nil, &APIError{
 			StatusCode: resp.StatusCode,
 			Message:    string(data),
 			Retryable:  resp.StatusCode == 429 || resp.StatusCode >= 500,
@@ -357,7 +357,7 @@ func doStreamPost(ctx context.Context, client *http.Client, url string, body []b
 	finishEvent, finishJSONPath := parseStreamFinishPath(finishReasonPath)
 
 	var usage Usage
-	var finishReason string
+	var finishReason *string
 	var currentEvent string
 	scanner := bufio.NewScanner(resp.Body)
 	// Default Scanner buffer is 64KB. SSE frames carrying large
@@ -404,7 +404,7 @@ func doStreamPost(ctx context.Context, client *http.Client, url string, body []b
 					// TS/Python/Rust parsers return "" for null and
 					// rely on truthiness — Go alone needs the literal.
 					if v := extractPath(parsed, finishJSONPath); v != "" && v != "<nil>" && v != "FINISH_REASON_UNSPECIFIED" {
-						finishReason = v
+						finishReason = optString(v)
 					}
 				}
 			}
@@ -428,8 +428,10 @@ func doStreamPost(ctx context.Context, client *http.Client, url string, body []b
 				}
 			}
 			// Extract usage from usage events
-			if currentEvent == streamCfg.UsageEvent && streamCfg.UsageOutputPath != "" {
-				usage.Output = extractIntPath(parsed, streamCfg.UsageOutputPath)
+			if currentEvent == streamCfg.UsageEvent {
+				if v := optIntPath(parsed, streamCfg.UsageOutputPath); v != nil {
+					usage.Output = v
+				}
 			}
 		} else {
 			// Data-only stream (OpenAI, Google)
@@ -437,15 +439,15 @@ func doStreamPost(ctx context.Context, client *http.Client, url string, body []b
 				callback(text)
 			}
 			// Check for usage in every event (OpenAI sends it in the last chunk)
-			if streamCfg.UsageInputPath != "" {
-				if v := extractIntPath(parsed, streamCfg.UsageInputPath); v > 0 {
-					usage.Input = v
-				}
+			// Gate on REPORTED-ness, not magnitude: the old `v > 0` guard
+			// discarded a usage frame that genuinely reported zero, and a
+			// stream carries its usage in one late frame, so "present in this
+			// event" is the only correct test (ADR-081 AVAIL-001).
+			if v := optIntPath(parsed, streamCfg.UsageInputPath); v != nil {
+				usage.Input = v
 			}
-			if streamCfg.UsageOutputPath != "" {
-				if v := extractIntPath(parsed, streamCfg.UsageOutputPath); v > 0 {
-					usage.Output = v
-				}
+			if v := optIntPath(parsed, streamCfg.UsageOutputPath); v != nil {
+				usage.Output = v
 			}
 		}
 
