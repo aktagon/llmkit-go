@@ -402,7 +402,7 @@ func parseVertexMusicResponse(raw map[string]any, fallbackMime string) MusicResp
 			audio = append(audio, AudioData{MimeType: mime, Bytes: decoded})
 		}
 	}
-	return MusicResponse{Audio: audio, FinishReason: finishReason}
+	return MusicResponse{Audio: audio, FinishReason: optString(finishReason)}
 }
 
 // parseGeminiMusicResponse walks candidates[0].content.parts, decoding each
@@ -438,7 +438,7 @@ func parseGeminiMusicResponse(raw map[string]any, fallbackMime string) MusicResp
 		}
 	}
 	finishReason, _ := first["finishReason"].(string)
-	return MusicResponse{Audio: audio, Text: strings.Join(textParts, ""), FinishReason: finishReason}
+	return MusicResponse{Audio: audio, Text: strings.Join(textParts, ""), FinishReason: optString(finishReason)}
 }
 
 // parseMinimaxMusicResponse decodes MiniMax /v1/music_generation responses.
@@ -458,5 +458,5 @@ func parseMinimaxMusicResponse(raw map[string]any, fallbackMime string) MusicRes
 			finishMessage = msg
 		}
 	}
-	return MusicResponse{Audio: audio, FinishMessage: finishMessage}
+	return MusicResponse{Audio: audio, FinishMessage: optString(finishMessage)}
 }
