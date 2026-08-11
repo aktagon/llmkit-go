@@ -64,7 +64,7 @@ var providerInfoTable = map[ProviderName]ProviderInfo{
 		Slug:            "azure",
 		EnvVar:          "AZURE_OPENAI_API_KEY",
 		DefaultModel:    "gpt-4o",
-		BaseURL:         "https://REPLACE-WITH-YOUR-RESOURCE.openai.azure.com",
+		BaseURL:         "https://{resource}.openai.azure.com",
 		BrowserCallable: false,
 	},
 	Bedrock: {
