@@ -46,12 +46,12 @@ are guaranteed to match the public surface.
 | anthropic  | claude-sonnet-4-6                                 | ANTHROPIC_API_KEY  |
 | openai     | gpt-4o-2024-08-06                                 | OPENAI_API_KEY     |
 | google     | gemini-2.5-flash                                  | GOOGLE_API_KEY     |
-| grok       | grok-3-fast                                       | GROK_API_KEY       |
+| grok       | grok-3-fast                                       | XAI_API_KEY        |
 | mistral    | mistral-large-latest                              | MISTRAL_API_KEY    |
 | deepseek   | deepseek-chat                                     | DEEPSEEK_API_KEY   |
 | groq       | llama-3.3-70b-versatile                           | GROQ_API_KEY       |
 | together   | meta-llama/Llama-3.3-70B-Instruct-Turbo           | TOGETHER_API_KEY   |
-| fireworks  | accounts/fireworks/models/llama-v3p3-70b-instruct | FIREWORKS_API_KEY  |
+| fireworks  | accounts/fireworks/models/gpt-oss-120b            | FIREWORKS_API_KEY  |
 | perplexity | sonar-pro                                         | PERPLEXITY_API_KEY |
 | openrouter | openai/gpt-4o                                     | OPENROUTER_API_KEY |
 | qwen       | qwen-plus                                         | DASHSCOPE_API_KEY  |
@@ -59,15 +59,15 @@ are guaranteed to match the public surface.
 | moonshot   | moonshot-v1-8k                                    | MOONSHOT_API_KEY   |
 | doubao     | doubao-1.5-pro-32k-250115                         | ARK_API_KEY        |
 | ernie      | ernie-4.0-8k                                      | QIANFAN_API_KEY    |
-| ollama     | llama3.2                                          | OLLAMA_API_KEY     |
+| ollama     | none - set with .Model()                          | OLLAMA_API_KEY     |
 | cohere     | command-r-plus                                    | COHERE_API_KEY     |
 | ai21       | jamba-1.5-large                                   | AI21_API_KEY       |
 | cerebras   | llama-3.3-70b                                     | CEREBRAS_API_KEY   |
 | sambanova  | Meta-Llama-3.3-70B-Instruct                       | SAMBANOVA_API_KEY  |
 | yi         | yi-large                                          | YI_API_KEY         |
 | minimax    | MiniMax-Text-01                                   | MINIMAX_API_KEY    |
-| lmstudio   | default                                           | LM_STUDIO_API_KEY  |
-| vllm       | default                                           | VLLM_API_KEY       |
+| lmstudio   | none - set with .Model()                          | LM_STUDIO_API_KEY  |
+| vllm       | none - set with .Model()                          | VLLM_API_KEY       |
 
 30 providers, 4 API shapes (OpenAI-compatible, Anthropic Messages, Google Generative AI, AWS Bedrock Converse). Bedrock auth uses SigV4; other providers use API-key auth. Full provider list — including `azure`, `bedrock`, `vertex`, `jan`, and `llamacpp` — in `providers/providers.go`.
 
