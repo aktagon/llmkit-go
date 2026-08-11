@@ -119,7 +119,7 @@ var providerInfoTable = map[ProviderName]ProviderInfo{
 		ID:              Fireworks,
 		Slug:            "fireworks",
 		EnvVar:          "FIREWORKS_API_KEY",
-		DefaultModel:    "accounts/fireworks/models/llama-v3p3-70b-instruct",
+		DefaultModel:    "accounts/fireworks/models/gpt-oss-120b",
 		BaseURL:         "https://api.fireworks.ai/inference",
 		BrowserCallable: false,
 	},
