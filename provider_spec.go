@@ -176,7 +176,7 @@ var providerSpecRegistry = map[string]providerSpec{
 	},
 	"azure": {
 		Name:                "azure",
-		BaseURL:             "https://REPLACE-WITH-YOUR-RESOURCE.openai.azure.com",
+		BaseURL:             "https://{resource}.openai.azure.com",
 		Endpoint:            "/openai/deployments/{model}/chat/completions?api-version=2024-10-21",
 		DefaultModel:        "gpt-4o",
 		EnvVar:              "AZURE_OPENAI_API_KEY",
