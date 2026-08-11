@@ -41,35 +41,50 @@ are guaranteed to match the public surface.
 
 ## Providers
 
-| Provider   | Default Model                                     | Env Var            |
-| ---------- | ------------------------------------------------- | ------------------ |
-| anthropic  | claude-sonnet-4-6                                 | ANTHROPIC_API_KEY  |
-| openai     | gpt-4o-2024-08-06                                 | OPENAI_API_KEY     |
-| google     | gemini-2.5-flash                                  | GOOGLE_API_KEY     |
-| grok       | grok-3-fast                                       | XAI_API_KEY        |
-| mistral    | mistral-large-latest                              | MISTRAL_API_KEY    |
-| deepseek   | deepseek-chat                                     | DEEPSEEK_API_KEY   |
-| groq       | llama-3.3-70b-versatile                           | GROQ_API_KEY       |
-| together   | meta-llama/Llama-3.3-70B-Instruct-Turbo           | TOGETHER_API_KEY   |
-| fireworks  | accounts/fireworks/models/gpt-oss-120b            | FIREWORKS_API_KEY  |
-| perplexity | sonar-pro                                         | PERPLEXITY_API_KEY |
-| openrouter | openai/gpt-4o                                     | OPENROUTER_API_KEY |
-| qwen       | qwen-plus                                         | DASHSCOPE_API_KEY  |
-| zhipu      | glm-4-plus                                        | ZHIPU_API_KEY      |
-| moonshot   | moonshot-v1-8k                                    | MOONSHOT_API_KEY   |
-| doubao     | doubao-1.5-pro-32k-250115                         | ARK_API_KEY        |
-| ernie      | ernie-4.0-8k                                      | QIANFAN_API_KEY    |
-| ollama     | none - set with .Model()                          | OLLAMA_API_KEY     |
-| cohere     | command-r-plus                                    | COHERE_API_KEY     |
-| ai21       | jamba-1.5-large                                   | AI21_API_KEY       |
-| cerebras   | llama-3.3-70b                                     | CEREBRAS_API_KEY   |
-| sambanova  | Meta-Llama-3.3-70B-Instruct                       | SAMBANOVA_API_KEY  |
-| yi         | yi-large                                          | YI_API_KEY         |
-| minimax    | MiniMax-Text-01                                   | MINIMAX_API_KEY    |
-| lmstudio   | none - set with .Model()                          | LM_STUDIO_API_KEY  |
-| vllm       | none - set with .Model()                          | VLLM_API_KEY       |
+<!-- llmkit:table providers -->
 
-30 providers, 4 API shapes (OpenAI-compatible, Anthropic Messages, Google Generative AI, AWS Bedrock Converse). Bedrock auth uses SigV4; other providers use API-key auth. Full provider list — including `azure`, `bedrock`, `vertex`, `jan`, and `llamacpp` — in `providers/providers.go`.
+| Provider   | Default Model                           | Env Var            | Capability    |
+| ---------- | --------------------------------------- | ------------------ | ------------- |
+| ai21       | jamba-1.5-large                         | AI21_API_KEY       | chat          |
+| anthropic  | claude-sonnet-4-6                       | ANTHROPIC_API_KEY  | chat          |
+| cerebras   | llama-3.3-70b                           | CEREBRAS_API_KEY   | chat          |
+| cohere     | command-r-plus                          | COHERE_API_KEY     | chat          |
+| deepseek   | deepseek-chat                           | DEEPSEEK_API_KEY   | chat          |
+| doubao     | doubao-1.5-pro-32k-250115               | ARK_API_KEY        | chat          |
+| ernie      | ernie-4.0-8k                            | QIANFAN_API_KEY    | chat          |
+| fireworks  | accounts/fireworks/models/gpt-oss-120b  | FIREWORKS_API_KEY  | chat          |
+| google     | gemini-2.5-flash                        | GOOGLE_API_KEY     | chat          |
+| grok       | grok-3-fast                             | XAI_API_KEY        | chat          |
+| groq       | llama-3.3-70b-versatile                 | GROQ_API_KEY       | chat          |
+| jan        | none - set with .Model()                | JAN_API_KEY        | chat          |
+| llamacpp   | none - set with .Model()                | LLAMACPP_API_KEY   | chat          |
+| lmstudio   | none - set with .Model()                | LM_STUDIO_API_KEY  | chat          |
+| minimax    | MiniMax-Text-01                         | MINIMAX_API_KEY    | chat          |
+| mistral    | mistral-large-latest                    | MISTRAL_API_KEY    | chat          |
+| moonshot   | moonshot-v1-8k                          | MOONSHOT_API_KEY   | chat          |
+| ollama     | none - set with .Model()                | OLLAMA_API_KEY     | chat          |
+| openai     | gpt-4o-2024-08-06                       | OPENAI_API_KEY     | chat          |
+| openrouter | openai/gpt-4o                           | OPENROUTER_API_KEY | chat          |
+| perplexity | sonar-pro                               | PERPLEXITY_API_KEY | chat          |
+| qwen       | qwen-plus                               | DASHSCOPE_API_KEY  | chat          |
+| sambanova  | Meta-Llama-3.3-70B-Instruct             | SAMBANOVA_API_KEY  | chat          |
+| together   | meta-llama/Llama-3.3-70B-Instruct-Turbo | TOGETHER_API_KEY   | chat          |
+| vllm       | none - set with .Model()                | VLLM_API_KEY       | chat          |
+| yi         | yi-large                                | YI_API_KEY         | chat          |
+| zhipu      | glm-4-plus                              | ZHIPU_API_KEY      | chat          |
+| recraft    | recraftv3                               | RECRAFT_API_TOKEN  | image         |
+| inworld    | inworld-tts-2                           | INWORLD_API_KEY    | speech        |
+| assemblyai | best                                    | ASSEMBLYAI_API_KEY | transcription |
+| pixverse   | v4.5                                    | PIXVERSE_API_KEY   | video         |
+| vidu       | viduq3-pro                              | VIDU_API_KEY       | video         |
+
+<!-- llmkit:endtable -->
+
+<!-- llmkit:table providers-summary -->
+
+36 providers, 5 API shapes (AWS Bedrock Converse, Anthropic Messages, Google Generative AI, OpenAI Chat Completions, OpenAI Responses). The 32 above are usable with a provider name and an API key alone; `azure`, `bedrock`, `vertex` and `workersai` additionally need caller-supplied configuration (resource name, region, project, or account) and are listed in `providers/providers.go`.
+
+<!-- llmkit:endtable -->
 
 ## API
 
