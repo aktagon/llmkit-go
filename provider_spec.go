@@ -477,7 +477,7 @@ var providerSpecRegistry = map[string]providerSpec{
 		Name:                "fireworks",
 		BaseURL:             "https://api.fireworks.ai/inference",
 		Endpoint:            "/v1/chat/completions",
-		DefaultModel:        "accounts/fireworks/models/llama-v3p3-70b-instruct",
+		DefaultModel:        "accounts/fireworks/models/gpt-oss-120b",
 		EnvVar:              "FIREWORKS_API_KEY",
 		DefaultMaxTokens:    4096,
 		ResponseTextPath:    "choices[0].message.content",
