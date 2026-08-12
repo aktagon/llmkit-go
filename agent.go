@@ -271,12 +271,20 @@ func (a *legacyAgent) runToolLoop(ctx context.Context) (Response, error) {
 func agentHistoryToMsgs(history []internalMessage) []msg {
 	out := make([]msg, 0, len(history))
 	for _, m := range history {
+		// Build the projection, wrap it, append once — deliberately NOT
+		// "append, then patch out[len(out)-1]". That form is correct only
+		// while every arm appends exactly one element, which is an invariant
+		// nothing states and a later arm can break silently: an arm that
+		// skips its append attaches the turn to the PREVIOUS message, and one
+		// that appends twice attaches it to the wrong half. Same shape as
+		// toInternal, for the same reason.
+		var projected msg
 		switch {
 		case m.toolResult != nil:
-			out = append(out, msgResult{result: ToolResult{
+			projected = msgResult{result: ToolResult{
 				ToolUseID: m.toolResult.toolUseID,
 				Content:   m.toolResult.content,
-			}})
+			}}
 		case len(m.toolCalls) > 0:
 			calls := make([]ToolCall, 0, len(m.toolCalls))
 			for _, tc := range m.toolCalls {
@@ -286,17 +294,18 @@ func agentHistoryToMsgs(history []internalMessage) []msg {
 					Input: encodeToolInput(tc.input),
 				})
 			}
-			out = append(out, msgCalls{calls: calls})
+			projected = msgCalls{calls: calls}
 		default:
-			out = append(out, msgText{role: m.role, text: m.content})
+			projected = msgText{role: m.role, text: m.content}
 		}
 		if m.providerTurn != nil {
-			out[len(out)-1] = msgTurn{
+			projected = msgTurn{
 				shape:    m.providerTurn.WireShape,
 				wire:     m.providerTurn.Wire,
-				fallback: out[len(out)-1],
+				fallback: projected,
 			}
 		}
+		out = append(out, projected)
 	}
 	return out
 }
