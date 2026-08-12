@@ -25,6 +25,12 @@ type internalMessage struct {
 	content    string
 	toolCalls  []toolCall
 	toolResult *toolResult
+	// providerTurn is this turn as the provider serialized it (ADR-085), set
+	// on assistant turns the loop received and nil on everything the loop
+	// authored (tool results) or the caller supplied. It sits beside the four
+	// fields above rather than replacing them: those stay the projection the
+	// loop reads to run tools, this is what goes back on the wire.
+	providerTurn *ProviderTurn
 }
 
 type toolCall struct {
@@ -176,13 +182,23 @@ func (a *legacyAgent) runToolLoop(ctx context.Context) (Response, error) {
 
 		if len(calls) == 0 {
 			text := extractPath(raw, providers.ResponseTextPath(a.provider.Name))
-			a.history = append(a.history, internalMessage{role: "assistant", content: text})
+			turn := captureProviderTurn(respBody, cfg, cfg.ChatWireShape)
+			// The terminal turn is captured too: an agent kept alive for
+			// another Chat() replays it like any other, and Response carries
+			// it so a caller running their own loop can thread it forward
+			// without parsing Raw per provider (ADR-085 § 6).
+			a.history = append(a.history, internalMessage{
+				role:         "assistant",
+				content:      text,
+				providerTurn: turn,
+			})
 			finishReason, finishMessage := extractFinishSignal(raw, a.provider.Name)
 			resp := Response{
 				Text:          text,
 				Usage:         totalUsage,
 				FinishReason:  finishReason,
 				FinishMessage: finishMessage,
+				ProviderTurn:  turn,
 			}
 			if a.opts.raw {
 				resp.Raw = append(json.RawMessage(nil), respBody...)
@@ -190,8 +206,17 @@ func (a *legacyAgent) runToolLoop(ctx context.Context) (Response, error) {
 			return resp, nil
 		}
 
-		// Record assistant message with tool calls using selected transform
-		a.history = append(a.history, internalMessage{role: "assistant", toolCalls: calls})
+		// Record the assistant turn. toolCalls is the projection the loop runs
+		// tools from; providerTurn is the same turn as the provider wrote it,
+		// and is what the NEXT request sends (ADR-085). Before this, the turn
+		// was rebuilt from toolCalls alone, which silently dropped any prose
+		// the model emitted alongside the call — the one confirmed defect the
+		// ADR's probe left standing.
+		a.history = append(a.history, internalMessage{
+			role:         "assistant",
+			toolCalls:    calls,
+			providerTurn: captureProviderTurn(respBody, cfg, cfg.ChatWireShape),
+		})
 
 		// Execute tools and record results using selected transform
 		for _, tc := range calls {
@@ -264,6 +289,13 @@ func agentHistoryToMsgs(history []internalMessage) []msg {
 			out = append(out, msgCalls{calls: calls})
 		default:
 			out = append(out, msgText{role: m.role, text: m.content})
+		}
+		if m.providerTurn != nil {
+			out[len(out)-1] = msgTurn{
+				shape:    m.providerTurn.WireShape,
+				wire:     m.providerTurn.Wire,
+				fallback: out[len(out)-1],
+			}
 		}
 	}
 	return out

@@ -569,9 +569,12 @@ func buildRequest(p Provider, req Request, msgs []msg, o *options, cfg providerS
 		}
 	}
 
-	// Message transform — derived from config, builds the messages/contents array
+	// Message transform — derived from config, builds the messages/contents array.
+	// resolveTurns runs first and only here: it is the one place cfg and the
+	// message list meet, so the ADR-085 RSN-006 shape check is made once rather
+	// than remembered in each transform.
 	msgTransform := selectMessageTransform(cfg)
-	msgTransform(body, msgs, req, cfg)
+	msgTransform(body, resolveTurns(msgs, cfg), req, cfg)
 
 	// Tool definitions (Agent path). nil tools on Text/batch is a no-op.
 	if len(tools) > 0 {
@@ -933,8 +936,15 @@ func DecodeResponse(provider, chatWireShape string, body []byte) (Response, erro
 		return Response{}, fmt.Errorf("unmarshal response: %w", err)
 	}
 
+	// ADR-085: capture the assistant turn as the provider serialized it, from
+	// the ORIGINAL bytes rather than from raw — re-encoding the parsed map
+	// would emit Go's rendering, not the provider's.
+	turn := captureProviderTurn(body, providerSpecs()[provider], chatWireShape)
+
 	if chatWireShape == providers.ChatResponsesOpenAI {
-		return parseResponsesEnvelope(raw), nil
+		resp := parseResponsesEnvelope(raw)
+		resp.ProviderTurn = turn
+		return resp, nil
 	}
 
 	text := extractPath(raw, providers.ResponseTextPath(provider))
@@ -945,6 +955,7 @@ func DecodeResponse(provider, chatWireShape string, body []byte) (Response, erro
 		Usage:         decodeUsage(raw, provider),
 		FinishReason:  finishReason,
 		FinishMessage: finishMessage,
+		ProviderTurn:  turn,
 	}, nil
 }
 
