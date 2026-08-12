@@ -128,9 +128,21 @@ type msgResult struct {
 	result ToolResult
 }
 
+// msgTurn is an assistant turn the provider itself serialized, replayed
+// verbatim instead of rebuilt (ADR-085). It carries the fallback it replaces
+// so resolveTurns can drop back to reconstruction when the payload was
+// captured under a different wire shape — the alternative, deciding that at
+// transform time, would put the same check in four places.
+type msgTurn struct {
+	shape    string
+	wire     string
+	fallback msg
+}
+
 func (msgText) isMsg()   {}
 func (msgCalls) isMsg()  {}
 func (msgResult) isMsg() {}
+func (msgTurn) isMsg()   {}
 
 // toInternal converts the public, untrusted []Message into the internal sum.
 // This is the single carrier-validation boundary (PIPE-008): a message carrying
@@ -157,14 +169,27 @@ func toInternal(messages []Message) ([]msg, error) {
 				Message: "must carry only one of content, tool calls, or tool result",
 			}
 		}
+		var projected msg
 		switch {
 		case m.ToolResult != nil:
-			out = append(out, msgResult{result: *m.ToolResult})
+			projected = msgResult{result: *m.ToolResult}
 		case len(m.ToolCalls) > 0:
-			out = append(out, msgCalls{calls: m.ToolCalls})
+			projected = msgCalls{calls: m.ToolCalls}
 		default:
-			out = append(out, msgText{role: m.Role, text: m.Content})
+			projected = msgText{role: m.Role, text: m.Content}
 		}
+		// ProviderTurn is not a fourth carrier — it is the same turn in the
+		// provider's own serialization, so it never participates in the
+		// one-carrier check above. When present it supersedes the projection
+		// on the wire while the projection stays what consumers read.
+		if m.ProviderTurn != nil {
+			projected = msgTurn{
+				shape:    m.ProviderTurn.WireShape,
+				wire:     m.ProviderTurn.Wire,
+				fallback: projected,
+			}
+		}
+		out = append(out, projected)
 	}
 	return out, nil
 }
@@ -188,10 +213,70 @@ func transformResponsesInput(body map[string]any, msgs []msg, req Request, cfg p
 	body["input"] = buildFlatMessageArray(msgs, req, cfg)
 }
 
+// flatProjectedEntry renders one canonical message as a flat-envelope entry —
+// the reconstruction path, unchanged from before ADR-085 and still what every
+// caller-authored turn takes.
+func flatProjectedEntry(m msg, cfg providerSpec, callT toolCallTransformFunc, resultT toolResultTransformFunc) map[string]any {
+	switch m := m.(type) {
+	case msgResult:
+		return resultT(m.result, cfg.RoleMappings)
+	case msgCalls:
+		return callT(m.calls, cfg.RoleMappings)
+	case msgText:
+		return map[string]any{
+			"role":    mapRole(m.role, cfg.RoleMappings),
+			"content": m.text,
+		}
+	default:
+		panic(fmt.Sprintf("unhandled msg variant %T", m))
+	}
+}
+
+// appendFlatReplayedTurn appends a captured assistant turn to a flat-envelope
+// array in whatever container that wire family expects, reporting false when
+// the payload cannot be placed so the caller reconstructs instead.
+//
+// The three families disagree on what assistantTurnPath even points at,
+// which is why this cannot be one append:
+//
+//   - ChatOpenAI     "choices[0].message"  -> an assistant message object
+//   - ChatAnthropic  "content"             -> the block ARRAY, with no message
+//     object around it; the role wrapper below is llmkit's, the blocks are the
+//     provider's
+//   - ChatResponses  "output"              -> an ITEM LIST that spreads across
+//     N input entries rather than becoming one (ADR-085 OQ-1)
+func appendFlatReplayedTurn(out []any, turn msgTurn, cfg providerSpec) ([]any, bool) {
+	raw := json.RawMessage(turn.wire)
+	switch turn.shape {
+	case providers.ChatAnthropic:
+		return append(out, map[string]any{
+			"role":    mapRole("assistant", cfg.RoleMappings),
+			"content": raw,
+		}), true
+	case providers.ChatResponsesOpenAI:
+		// Only the array container is decoded. Each item keeps its own bytes,
+		// so the reasoning item and its encrypted_content cross unaltered.
+		var items []json.RawMessage
+		if err := json.Unmarshal(raw, &items); err != nil {
+			return out, false
+		}
+		for _, item := range items {
+			out = append(out, item)
+		}
+		return out, true
+	default:
+		return append(out, raw), true
+	}
+}
+
 // buildFlatMessageArray builds the shared flat message array used by both the
 // Chat Completions ("messages") and Responses ("input") envelopes.
-func buildFlatMessageArray(msgs []msg, req Request, cfg providerSpec) []map[string]any {
-	out := []map[string]any{}
+//
+// The element type is []any rather than []map[string]any because a replayed
+// turn (ADR-085) enters as json.RawMessage — provider bytes that must reach
+// the wire unrebuilt, which a map cannot hold without decoding them first.
+func buildFlatMessageArray(msgs []msg, req Request, cfg providerSpec) []any {
+	out := []any{}
 
 	if cfg.SystemPlacement == providers.PlacementMessageInArray && req.System != "" {
 		out = append(out, map[string]any{
@@ -206,19 +291,14 @@ func buildFlatMessageArray(msgs []msg, req Request, cfg providerSpec) []map[stri
 		callT := selectToolCallTransform(cfg)
 		resultT := selectToolResultTransform(cfg)
 		for _, m := range msgs {
-			switch m := m.(type) {
-			case msgResult:
-				out = append(out, resultT(m.result, cfg.RoleMappings))
-			case msgCalls:
-				out = append(out, callT(m.calls, cfg.RoleMappings))
-			case msgText:
-				out = append(out, map[string]any{
-					"role":    mapRole(m.role, cfg.RoleMappings),
-					"content": m.text,
-				})
-			default:
-				panic(fmt.Sprintf("unhandled msg variant %T", m))
+			if turn, ok := m.(msgTurn); ok {
+				if next, ok := appendFlatReplayedTurn(out, turn, cfg); ok {
+					out = next
+					continue
+				}
+				m = turn.fallback
 			}
+			out = append(out, flatProjectedEntry(m, cfg, callT, resultT))
 		}
 	} else if req.User != "" {
 		if hasMedia {
@@ -296,7 +376,11 @@ func buildFlatContentParts(req Request, cfg providerSpec) []map[string]any {
 }
 
 func transformGoogleParts(body map[string]any, msgs []msg, req Request, cfg providerSpec) {
-	contents := []map[string]any{}
+	// []any, not []map[string]any: a replayed turn (ADR-085) is the provider's
+	// own {role, parts} object carried as raw bytes. Google is the shape where
+	// this matters most — the payload holds the per-turn thoughtSignature that
+	// a rebuilt contents entry has nowhere to put.
+	contents := []any{}
 
 	if len(msgs) > 0 {
 		callT := selectToolCallTransform(cfg)
@@ -311,6 +395,27 @@ func transformGoogleParts(body map[string]any, msgs []msg, req Request, cfg prov
 		// id==name), and an unmatched id passes through unchanged.
 		var idToName map[string]string
 		for _, m := range msgs {
+			// A replayed Google turn is candidates[0].content verbatim — the
+			// same {role, parts} object the contents array takes, so it drops
+			// straight in. It still has to feed idToName below, because a LATER
+			// tool result is matched by name against calls made on this turn;
+			// that lookup reads the canonical projection, which the fallback
+			// still carries even when the wire bytes are what get sent.
+			if turn, ok := m.(msgTurn); ok && turn.shape == providers.ChatGoogle {
+				if calls, ok := turn.fallback.(msgCalls); ok {
+					if idToName == nil {
+						idToName = make(map[string]string)
+					}
+					for _, c := range calls.calls {
+						idToName[c.ID] = c.Name
+					}
+				}
+				contents = append(contents, json.RawMessage(turn.wire))
+				continue
+			}
+			if turn, ok := m.(msgTurn); ok {
+				m = turn.fallback
+			}
 			switch m := m.(type) {
 			case msgResult:
 				r := m.result
