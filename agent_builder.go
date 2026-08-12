@@ -113,6 +113,11 @@ func toPublicMessage(m internalMessage) Message {
 			Content:   m.toolResult.content,
 		}
 	}
+	// ADR-085: the captured turn crosses to the public shape too. Without
+	// this, Messages() hands back a turn the SDK still holds internally but
+	// the caller cannot see, and Save() then serializes that blind copy —
+	// retention would work only for the lifetime of one live *Agent.
+	out.ProviderTurn = m.providerTurn
 	return out
 }
 
@@ -216,6 +221,10 @@ func (b *Agent) initAgent() {
 				content:   m.ToolResult.Content,
 			}
 		}
+		// The return leg of toPublicMessage. A turn restored from Load()
+		// carries its payload back into the loop, which is what makes
+		// cross-process resume (ADR-023) replay rather than reconstruct.
+		im.providerTurn = m.ProviderTurn
 		a.history = append(a.history, im)
 	}
 	b.state = &agentState{agent: a}

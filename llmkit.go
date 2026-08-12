@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -1052,11 +1051,7 @@ func setWirePath(data map[string]any, path string, val any) {
 	current := data
 	for i, part := range parts {
 		last := i == len(parts)-1
-		field, idx := part, -1
-		if b := strings.Index(part, "["); b != -1 {
-			field = part[:b]
-			idx, _ = strconv.Atoi(part[b+1 : len(part)-1])
-		}
+		field, idx := splitPathSegment(part)
 		if idx == -1 {
 			if last {
 				current[field] = val
@@ -1237,10 +1232,7 @@ func pathPresent(data map[string]any, path string) bool {
 	parts := strings.Split(path, ".")
 	var current any = data
 	for _, part := range parts {
-		if idx := strings.Index(part, "["); idx != -1 {
-			field := part[:idx]
-			idxStr := part[idx+1 : len(part)-1]
-			arrIdx, _ := strconv.Atoi(idxStr)
+		if field, arrIdx := splitPathSegment(part); arrIdx != -1 {
 			m, ok := current.(map[string]any)
 			if !ok {
 				return false
@@ -1284,11 +1276,7 @@ func extractPath(data map[string]any, path string) string {
 
 	for _, part := range parts {
 		// Check for array index: "field[N]"
-		if idx := strings.Index(part, "["); idx != -1 {
-			field := part[:idx]
-			idxStr := part[idx+1 : len(part)-1]
-			arrIdx, _ := strconv.Atoi(idxStr)
-
+		if field, arrIdx := splitPathSegment(part); arrIdx != -1 {
 			if m, ok := current.(map[string]any); ok {
 				current = m[field]
 			} else {

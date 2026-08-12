@@ -401,15 +401,19 @@ func parseBatchResults(provider string, data []byte, bc *providers.BatchDef, raw
 
 		responseBytes := []byte(line)
 		if bc.ResultBodyPath != "" {
-			var wrapper map[string]any
-			if err := json.Unmarshal([]byte(line), &wrapper); err != nil {
+			// Slice the ORIGINAL bytes rather than decode-and-re-marshal.
+			// The old path round-tripped through map[string]any, so what
+			// reached DecodeResponse was Go's rendering of the body: keys
+			// re-sorted, `<` escaped to \u003c, and every integer past
+			// float64's exact range rewritten. That was invisible while the
+			// decoder only read scalars out of it, and stopped being
+			// invisible when ADR-085 started capturing a verbatim payload
+			// from the same bytes.
+			inner := extractRawJSONPath([]byte(line), bc.ResultBodyPath)
+			if len(inner) == 0 {
 				continue
 			}
-			inner := navigateMapPath(wrapper, bc.ResultBodyPath)
-			if inner == nil {
-				continue
-			}
-			responseBytes, _ = json.Marshal(inner)
+			responseBytes = inner
 		}
 
 		// Batch is Chat-Completions-only (ADR-055): empty wire shape selects the

@@ -26,10 +26,18 @@ import (
 // single parser, so the three walkers over it cannot drift apart.
 func splitPathSegment(part string) (string, int) {
 	bracket := strings.Index(part, "[")
-	if bracket == -1 {
+	// A segment must end in "]" for the slice below to be in range, and a
+	// negative index would read back as "no index" and silently widen the
+	//
+	// neither is user-triggerable — but "not reachable today" is a fact
+	// about the callers, not about this function.
+	if bracket == -1 || !strings.HasSuffix(part, "]") {
 		return part, -1
 	}
-	idx, _ := strconv.Atoi(part[bracket+1 : len(part)-1])
+	idx, err := strconv.Atoi(part[bracket+1 : len(part)-1])
+	if err != nil || idx < 0 {
+		return part, -1
+	}
 	return part[:bracket], idx
 }
 
@@ -108,7 +116,13 @@ func effectiveChatWireShape(cfg providerSpec, chatWireShape string) string {
 func captureProviderTurn(body []byte, cfg providerSpec, chatWireShape string) *ProviderTurn {
 	shape := effectiveChatWireShape(cfg, chatWireShape)
 	wire := extractRawJSONPath(body, assistantTurnPath(cfg, shape))
-	if len(wire) == 0 {
+	// A JSON null at the path is the provider declining to send a turn, not
+	// a turn whose content is null — Google nulls candidates[0].content on a
+	// safety block, and OpenAI-compatible proxies null choices[0].message on
+	// a content filter. json.RawMessage("null") is four bytes, so a length
+	// check alone captures it and the next request appends a bare `null` to
+	// messages, which is a 400.
+	if len(wire) == 0 || string(wire) == "null" {
 		return nil
 	}
 	return &ProviderTurn{WireShape: shape, Wire: string(wire)}
@@ -133,7 +147,14 @@ func resolveTurns(msgs []msg, cfg providerSpec) []msg {
 	copied := false
 	for i, m := range msgs {
 		turn, ok := m.(msgTurn)
-		if !ok || turn.shape == cfg.ChatWireShape {
+		// Two conditions, not one. Matching the shape is not enough: the
+		// shape must also DECLARE a turn position. A payload claiming an
+		// unanchored shape can only come from caller-supplied or Load()ed
+		// data, and the transform for such a shape has no replay arm — so
+		// without the second check, History(...) carrying
+		// ProviderTurn{WireShape: "ChatBedrock"} panics inside a public
+		// entry point on a Bedrock provider.
+		if !ok || (turn.shape == cfg.ChatWireShape && assistantTurnPath(cfg, turn.shape) != "") {
 			continue
 		}
 		if !copied {
