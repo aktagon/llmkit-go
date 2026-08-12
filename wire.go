@@ -60,7 +60,15 @@ func SaveHistory(msgs []Message) ([]byte, error) {
 }
 
 // LoadHistory parses a wire document and returns the in-memory
-// Message slice. Rejects documents missing `_v`, with `_v` above the
+// Message slice.
+//
+// ADR-085 RSN-009, the unknown-field hazard: an OLD reader — one built before
+// provider_turn existed — silently DROPS that key, and on Anthropic a dropped
+// reasoning payload is a rejected request once the provider enforces the echo,
+// not a degraded one. Unknown-field tolerance is benign in general and is not
+// benign here. Nothing in the format can fix it (the key is additive under the
+// same _v by ADR-085 §9); it is stated so a consumer reading a document written
+// by a newer SDK knows what a silent reconstruction means. Rejects documents missing `_v`, with `_v` above the
 // compiled-in WireSchemaVersion, or with unknown top-level keys
 // (STAB-003 + STAB-011). Tolerates unknown keys nested inside
 // Message / ToolCall / ToolResult so additive evolution under the
