@@ -733,6 +733,17 @@ func transformBedrockConverse(body map[string]any, msgs []msg, req Request, cfg 
 		callT := selectToolCallTransform(cfg)
 		resultT := selectToolResultTransform(cfg)
 		for _, m := range msgs {
+			// Bedrock never replays: ChatBedrock declares
+			// assistantTurnUnanchored rather than a position (ADR-085
+			// OQ-5), so there is no container to splice into. Reconstruct
+			// from the projection instead of falling through to the panic
+			// below — resolveTurns should already have unwrapped this, and
+			// a panic reaching a caller is the wrong way to report that it
+			// did not. When OQ-5 anchors Converse, this arm becomes a real
+			// splice.
+			if turn, ok := m.(msgTurn); ok {
+				m = turn.fallback
+			}
 			switch m := m.(type) {
 			case msgResult:
 				out = append(out, resultT(m.result, cfg.RoleMappings))
