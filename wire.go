@@ -47,10 +47,11 @@ func SaveHistory(msgs []Message) ([]byte, error) {
 	wire := make([]wireMessage, 0, len(msgs))
 	for _, m := range msgs {
 		w := wireMessage{
-			Role:       m.Role,
-			Content:    m.Content,
-			ToolCalls:  toWireToolCalls(m.ToolCalls),
-			ToolResult: toWireToolResult(m.ToolResult),
+			Role:         m.Role,
+			Content:      m.Content,
+			ToolCalls:    toWireToolCalls(m.ToolCalls),
+			ToolResult:   toWireToolResult(m.ToolResult),
+			ProviderTurn: toWireProviderTurn(m.ProviderTurn),
 		}
 		wire = append(wire, w)
 	}
@@ -117,6 +118,20 @@ type wireMessage struct {
 	Content    string         `json:"content"`
 	ToolCalls  []wireToolCall `json:"tool_calls"`
 	ToolResult *wireToolRes   `json:"tool_result"`
+	// ADR-085. omitempty, unlike tool_result: STAB-004's emit-null rule is
+	// scoped to the role discriminator, and provider_turn is not one — a
+	// turn that never had a payload and a turn whose payload was dropped
+	// are the same thing to a reader. Omitting also keeps the canonical
+	// messages.json golden byte-identical, since the wire.ttl fixture
+	// declares no payload.
+	ProviderTurn *wireProviderTurn `json:"provider_turn,omitempty"`
+}
+
+// wireProviderTurn is the serialized form of ProviderTurn. Both fields are
+// plain strings, so the v1 document gains no new value encoding.
+type wireProviderTurn struct {
+	WireShape string `json:"wire_shape"`
+	Wire      string `json:"wire"`
 }
 
 // wireToolCall.Input is omitted when nil. The cross-SDK contract
@@ -162,6 +177,13 @@ func toWireToolResult(in *ToolResult) *wireToolRes {
 	return &wireToolRes{ToolUseID: in.ToolUseID, Content: in.Content}
 }
 
+func toWireProviderTurn(in *ProviderTurn) *wireProviderTurn {
+	if in == nil {
+		return nil
+	}
+	return &wireProviderTurn{WireShape: in.WireShape, Wire: in.Wire}
+}
+
 func (w wireMessage) toPublic() Message {
 	out := Message{
 		Role:      w.Role,
@@ -170,6 +192,12 @@ func (w wireMessage) toPublic() Message {
 	}
 	for _, tc := range w.ToolCalls {
 		out.ToolCalls = append(out.ToolCalls, ToolCall(tc))
+	}
+	if w.ProviderTurn != nil {
+		out.ProviderTurn = &ProviderTurn{
+			WireShape: w.ProviderTurn.WireShape,
+			Wire:      w.ProviderTurn.Wire,
+		}
 	}
 	if w.ToolResult != nil {
 		out.ToolResult = &ToolResult{
