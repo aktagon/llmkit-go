@@ -79,7 +79,7 @@ var providerInfoTable = map[ProviderName]ProviderInfo{
 		ID:              Cerebras,
 		Slug:            "cerebras",
 		EnvVar:          "CEREBRAS_API_KEY",
-		DefaultModel:    "llama-3.3-70b",
+		DefaultModel:    "gpt-oss-120b",
 		BaseURL:         "https://api.cerebras.ai",
 		BrowserCallable: false,
 	},
