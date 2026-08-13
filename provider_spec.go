@@ -262,7 +262,7 @@ var providerSpecRegistry = map[string]providerSpec{
 		Name:                "cerebras",
 		BaseURL:             "https://api.cerebras.ai",
 		Endpoint:            "/v1/chat/completions",
-		DefaultModel:        "llama-3.3-70b",
+		DefaultModel:        "gpt-oss-120b",
 		EnvVar:              "CEREBRAS_API_KEY",
 		DefaultMaxTokens:    4096,
 		ResponseTextPath:    "choices[0].message.content",
