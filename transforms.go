@@ -80,6 +80,8 @@ func selectToolResultTransform(cfg providerSpec) toolResultTransformFunc {
 		return transformBedrockToolResultMsg
 	case providers.ChatGoogle:
 		return transformGoogleToolResultMsg
+	case providers.ChatResponsesOpenAI:
+		return transformResponsesToolResultMsg
 	}
 	tc := providers.ToolCallConfig(cfg.Name)
 	if tc != nil && tc.ResultRole == "user" && tc.ArgsFormat == "map" {
@@ -628,6 +630,25 @@ func transformOpenAIToolResultMsg(result ToolResult, _ map[string]string) map[st
 		"role":         "tool",
 		"content":      result.Content,
 		"tool_call_id": result.ToolUseID,
+	}
+}
+
+// transformResponsesToolResultMsg builds a tool result for the OpenAI Responses
+// protocol (ADR-055). Responses does not accept the Chat Completions tool
+// message: `input[]` entries carry only the roles assistant/system/developer/user,
+// and a tool result is a top-level typed item instead — {type:
+// "function_call_output", call_id, output}.
+//
+// LIVE-ANCHORED 2026-08-13 (one OPENAI_API_KEY round-trip, two arms against
+// /v1/responses on the same turn-1 output): the Chat Completions shape this
+// used to fall through to is rejected 400 invalid_value on `input[3]`
+// ("Invalid value: 'tool'. Supported values are: 'assistant', 'system',
+// 'developer', and 'user'."); the shape below returns 200 status "completed".
+func transformResponsesToolResultMsg(result ToolResult, _ map[string]string) map[string]any {
+	return map[string]any{
+		"type":    "function_call_output",
+		"call_id": result.ToolUseID,
+		"output":  result.Content,
 	}
 }
 
