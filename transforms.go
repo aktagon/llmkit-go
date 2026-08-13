@@ -18,7 +18,15 @@ import (
 // OpenAI and Anthropic families share the flat {messages} envelope, so they fall
 // through to the default arm; the OpenAI-vs-Anthropic split (tool arg format,
 // content-part encoding) stays keyed on its own ToolCallConfig/ChatWireShape
-// facts, not on system placement. ChatResponsesOpenAI has no arm yet (Phase B).
+// facts, not on system placement.
+//
+// ChatResponsesOpenAI needs an arm in EVERY selector below that it can reach,
+// and BUG-050 is what happens when it gets one in some of them: the message,
+// tool-call and tool-result selectors all have one; selectToolDefTransform does
+// not, and is unreachable only because no builder that can set Protocol also
+// takes a tool definition. When one does, that is the fourth arm to write.
+// Enumerate the selectors when a protocol is added — a missing arm is silent on
+// the way out and loud only at the provider, several entries later.
 
 // selectMessageTransform picks the message builder based on the chat wire shape.
 func selectMessageTransform(cfg providerSpec) messageTransformFunc {
@@ -65,6 +73,8 @@ func selectToolCallTransform(cfg providerSpec) toolCallTransformFunc {
 		return transformBedrockToolCallMsg
 	case providers.ChatGoogle:
 		return transformGoogleToolCallMsg
+	case providers.ChatResponsesOpenAI:
+		return transformResponsesToolCallMsgs
 	}
 	tc := providers.ToolCallConfig(cfg.Name)
 	if tc != nil && tc.ArgsFormat == "map" {
@@ -215,20 +225,23 @@ func transformResponsesInput(body map[string]any, msgs []msg, req Request, cfg p
 	body["input"] = buildFlatMessageArray(msgs, req, cfg)
 }
 
-// flatProjectedEntry renders one canonical message as a flat-envelope entry —
-// the reconstruction path, unchanged from before ADR-085 and still what every
-// caller-authored turn takes.
-func flatProjectedEntry(m msg, cfg providerSpec, callT toolCallTransformFunc, resultT toolResultTransformFunc) map[string]any {
+// flatProjectedEntries renders one canonical message as flat-envelope entries —
+// the reconstruction path, and the counterpart of appendFlatReplayedTurn below.
+// Both return a LIST for the same reason: on ChatResponsesOpenAI a single
+// assistant turn is not a single wire entry, whether its bytes are the
+// provider's (replay) or llmkit's (reconstruction). Every other family, and
+// every other variant, yields exactly one.
+func flatProjectedEntries(m msg, cfg providerSpec, callT toolCallTransformFunc, resultT toolResultTransformFunc) []map[string]any {
 	switch m := m.(type) {
 	case msgResult:
-		return resultT(m.result, cfg.RoleMappings)
+		return []map[string]any{resultT(m.result, cfg.RoleMappings)}
 	case msgCalls:
 		return callT(m.calls, cfg.RoleMappings)
 	case msgText:
-		return map[string]any{
+		return []map[string]any{{
 			"role":    mapRole(m.role, cfg.RoleMappings),
 			"content": m.text,
-		}
+		}}
 	default:
 		panic(fmt.Sprintf("unhandled msg variant %T", m))
 	}
@@ -300,7 +313,9 @@ func buildFlatMessageArray(msgs []msg, req Request, cfg providerSpec) []any {
 				}
 				m = turn.fallback
 			}
-			out = append(out, flatProjectedEntry(m, cfg, callT, resultT))
+			for _, e := range flatProjectedEntries(m, cfg, callT, resultT) {
+				out = append(out, e)
+			}
 		}
 	} else if req.User != "" {
 		if hasMedia {
@@ -432,7 +447,9 @@ func transformGoogleParts(body map[string]any, msgs []msg, req Request, cfg prov
 				for _, c := range m.calls {
 					idToName[c.ID] = c.Name
 				}
-				contents = append(contents, callT(m.calls, cfg.RoleMappings))
+				for _, e := range callT(m.calls, cfg.RoleMappings) {
+					contents = append(contents, e)
+				}
 			case msgText:
 				contents = append(contents, map[string]any{
 					"role":  mapRole(m.role, cfg.RoleMappings),
@@ -566,9 +583,16 @@ func transformGoogleFunctionDeclarations(body map[string]any, tools []Tool, para
 // the Text/batch path would carry on a tool-bearing history (ADR-026). Input
 // is a json.RawMessage; embedding it in the body map marshals the argument
 // JSON inline (and emits null for a nil/empty RawMessage).
-type toolCallTransformFunc func(calls []ToolCall, roleMappings map[string]string) map[string]any
+//
+// The return is a SLICE because one canonical assistant turn is not always one
+// wire entry. Every flat/Google/Bedrock family collapses N calls into a single
+// message carrying a list; ChatResponsesOpenAI has no assistant envelope at all
+// and spreads the same N calls across N peer `input[]` items (BUG-050). A
+// map-valued signature cannot express that, and the shape that fell out of it
+// was rejected 400 by the provider.
+type toolCallTransformFunc func(calls []ToolCall, roleMappings map[string]string) []map[string]any
 
-func transformOpenAIToolCallMsg(calls []ToolCall, roleMappings map[string]string) map[string]any {
+func transformOpenAIToolCallMsg(calls []ToolCall, roleMappings map[string]string) []map[string]any {
 	tcs := []map[string]any{}
 	for _, tc := range calls {
 		argsJSON, _ := json.Marshal(tc.Input)
@@ -581,13 +605,41 @@ func transformOpenAIToolCallMsg(calls []ToolCall, roleMappings map[string]string
 			},
 		})
 	}
-	return map[string]any{
+	return []map[string]any{{
 		"role":       mapRole("assistant", roleMappings),
 		"tool_calls": tcs,
-	}
+	}}
 }
 
-func transformAnthropicToolCallMsg(calls []ToolCall, roleMappings map[string]string) map[string]any {
+// transformResponsesToolCallMsgs builds the tool-call half of an assistant turn
+// for the OpenAI Responses protocol (ADR-055) — the sibling of
+// transformResponsesToolResultMsg, and the one arm in this file that returns
+// more than one entry. Responses has no assistant message envelope for tool
+// calls: each call is its own top-level `input[]` item, correlated to its
+// output by call_id rather than by position in a tool_calls array.
+//
+// LIVE-ANCHORED 2026-08-13 (one OPENAI_API_KEY round-trip, two arms against
+// /v1/responses, two PARALLEL calls so the spread itself is under test): the
+// Chat Completions shape this used to fall through to is rejected 400
+// missing_required_parameter on `input[1].content` — Responses accepts the
+// assistant role, then demands the content a tool_calls-only message has not
+// got; the shape below returns 200 "completed" and the model's answer names
+// both tool results, so call_id pairing survives the spread.
+func transformResponsesToolCallMsgs(calls []ToolCall, _ map[string]string) []map[string]any {
+	out := make([]map[string]any, 0, len(calls))
+	for _, tc := range calls {
+		argsJSON, _ := json.Marshal(tc.Input)
+		out = append(out, map[string]any{
+			"type":      "function_call",
+			"call_id":   tc.ID,
+			"name":      tc.Name,
+			"arguments": string(argsJSON),
+		})
+	}
+	return out
+}
+
+func transformAnthropicToolCallMsg(calls []ToolCall, roleMappings map[string]string) []map[string]any {
 	content := []map[string]any{}
 	for _, tc := range calls {
 		content = append(content, map[string]any{
@@ -597,13 +649,13 @@ func transformAnthropicToolCallMsg(calls []ToolCall, roleMappings map[string]str
 			"input": tc.Input,
 		})
 	}
-	return map[string]any{
+	return []map[string]any{{
 		"role":    mapRole("assistant", roleMappings),
 		"content": content,
-	}
+	}}
 }
 
-func transformGoogleToolCallMsg(calls []ToolCall, roleMappings map[string]string) map[string]any {
+func transformGoogleToolCallMsg(calls []ToolCall, roleMappings map[string]string) []map[string]any {
 	parts := []map[string]any{}
 	for _, tc := range calls {
 		parts = append(parts, map[string]any{
@@ -613,10 +665,10 @@ func transformGoogleToolCallMsg(calls []ToolCall, roleMappings map[string]string
 			},
 		})
 	}
-	return map[string]any{
+	return []map[string]any{{
 		"role":  mapRole("assistant", roleMappings),
 		"parts": parts,
-	}
+	}}
 }
 
 // =============================================================================
@@ -769,7 +821,7 @@ func transformBedrockConverse(body map[string]any, msgs []msg, req Request, cfg 
 			case msgResult:
 				out = append(out, resultT(m.result, cfg.RoleMappings))
 			case msgCalls:
-				out = append(out, callT(m.calls, cfg.RoleMappings))
+				out = append(out, callT(m.calls, cfg.RoleMappings)...)
 			case msgText:
 				out = append(out, map[string]any{
 					"role":    mapRole(m.role, cfg.RoleMappings),
@@ -838,7 +890,7 @@ func transformBedrockToolDefs(body map[string]any, tools []Tool) {
 	body["toolConfig"] = map[string]any{"tools": defs}
 }
 
-func transformBedrockToolCallMsg(calls []ToolCall, roleMappings map[string]string) map[string]any {
+func transformBedrockToolCallMsg(calls []ToolCall, roleMappings map[string]string) []map[string]any {
 	content := []map[string]any{}
 	for _, tc := range calls {
 		content = append(content, map[string]any{
@@ -849,10 +901,10 @@ func transformBedrockToolCallMsg(calls []ToolCall, roleMappings map[string]strin
 			},
 		})
 	}
-	return map[string]any{
+	return []map[string]any{{
 		"role":    mapRole("assistant", roleMappings),
 		"content": content,
-	}
+	}}
 }
 
 func transformBedrockToolResultMsg(result ToolResult, _ map[string]string) map[string]any {
