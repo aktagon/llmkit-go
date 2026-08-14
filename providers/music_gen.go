@@ -30,6 +30,7 @@ type MusicModelDef struct {
 type MusicGenDef struct {
 	WireShape   string // MusicShapePredict | MusicShapeGenerateContent | MusicShapeMinimax
 	GenEndpoint string // override; empty = use provider main endpoint
+	BaseURL     string // music API base when it differs from the chat base; "" = use chat base
 	Models      []MusicModelDef
 }
 
@@ -41,6 +42,7 @@ func MusicGenConfig(provider string) *MusicGenDef {
 		return &MusicGenDef{
 			WireShape:   "MusicGenerateContent",
 			GenEndpoint: "",
+			BaseURL:     "",
 			Models: []MusicModelDef{
 				{
 					ModelID:                "lyria-3-clip-preview",
@@ -65,7 +67,8 @@ func MusicGenConfig(provider string) *MusicGenDef {
 	case Minimax:
 		return &MusicGenDef{
 			WireShape:   "MusicMinimax",
-			GenEndpoint: "https://api.minimax.io/v1/music_generation",
+			GenEndpoint: "/v1/music_generation",
+			BaseURL:     "https://api.minimax.io",
 			Models: []MusicModelDef{
 				{
 					ModelID:                "music-2.6",
@@ -82,6 +85,7 @@ func MusicGenConfig(provider string) *MusicGenDef {
 		return &MusicGenDef{
 			WireShape:   "MusicPredict",
 			GenEndpoint: "",
+			BaseURL:     "",
 			Models: []MusicModelDef{
 				{
 					ModelID:                "lyria-002",
