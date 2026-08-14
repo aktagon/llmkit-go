@@ -207,16 +207,32 @@ func dispatchMusicHTTP(
 
 	case providers.MusicShapeMinimax:
 		body := buildMinimaxMusicBody(parts, model)
-		url := mgCfg.GenEndpoint
-		if !strings.HasPrefix(url, "http") {
-			url = base + mgCfg.GenEndpoint
-		}
-		return postMusicJSON(ctx, client, url, body, headers)
+		return postMusicJSON(ctx, client, musicBaseURL(p, cfg, mgCfg)+mgCfg.GenEndpoint, body, headers)
 
 	default: // MusicShapeGenerateContent (Gemini)
 		body := buildGeminiMusicBody(parts)
 		return postMusicJSON(ctx, client, buildMusicURL(p, cfg, mgCfg, model), body, headers)
 	}
+}
+
+// musicBaseURL resolves the base for the music API (Option D): an explicit
+// per-client override wins (tests point it at a mock; users at a proxy), else
+// the provider's distinct music base (mgCfg.BaseURL) when the music host
+// differs from chat, else the chat base. Byte-for-byte the videoBaseURL
+// contract, and it exists for the same reason: MiniMax's music endpoint
+//
+// it the only call in the SDK a BaseURL override could not redirect. It could
+// not be pointed at a mock server, so the Go tests grew a host-rewriting
+// transport and the first music wire golden could not be minted at all until
+// the host became a fact and the endpoint a relative path.
+func musicBaseURL(p Provider, cfg providerSpec, mgCfg *providers.MusicGenDef) string {
+	if p.BaseURL != "" {
+		return p.BaseURL
+	}
+	if mgCfg.BaseURL != "" {
+		return mgCfg.BaseURL
+	}
+	return cfg.BaseURL
 }
 
 func postMusicJSON(ctx context.Context, client *http.Client, url string, body map[string]any, headers map[string]string) ([]byte, error) {
