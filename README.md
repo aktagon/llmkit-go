@@ -47,7 +47,7 @@ are guaranteed to match the public surface.
 | ---------- | --------------------------------------- | ------------------ | ------------- |
 | ai21       | jamba-1.5-large                         | AI21_API_KEY       | chat          |
 | anthropic  | claude-sonnet-4-6                       | ANTHROPIC_API_KEY  | chat          |
-| cerebras   | llama-3.3-70b                           | CEREBRAS_API_KEY   | chat          |
+| cerebras   | gpt-oss-120b                            | CEREBRAS_API_KEY   | chat          |
 | cohere     | command-r-plus                          | COHERE_API_KEY     | chat          |
 | deepseek   | deepseek-chat                           | DEEPSEEK_API_KEY   | chat          |
 | doubao     | doubao-1.5-pro-32k-250115               | ARK_API_KEY        | chat          |
