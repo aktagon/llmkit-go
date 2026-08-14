@@ -134,6 +134,68 @@ func ImageGenConfig(provider string) *ImageGenDef {
 				},
 			},
 		}
+	case Openrouter:
+		return &ImageGenDef{
+			InputMode:       "JSONGenerations",
+			OutputMode:      "Base64Inline",
+			ResponseShape:   "DataArrayB64Json",
+			UsageInputPath:  "usage.prompt_tokens",
+			UsageOutputPath: "usage.completion_tokens",
+			MaxInputCount:   0,
+			GenEndpoint:     "/v1/images",
+			EditEndpoint:    "",
+			Models: []ImageModelDef{
+				{
+					ModelID:        "google/gemini-2.5-flash-image",
+					Label:          "Nano Banana (Gemini 2.5 Flash Image)",
+					AspectRatios:   []string{},
+					ImageSizes:     []string{},
+					MaxInputImages: 0,
+				},
+				{
+					ModelID:        "google/gemini-3-pro-image",
+					Label:          "Nano Banana Pro (Gemini 3 Pro Image)",
+					AspectRatios:   []string{},
+					ImageSizes:     []string{},
+					MaxInputImages: 0,
+				},
+				{
+					ModelID:        "google/gemini-3.1-flash-image",
+					Label:          "Nano Banana 2 (Gemini 3.1 Flash Image)",
+					AspectRatios:   []string{},
+					ImageSizes:     []string{},
+					MaxInputImages: 0,
+				},
+				{
+					ModelID:        "google/gemini-3.1-flash-lite-image",
+					Label:          "Nano Banana 2 Lite (Gemini 3.1 Flash Lite Image)",
+					AspectRatios:   []string{},
+					ImageSizes:     []string{},
+					MaxInputImages: 0,
+				},
+				{
+					ModelID:        "openai/gpt-5-image",
+					Label:          "GPT-5 Image",
+					AspectRatios:   []string{},
+					ImageSizes:     []string{},
+					MaxInputImages: 0,
+				},
+				{
+					ModelID:        "openai/gpt-5-image-mini",
+					Label:          "GPT-5 Image Mini",
+					AspectRatios:   []string{},
+					ImageSizes:     []string{},
+					MaxInputImages: 0,
+				},
+				{
+					ModelID:        "openai/gpt-5.4-image-2",
+					Label:          "GPT-5.4 Image 2",
+					AspectRatios:   []string{},
+					ImageSizes:     []string{},
+					MaxInputImages: 0,
+				},
+			},
+		}
 	case Recraft:
 		return &ImageGenDef{
 			InputMode:       "JSONGenerations",
