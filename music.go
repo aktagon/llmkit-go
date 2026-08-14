@@ -190,10 +190,15 @@ func dispatchMusicHTTP(
 	parts []Part,
 	headers map[string]string,
 ) ([]byte, error) {
-	base := p.BaseURL
-	if base == "" {
-		base = cfg.BaseURL
-	}
+	// Resolved ONCE for every wire shape, not per branch. Applying it only on
+	// the MiniMax arm — the one provider that sets MusicGenDef.BaseURL today —
+	// would leave Go the single SDK where a future MusicPredict or
+	// MusicGenerateContent provider declaring hasMusicBaseURL silently
+	// posted to the chat host: TS, Python, Rust, Swift, Java and Zig all
+	// resolve it once for all shapes. No wire fixture could catch that
+	// divergence either, since the request-wire drivers override the base URL
+	// before dispatch.
+	base := musicBaseURL(p, cfg, mgCfg)
 
 	switch mgCfg.WireShape {
 	case providers.MusicShapePredict:
@@ -207,7 +212,7 @@ func dispatchMusicHTTP(
 
 	case providers.MusicShapeMinimax:
 		body := buildMinimaxMusicBody(parts, model)
-		return postMusicJSON(ctx, client, musicBaseURL(p, cfg, mgCfg)+mgCfg.GenEndpoint, body, headers)
+		return postMusicJSON(ctx, client, base+mgCfg.GenEndpoint, body, headers)
 
 	default: // MusicShapeGenerateContent (Gemini)
 		body := buildGeminiMusicBody(parts)
@@ -326,10 +331,7 @@ func joinLyricsText(parts []Part) string {
 // template (Gemini reuses the main generateContent endpoint) and appends the
 // query auth key for query-param-key providers (Google).
 func buildMusicURL(p Provider, cfg providerSpec, mgCfg *providers.MusicGenDef, model string) string {
-	base := p.BaseURL
-	if base == "" {
-		base = cfg.BaseURL
-	}
+	base := musicBaseURL(p, cfg, mgCfg)
 	endpoint := mgCfg.GenEndpoint
 	if endpoint == "" {
 		endpoint = cfg.Endpoint
