@@ -929,7 +929,32 @@ func removeAdditionalProperties(schema any) {
 // network, no clock. The wire shape is required, not derived — one provider can
 // serve two chat protocols, and inferring it silently mis-parses (SYM-003).
 // This is the same function the chat send path calls (SYM-004).
+// resolveChatWireShape fills in an unspecified wire shape with the provider's
+// DEFAULT chat protocol.
+//
+// Callers that decode a body they know is Chat Completions — batch result
+// lines, chiefly — pass "" to mean "not the Responses envelope". That was
+// harmless while the shape only selected between the Responses arm and the
+// provider's declared paths. It stopped being harmless when the shape started
+// selecting the TEXT READER too: "" resolved to no config, which is the
+// positional reader BUG-053 removed, so batched Anthropic replies with a
+// leading thinking block decoded to "" long after the send path was fixed.
+//
+// Resolving here rather than at each call site keeps N=1: a future caller that
+// passes "" gets the right reader without having to know it must not.
+// ADR-055 requires every provider's default protocol to be a Chat Completions
+// family (lint_chat_wire_shape gates it), so this can never resolve INTO the
+// Responses arm and silently change which envelope is parsed.
+func resolveChatWireShape(provider, chatWireShape string) string {
+	if chatWireShape != "" {
+		return chatWireShape
+	}
+	return providerSpecs()[provider].ChatWireShape
+}
+
 func DecodeResponse(provider, chatWireShape string, body []byte) (Response, error) {
+	chatWireShape = resolveChatWireShape(provider, chatWireShape)
+
 	var raw map[string]any
 	if err := json.Unmarshal(body, &raw); err != nil {
 		return Response{}, fmt.Errorf("unmarshal response: %w", err)
@@ -1037,6 +1062,7 @@ func decodeUsage(raw map[string]any, provider string) Usage {
 // The contract is the canonical fixed point, Decode(Encode(Decode(b))) ==
 // Decode(b) (SYM-006).
 func EncodeResponse(provider, chatWireShape string, resp Response) ([]byte, error) {
+	chatWireShape = resolveChatWireShape(provider, chatWireShape)
 	if err := guardOneWayFields(provider, resp); err != nil {
 		return nil, err
 	}
