@@ -181,7 +181,12 @@ func (a *legacyAgent) runToolLoop(ctx context.Context) (Response, error) {
 		calls := tcExtractor(raw, tcConfig)
 
 		if len(calls) == 0 {
-			text := extractPath(raw, providers.ResponseTextPath(a.provider.Name))
+			// The same reader DecodeResponse uses, and it has to be: this text
+			// is appended to a.history below, so a positional read did not
+			// merely return the wrong value once — it wrote an EMPTY assistant
+			// turn into the loop's own conversation state, and every later
+			// turn was conditioned on that hole (BUG-053 defect 5).
+			text := extractResponseText(raw, a.provider.Name, cfg.ChatWireShape)
 			turn := captureProviderTurn(respBody, cfg, cfg.ChatWireShape)
 			// The terminal turn is captured too: an agent kept alive for
 			// another Chat() replays it like any other, and Response carries
