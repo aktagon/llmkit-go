@@ -82,6 +82,57 @@ func ResponseTextPath(provider string) string {
 	}
 }
 
+// ResponseTextConfigDef locates the assistant's text inside a response whose
+// content is an ARRAY OF BLOCKS, by discriminator rather than by array position.
+// Position is not stable on these families: a thinking block or a non-text part
+// leading the array shifts the text out from under a fixed path (BUG-053).
+//
+// Marker semantics:
+//
+//	MarkerPath == ""                     every element is a text block
+//	MarkerPath set, MarkerValue == ""     the element is text if the key is PRESENT
+//	MarkerPath and MarkerValue both set   the element is text if the key EQUALS the value
+//
+// MarkerValue is also a WRITE instruction: EncodeResponse stamps it onto the
+// block it writes, so a body this library emits is one this table can read back.
+type ResponseTextConfigDef struct {
+	BlocksPath  string
+	MarkerPath  string
+	MarkerValue string
+	ValuePath   string
+}
+
+// ResponseTextConfig returns the text-block selector for a chat wire shape, or
+// nil when the shape carries text as a plain scalar — nil SELECTS the
+// ResponseTextPath reader above, it does not mean 'no text'.
+func ResponseTextConfig(chatWireShape string) *ResponseTextConfigDef {
+	switch chatWireShape {
+	case ChatAnthropic:
+		return &ResponseTextConfigDef{
+			BlocksPath:  "content",
+			MarkerPath:  "type",
+			MarkerValue: "text",
+			ValuePath:   "text",
+		}
+	case ChatBedrock:
+		return &ResponseTextConfigDef{
+			BlocksPath:  "output.message.content",
+			MarkerPath:  "text",
+			MarkerValue: "",
+			ValuePath:   "text",
+		}
+	case ChatGoogle:
+		return &ResponseTextConfigDef{
+			BlocksPath:  "candidates[0].content.parts",
+			MarkerPath:  "text",
+			MarkerValue: "",
+			ValuePath:   "text",
+		}
+	default:
+		return nil
+	}
+}
+
 // UsagePaths returns the JSON paths for input and output token counts.
 func UsagePaths(provider string) (inputPath, outputPath string) {
 	switch ProviderName(provider) {
