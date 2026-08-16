@@ -929,7 +929,32 @@ func removeAdditionalProperties(schema any) {
 // network, no clock. The wire shape is required, not derived — one provider can
 // serve two chat protocols, and inferring it silently mis-parses (SYM-003).
 // This is the same function the chat send path calls (SYM-004).
+// resolveChatWireShape fills in an unspecified wire shape with the provider's
+// DEFAULT chat protocol.
+//
+// Callers that decode a body they know is Chat Completions — batch result
+// lines, chiefly — pass "" to mean "not the Responses envelope". That was
+// harmless while the shape only selected between the Responses arm and the
+// provider's declared paths. It stopped being harmless when the shape started
+// selecting the TEXT READER too: "" resolved to no config, which is the
+// positional reader BUG-053 removed, so batched Anthropic replies with a
+// leading thinking block decoded to "" long after the send path was fixed.
+//
+// Resolving here rather than at each call site keeps N=1: a future caller that
+// passes "" gets the right reader without having to know it must not.
+// ADR-055 requires every provider's default protocol to be a Chat Completions
+// family (lint_chat_wire_shape gates it), so this can never resolve INTO the
+// Responses arm and silently change which envelope is parsed.
+func resolveChatWireShape(provider, chatWireShape string) string {
+	if chatWireShape != "" {
+		return chatWireShape
+	}
+	return providerSpecs()[provider].ChatWireShape
+}
+
 func DecodeResponse(provider, chatWireShape string, body []byte) (Response, error) {
+	chatWireShape = resolveChatWireShape(provider, chatWireShape)
+
 	var raw map[string]any
 	if err := json.Unmarshal(body, &raw); err != nil {
 		return Response{}, fmt.Errorf("unmarshal response: %w", err)
@@ -946,7 +971,7 @@ func DecodeResponse(provider, chatWireShape string, body []byte) (Response, erro
 		return resp, nil
 	}
 
-	text := extractPath(raw, providers.ResponseTextPath(provider))
+	text := extractResponseText(raw, provider, chatWireShape)
 	finishReason, finishMessage := extractFinishSignal(raw, provider)
 
 	return Response{
@@ -956,6 +981,53 @@ func DecodeResponse(provider, chatWireShape string, body []byte) (Response, erro
 		FinishMessage: finishMessage,
 		ProviderTurn:  turn,
 	}, nil
+}
+
+// extractResponseText reads the assistant's text out of a parsed provider body.
+//
+// Two readers, selected by the wire shape, never by provider name (CLAUDE.md
+// forbids switching on provider outside errors.go):
+//
+//   - block-array families declare a ResponseTextConfig and are read by
+//     DISCRIMINATOR, because array position is not stable — Opus 5 and
+//     Sonnet 5 think by default, so content[0] is a thinking block (BUG-053);
+//   - scalar families declare none, and nil SELECTS the fixed-path reader.
+//
+// An empty result is a real answer, not a failure: every tool-use turn carries
+// no text block at all. FinishReason is what says why, which is the reason
+// Response.Text stays a plain string rather than becoming optional in seven
+// SDKs to mark something routine.
+func extractResponseText(raw map[string]any, provider, chatWireShape string) string {
+	cfg := providers.ResponseTextConfig(chatWireShape)
+	if cfg == nil {
+		return extractPath(raw, providers.ResponseTextPath(provider))
+	}
+	blocks := matchingBlocks(raw, cfg.BlocksPath, cfg.MarkerPath, cfg.MarkerValue)
+	if len(blocks) == 0 {
+		return ""
+	}
+	return extractPath(blocks[0], cfg.ValuePath)
+}
+
+// encodeResponseText is extractResponseText's inverse, driven by the SAME
+// config so the two cannot drift apart.
+//
+// The marker is WRITTEN, not just tested. Emitting only the value path would
+// produce {"content":[{"text":"pong"}]} — a body with no type discriminator,
+// which the reader above then finds no matching block in. That is the ADR-076
+// fixed point breaking, and it is why textMarkerValue is documented as a
+// write instruction rather than a read predicate.
+func encodeResponseText(raw map[string]any, provider, chatWireShape, text string) {
+	cfg := providers.ResponseTextConfig(chatWireShape)
+	if cfg == nil {
+		setWirePath(raw, providers.ResponseTextPath(provider), text)
+		return
+	}
+	block := cfg.BlocksPath + "[0]"
+	if cfg.MarkerValue != "" {
+		setWirePath(raw, block+"."+cfg.MarkerPath, cfg.MarkerValue)
+	}
+	setWirePath(raw, block+"."+cfg.ValuePath, text)
 }
 
 // decodeUsage reads all six dimensions out of a parsed provider body. The ONE
@@ -990,6 +1062,7 @@ func decodeUsage(raw map[string]any, provider string) Usage {
 // The contract is the canonical fixed point, Decode(Encode(Decode(b))) ==
 // Decode(b) (SYM-006).
 func EncodeResponse(provider, chatWireShape string, resp Response) ([]byte, error) {
+	chatWireShape = resolveChatWireShape(provider, chatWireShape)
 	if err := guardOneWayFields(provider, resp); err != nil {
 		return nil, err
 	}
@@ -998,7 +1071,7 @@ func EncodeResponse(provider, chatWireShape string, resp Response) ([]byte, erro
 	}
 
 	raw := map[string]any{}
-	setWirePath(raw, providers.ResponseTextPath(provider), resp.Text)
+	encodeResponseText(raw, provider, chatWireShape, resp.Text)
 	inputPath, outputPath := providers.UsagePaths(provider)
 	setWirePath(raw, inputPath, resp.Usage.Input)
 	setWirePath(raw, outputPath, resp.Usage.Output)
@@ -1268,9 +1341,13 @@ func extractReasoningUsage(raw map[string]any, provider string) *int {
 	return optIntPath(raw, cfg.ReasoningTokensPath)
 }
 
-// extractPath navigates a nested map using dot-notation paths with array index support.
+// walkPath navigates a nested map using dot-notation paths with array index
+// support and returns the raw value it lands on, or nil for a miss.
 // Examples: "content[0].text", "choices[0].message.content", "usage.input_tokens"
-func extractPath(data map[string]any, path string) string {
+//
+// Split out of extractPath so the string reader and the block selector
+// (matchingBlocks) walk the SAME path grammar rather than each rolling one.
+func walkPath(data map[string]any, path string) any {
 	parts := strings.Split(path, ".")
 	var current any = data
 
@@ -1280,23 +1357,37 @@ func extractPath(data map[string]any, path string) string {
 			if m, ok := current.(map[string]any); ok {
 				current = m[field]
 			} else {
-				return ""
+				return nil
 			}
 
 			if arr, ok := current.([]any); ok && arrIdx < len(arr) {
 				current = arr[arrIdx]
 			} else {
-				return ""
+				return nil
 			}
 		} else {
 			if m, ok := current.(map[string]any); ok {
 				current = m[part]
 			} else {
-				return ""
+				return nil
 			}
 		}
 	}
 
+	return current
+}
+
+// extractPath is walkPath rendered as a string. A miss yields "".
+//
+// The nil guard below is not defensive tidying: Sprintf("%v", nil) renders the
+// literal "<nil>", so before BUG-053 a missed path did not return the empty
+// string this function's contract claims — it returned five characters that
+// pass any `if text != ""` guard a caller writes.
+func extractPath(data map[string]any, path string) string {
+	current := walkPath(data, path)
+	if current == nil {
+		return ""
+	}
 	if s, ok := current.(string); ok {
 		return s
 	}
