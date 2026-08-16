@@ -121,7 +121,7 @@ var providerSpecRegistry = map[string]providerSpec{
 		},
 		UsageInputPath:          "usage.input_tokens",
 		UsageOutputPath:         "usage.output_tokens",
-		ReasoningTokensPath:     "",
+		ReasoningTokensPath:     "usage.output_tokens_details.thinking_tokens",
 		FinishReasonPath:        "stop_reason",
 		FinishMessagePath:       "",
 		StreamFinishReasonPath:  "message_stop:stop_reason",

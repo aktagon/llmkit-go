@@ -728,6 +728,55 @@ func transformGoogleToolResultMsg(result ToolResult, _ map[string]string) map[st
 }
 
 // =============================================================================
+// Block selection — the ONE scanner over a provider's mixed content array
+// =============================================================================
+
+// matchingBlocks returns the elements of the array at blocksPath that the
+// marker identifies, in wire order. It is the single primitive behind every
+// "which blocks in this response are of kind X" question — text extraction and
+// tool-call extraction both run through it, so the two cannot come to disagree
+// about what an array element is.
+//
+// Marker semantics are exactly the generated config contract:
+//
+//	markerPath == ""                     homogeneous array; every element matches
+//	markerPath set, markerValue == ""    element matches if the key is PRESENT
+//	markerPath and markerValue both set  element matches if the key EQUALS the value
+//
+// Presence rather than equality is not a shortcut: a Bedrock ContentBlock and a
+// Gemini Part are UNIONS whose text member carries no type key at all, so an
+// equality test there would match nothing.
+//
+// Navigation reuses walkPath, so there is no second path grammar here — which
+// is what kept this fix clear of the rejected content[type=text].text filter
+// syntax (java's Json.at calls parseInt on the bracket body).
+func matchingBlocks(raw map[string]any, blocksPath, markerPath, markerValue string) []map[string]any {
+	arr, ok := walkPath(raw, blocksPath).([]any)
+	if !ok {
+		return nil
+	}
+
+	var out []map[string]any
+	for _, elem := range arr {
+		block, ok := elem.(map[string]any)
+		if !ok {
+			continue
+		}
+		if markerPath != "" {
+			marker, present := block[markerPath]
+			if !present {
+				continue
+			}
+			if markerValue != "" && marker != markerValue {
+				continue
+			}
+		}
+		out = append(out, block)
+	}
+	return out
+}
+
+// =============================================================================
 // Tool call extraction — parse tool calls from provider responses
 // =============================================================================
 
@@ -769,17 +818,14 @@ func extractOpenAIToolCalls(raw map[string]any, tcConfig *providers.ToolCallDef)
 	return calls
 }
 
+// The N=1 proof for matchingBlocks: this is the SAME call the text reader
+// makes, with a different marker value. Before BUG-053 these were two
+// hand-rolled scans over one array that happened to agree; agreement by
+// coincidence is what let text extraction break on thinking blocks while
+// tool-call extraction, scanning the very same array, kept working.
 func extractAnthropicToolCalls(raw map[string]any, _ *providers.ToolCallDef) []toolCall {
-	content, ok := raw["content"].([]any)
-	if !ok {
-		return nil
-	}
 	var calls []toolCall
-	for _, c := range content {
-		block, ok := c.(map[string]any)
-		if !ok || block["type"] != "tool_use" {
-			continue
-		}
+	for _, block := range matchingBlocks(raw, "content", "type", "tool_use") {
 		input, _ := block["input"].(map[string]any)
 		calls = append(calls, toolCall{
 			id:    fmt.Sprintf("%v", block["id"]),
