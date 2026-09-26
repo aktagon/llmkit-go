@@ -18,6 +18,9 @@ type BatchDef struct {
 	EndpointPath     string // API endpoint path for JSONL batch requests
 	ItemBodyField    string // field nesting request body in each item (e.g., "params" for Anthropic)
 	ResultBodyPath   string // JSON path from each JSONL result line to the response body
+	ResultKeyPath    string // JSON path from each result line; see batchResultKeyPath
+	ResultStatusPath string // JSON path from each result line; see batchResultStatusPath
+	ResultErrorPath  string // JSON path from each result line; see batchResultErrorPath
 	Lifecycle        *ResourceLifecycleDef
 }
 
@@ -34,6 +37,9 @@ func BatchConfig(provider string) *BatchDef {
 			EndpointPath:     "",
 			ItemBodyField:    "params",
 			ResultBodyPath:   "result.message",
+			ResultKeyPath:    "custom_id",
+			ResultStatusPath: "result.type",
+			ResultErrorPath:  "result.error.error.message",
 			Lifecycle: &ResourceLifecycleDef{
 				CreateEndpoint:      "/v1/messages/batches",
 				ResponseIdPath:      "id",
@@ -57,6 +63,9 @@ func BatchConfig(provider string) *BatchDef {
 			EndpointPath:     "",
 			ItemBodyField:    "",
 			ResultBodyPath:   "",
+			ResultKeyPath:    "",
+			ResultStatusPath: "",
+			ResultErrorPath:  "",
 		}
 	case OpenAI:
 		return &BatchDef{
@@ -68,6 +77,9 @@ func BatchConfig(provider string) *BatchDef {
 			EndpointPath:     "/v1/chat/completions",
 			ItemBodyField:    "",
 			ResultBodyPath:   "response.body",
+			ResultKeyPath:    "custom_id",
+			ResultStatusPath: "",
+			ResultErrorPath:  "error.message",
 			Lifecycle: &ResourceLifecycleDef{
 				CreateEndpoint:      "/v1/batches",
 				ResponseIdPath:      "id",
