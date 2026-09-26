@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -383,51 +384,121 @@ func fetchBatchResults(ctx context.Context, o *options, handle BatchHandle, base
 	return parseBatchResults(handle.Provider.Name, respBody, bc, raw)
 }
 
-// parseBatchResults parses JSONL batch result data into responses.
-// If bc.ResultBodyPath is set (e.g., "response.body" for OpenAI,
-// "result.message" for Anthropic), each line is unwrapped at that path before
-// being passed to parseResponse. Otherwise the line IS the response body.
+// parseBatchResults parses JSONL batch result data into one Response per
+// submitted request, at that request's index (BUG-072).
+//
+// Providers return result lines in any order, so a line is placed by the
+// request id at bc.ResultKeyPath: "req-N" goes to index N. A line whose body
+// is missing at bc.ResultBodyPath is a failed request; it keeps its slot as a
+// Response with empty text, FinishReason from bc.ResultStatusPath ("error"
+// when the provider has no status) and FinishMessage from bc.ResultErrorPath.
+// An index with no line gets FinishReason "missing". Lines whose id is not
+// "req-N" (a batch created outside llmkit, or a repeated id) follow the
+// indexed slots in file order. A line that is not JSON cannot be placed and
+// is skipped; its index reads "missing".
 //
 // When raw is true, each parsed Response carries Response.Raw set to the
 // per-item body (the unwrapped inner body when ResultBodyPath is set,
-// otherwise the JSONL line itself).
+// otherwise the JSONL line itself); a failed Response carries the whole line.
 func parseBatchResults(provider string, data []byte, bc *providers.BatchDef, raw bool) ([]Response, error) {
-	var responses []Response
+	var slots []*Response
+	var unkeyed []Response
 	for _, line := range strings.Split(string(data), "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
 		}
-
-		responseBytes := []byte(line)
-		if bc.ResultBodyPath != "" {
-			// Slice the ORIGINAL bytes rather than decode-and-re-marshal.
-			// The old path round-tripped through map[string]any, so what
-			// reached DecodeResponse was Go's rendering of the body: keys
-			// re-sorted, `<` escaped to \u003c, and every integer past
-			// float64's exact range rewritten. That was invisible while the
-			// decoder only read scalars out of it, and stopped being
-			// invisible when ADR-085 started capturing a verbatim payload
-			// from the same bytes.
-			inner := extractRawJSONPath([]byte(line), bc.ResultBodyPath)
-			if len(inner) == 0 {
-				continue
-			}
-			responseBytes = inner
-		}
-
-		// Batch is Chat-Completions-only (ADR-055): empty wire shape selects the
-		// provider's declared response paths, not the Responses output[] arm.
-		resp, err := DecodeResponse(provider, "", responseBytes)
-		if err != nil {
+		var wrapper map[string]any
+		if err := json.Unmarshal([]byte(line), &wrapper); err != nil {
 			continue
 		}
-		if raw {
-			resp.Raw = append(json.RawMessage(nil), responseBytes...)
+		resp := parseBatchResultLine(provider, []byte(line), wrapper, bc, raw)
+
+		index, ok := -1, false
+		if bc.ResultKeyPath != "" {
+			index, ok = batchRequestIndex(extractPath(wrapper, bc.ResultKeyPath))
 		}
-		responses = append(responses, resp)
+		if !ok || (index < len(slots) && slots[index] != nil) {
+			unkeyed = append(unkeyed, resp)
+			continue
+		}
+		for len(slots) <= index {
+			slots = append(slots, nil)
+		}
+		slots[index] = &resp
 	}
-	return responses, nil
+
+	responses := make([]Response, 0, len(slots)+len(unkeyed))
+	for _, slot := range slots {
+		if slot == nil {
+			missing := "missing"
+			responses = append(responses, Response{FinishReason: &missing})
+			continue
+		}
+		responses = append(responses, *slot)
+	}
+	return append(responses, unkeyed...), nil
+}
+
+// parseBatchResultLine decodes one result line. A line whose body is missing
+// at bc.ResultBodyPath, or does not decode, becomes a failed Response.
+func parseBatchResultLine(provider string, line []byte, wrapper map[string]any, bc *providers.BatchDef, raw bool) Response {
+	responseBytes := line
+	if bc.ResultBodyPath != "" {
+		// Slice the ORIGINAL bytes rather than decode-and-re-marshal.
+		// The old path round-tripped through map[string]any, so what
+		// reached DecodeResponse was Go's rendering of the body: keys
+		// re-sorted, `<` escaped to \u003c, and every integer past
+		// float64's exact range rewritten. That was invisible while the
+		// decoder only read scalars out of it, and stopped being
+		// invisible when ADR-085 started capturing a verbatim payload
+		// from the same bytes.
+		responseBytes = extractRawJSONPath(line, bc.ResultBodyPath)
+	}
+	if len(responseBytes) > 0 && responseBytes[0] == '{' {
+		// Batch is Chat-Completions-only (ADR-055): empty wire shape selects the
+		// provider's declared response paths, not the Responses output[] arm.
+		if resp, err := DecodeResponse(provider, "", responseBytes); err == nil {
+			if raw {
+				resp.Raw = append(json.RawMessage(nil), responseBytes...)
+			}
+			return resp
+		}
+	}
+
+	reason := "error"
+	if bc.ResultStatusPath != "" {
+		if status := extractPath(wrapper, bc.ResultStatusPath); status != "" {
+			reason = status
+		}
+	}
+	failed := Response{FinishReason: &reason}
+	if bc.ResultErrorPath != "" {
+		failed.FinishMessage = optString(extractPath(wrapper, bc.ResultErrorPath))
+	}
+	if raw {
+		failed.Raw = append(json.RawMessage(nil), line...)
+	}
+	return failed
+}
+
+// batchRequestIndex reads N out of the "req-N" id the SDK sends with request
+// N. Any other id reports false.
+func batchRequestIndex(id string) (int, bool) {
+	digits, ok := strings.CutPrefix(id, "req-")
+	if !ok || digits == "" {
+		return 0, false
+	}
+	for _, c := range digits {
+		if c < '0' || c > '9' {
+			return 0, false
+		}
+	}
+	n, err := strconv.Atoi(digits)
+	if err != nil {
+		return 0, false
+	}
+	return n, true
 }
 
 // navigateMapPath walks a dotted path through nested maps and returns the

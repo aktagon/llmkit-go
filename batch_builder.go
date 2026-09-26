@@ -49,7 +49,14 @@ func (b *Text) batchInputs(prompts []string) ([]Request, []Option) {
 }
 
 // Wait polls the provider's batch lifecycle until completion and
-// returns the ordered Response slice. Cross-process resume works by
+// returns one Response per prompt, at the prompt's index. A failed
+// request keeps its slot: empty Text, FinishReason set to the provider's
+// result status ("errored", "expired", "canceled"; "error" when the
+// provider has none) and FinishMessage set to the provider's error
+// message. A request with no result line reads FinishReason "missing".
+// Results whose request id is not one this SDK assigned (a batch created
+// elsewhere, resumed by ID) follow the indexed ones in file order.
+// Cross-process resume works by
 // reconstructing a BatchHandle{ID, Provider, Raw} from persisted
 // state and calling Wait on it.
 //
