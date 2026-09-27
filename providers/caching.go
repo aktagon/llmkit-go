@@ -21,6 +21,7 @@ type ResourceLifecycleDef struct {
 	ResultEndpoint      string
 	ResultResponsePath  string
 	ResultFileIdPath    string // JSON path to output file ID in poll response (OpenAI batch)
+	ErrorFileIdPath     string // JSON path to error file ID in poll response (OpenAI batch)
 	FileContentEndpoint string // URL path template for downloading file content
 }
 
