@@ -107,10 +107,7 @@ func (b *Text) Prompt(ctx context.Context, finalText string) (Response, error) {
 		return Response{}, err
 	}
 
-	resp, parseErr := DecodeResponse(p.Name, cfg.ChatWireShape, respBody)
-	if o.raw && parseErr == nil {
-		resp.Raw = append(json.RawMessage(nil), respBody...)
-	}
+	resp, parseErr := decodeResponseRaw(p.Name, cfg.ChatWireShape, respBody, o.raw)
 	postEv := baseEvent
 	postEv.Usage = resp.Usage
 	postEv.Err = parseErr
@@ -223,4 +220,24 @@ func splitTextAndImages(parts []Part) (string, []InputImage) {
 		}
 	}
 	return text, images
+}
+
+// decodeResponseRaw is DecodeResponse plus the ADR-014 raw opt-in. Every
+// Response send path (prompt, agent, batch) decodes or attaches through here,
+// so none can forget the caller's .Raw() (BUG-073). The public codec keeps its
+// signature (ADR-076).
+func decodeResponseRaw(provider, wireShape string, body []byte, raw bool) (Response, error) {
+	resp, err := DecodeResponse(provider, wireShape, body)
+	if err != nil {
+		return resp, err
+	}
+	return attachRaw(resp, body, raw), nil
+}
+
+// attachRaw sets resp.Raw to a copy of body when the caller opted in.
+func attachRaw(resp Response, body []byte, raw bool) Response {
+	if raw {
+		resp.Raw = append(json.RawMessage(nil), body...)
+	}
+	return resp
 }

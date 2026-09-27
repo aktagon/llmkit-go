@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -268,7 +269,7 @@ func buildBatchBody(ctx context.Context, reqs []Request, o *options, p Provider,
 		var item map[string]any
 		if bc.ItemBodyField != "" {
 			item = map[string]any{
-				"custom_id":      fmt.Sprintf("req-%d", i),
+				"custom_id":      providers.BatchRequestIDPrefix + strconv.Itoa(i),
 				bc.ItemBodyField: reqBody,
 			}
 		} else {
@@ -300,7 +301,7 @@ func buildBatchJSONL(ctx context.Context, reqs []Request, o *options, p Provider
 			}
 		}
 		line := map[string]any{
-			"custom_id": fmt.Sprintf("req-%d", i),
+			"custom_id": providers.BatchRequestIDPrefix + strconv.Itoa(i),
 			"method":    "POST",
 			"url":       bc.EndpointPath,
 			"body":      reqBody,
@@ -338,154 +339,211 @@ func uploadBatchFile(ctx context.Context, client *http.Client, base string, json
 }
 
 // fetchBatchResults fetches and parses completed batch results.
-// Supports two patterns:
-//   - Direct result endpoint (Anthropic): GET ResultEndpoint/{id}
-//   - File-based results (OpenAI): extract output_file_id from poll response, download file content
+//
+// A provider declares up to three result sources (HANDOFF-078): a direct result
+// endpoint (Anthropic), and file IDs in the status body for the output file and
+// the error file (OpenAI). Every source that is present is read, in that order;
+// the call fails only when none is. The status body also carries the request
+// count (bc.RequestCountPaths), which fixes the number of result slots.
 //
 // statusRaw is the already-decoded poll body when the caller has it (the poll
-// engine does); the two-hop result fetch reads output_file_id from it instead
-// of re-GETting the status. When nil (no prior poll), the status is fetched.
+// engine does). When nil and a file ID or the count is needed, the status is
+// fetched.
 func fetchBatchResults(ctx context.Context, o *options, handle BatchHandle, base string, bc *providers.BatchDef, cfg providerSpec, headers map[string]string, raw bool, statusRaw map[string]any) ([]Response, error) {
-	var respBody []byte
-	var err error
-
-	if bc.Lifecycle.ResultFileIdPath != "" {
-		// Two-hop: read output file ID from the poll body, then download file.
-		if statusRaw == nil {
-			pollURL := base + bc.Lifecycle.CreateEndpoint + "/" + handle.ID
-			statusBody, gerr := doGet(ctx, o.httpClient, pollURL, headers)
-			if gerr != nil {
-				return nil, fmt.Errorf("batch status: %w", gerr)
-			}
-			if err := json.Unmarshal(statusBody, &statusRaw); err != nil {
-				return nil, fmt.Errorf("unmarshal batch status: %w", err)
-			}
-		}
-		fileID := extractPath(statusRaw, bc.Lifecycle.ResultFileIdPath)
-		if fileID == "" {
-			return nil, fmt.Errorf("batch results: empty output file ID")
-		}
-		fileURL := base + strings.ReplaceAll(bc.Lifecycle.FileContentEndpoint, "{id}", fileID)
-		respBody, err = doGet(ctx, o.httpClient, fileURL, headers)
+	lc := bc.Lifecycle
+	needsStatus := lc.ResultFileIdPath != "" || lc.ErrorFileIdPath != "" || len(bc.RequestCountPaths) > 0
+	if statusRaw == nil && needsStatus {
+		pollURL := base + lc.CreateEndpoint + "/" + handle.ID
+		statusBody, err := doGet(ctx, o.httpClient, pollURL, headers)
 		if err != nil {
-			return nil, fmt.Errorf("batch result file: %w", err)
+			return nil, fmt.Errorf("batch status: %w", err)
 		}
-	} else if bc.Lifecycle.ResultEndpoint != "" {
-		// Direct result endpoint
-		resultURL := base + strings.ReplaceAll(bc.Lifecycle.ResultEndpoint, "{id}", handle.ID)
-		respBody, err = doGet(ctx, o.httpClient, resultURL, headers)
+		if err := json.Unmarshal(statusBody, &statusRaw); err != nil {
+			return nil, fmt.Errorf("unmarshal batch status: %w", err)
+		}
+	}
+
+	var sources [][]byte
+	if lc.ResultEndpoint != "" {
+		resultURL := base + strings.ReplaceAll(lc.ResultEndpoint, "{id}", handle.ID)
+		body, err := doGet(ctx, o.httpClient, resultURL, headers)
 		if err != nil {
 			return nil, fmt.Errorf("batch results: %w", err)
 		}
-	} else {
-		return nil, fmt.Errorf("batch result endpoint not configured for %s", handle.Provider.Name)
+		sources = append(sources, body)
+	}
+	for _, idPath := range []string{lc.ResultFileIdPath, lc.ErrorFileIdPath} {
+		if idPath == "" {
+			continue
+		}
+		fileID := extractPath(statusRaw, idPath)
+		if fileID == "" {
+			continue
+		}
+		fileURL := base + strings.ReplaceAll(lc.FileContentEndpoint, "{id}", fileID)
+		body, err := doGet(ctx, o.httpClient, fileURL, headers)
+		if err != nil {
+			return nil, fmt.Errorf("batch result file: %w", err)
+		}
+		sources = append(sources, body)
+	}
+	if len(sources) == 0 {
+		return nil, fmt.Errorf("batch results: no result source for %s batch %s", handle.Provider.Name, handle.ID)
 	}
 
-	return parseBatchResults(handle.Provider.Name, respBody, bc, raw)
+	count, hasCount := batchRequestCount(statusRaw, bc.RequestCountPaths)
+	return parseBatchResults(handle.Provider.Name, sources, bc, raw, count, hasCount), nil
 }
 
-// parseBatchResults parses JSONL batch result data into one Response per
-// submitted request, at that request's index (BUG-072).
+// batchRequestCount sums the integers at paths in the status body. It reports
+// false when no path resolves to a number.
+func batchRequestCount(status map[string]any, paths []string) (int, bool) {
+	total, found := 0, false
+	for _, path := range paths {
+		if n, ok := walkPath(status, path).(float64); ok {
+			total += int(n)
+			found = true
+		}
+	}
+	return total, found
+}
+
+// batchSlot is one parsed result line waiting for its index.
+type batchSlot struct {
+	resp      Response
+	succeeded bool
+}
+
+// parseBatchResults parses JSONL result sources into one Response per
+// submitted request, at that request's index (BUG-072, HANDOFF-078).
 //
 // Providers return result lines in any order, so a line is placed by the
-// request id at bc.ResultKeyPath: "req-N" goes to index N. A line whose body
-// is missing at bc.ResultBodyPath is a failed request; it keeps its slot as a
-// Response with empty text, FinishReason from bc.ResultStatusPath ("error"
-// when the provider has no status) and FinishMessage from bc.ResultErrorPath.
-// An index with no line gets FinishReason "missing". Lines whose id is not
-// "req-N" (a batch created outside llmkit, or a repeated id) follow the
-// indexed slots in file order. A line that is not JSON cannot be placed and
-// is skipped; its index reads "missing".
+// request id at bc.ResultKeyPath: providers.BatchRequestIDPrefix + N goes to #gitleaks:allow
+// index N. When one index appears twice, a line that succeeded replaces a
+// failed one; otherwise the later line follows the indexed slots.
 //
-// When raw is true, each parsed Response carries Response.Raw set to the
-// per-item body (the unwrapped inner body when ResultBodyPath is set,
-// otherwise the JSONL line itself); a failed Response carries the whole line.
-func parseBatchResults(provider string, data []byte, bc *providers.BatchDef, raw bool) ([]Response, error) {
-	var slots []*Response
+// With a request count (hasCount), there are exactly count slots, and an id at
+// or above the count follows them. Without one, slots run to the highest index
+// seen. An index with no line reads providers.BatchSlotMissing. Lines whose id
+// has another form (a batch created outside llmkit) follow the indexed slots
+// in file order. A line that is not JSON cannot be placed and is skipped.
+//
+// When raw is true, a succeeded Response carries Response.Raw set to its body
+// (the unwrapped inner body when ResultBodyPath is set, otherwise the line);
+// a failed Response carries the whole line.
+func parseBatchResults(provider string, sources [][]byte, bc *providers.BatchDef, raw bool, count int, hasCount bool) []Response {
+	var slots []*batchSlot
+	if hasCount {
+		slots = make([]*batchSlot, count)
+	}
 	var unkeyed []Response
-	for _, line := range strings.Split(string(data), "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		var wrapper map[string]any
-		if err := json.Unmarshal([]byte(line), &wrapper); err != nil {
-			continue
-		}
-		resp := parseBatchResultLine(provider, []byte(line), wrapper, bc, raw)
+	for _, data := range sources {
+		for _, line := range strings.Split(string(data), "\n") {
+			line = strings.TrimSpace(line)
+			if line == "" {
+				continue
+			}
+			var wrapper map[string]any
+			if err := json.Unmarshal([]byte(line), &wrapper); err != nil {
+				continue
+			}
+			slot := parseBatchResultLine(provider, []byte(line), wrapper, bc, raw)
 
-		index, ok := -1, false
-		if bc.ResultKeyPath != "" {
-			index, ok = batchRequestIndex(extractPath(wrapper, bc.ResultKeyPath))
+			index, ok := -1, false
+			if bc.ResultKeyPath != "" {
+				index, ok = batchRequestIndex(extractPath(wrapper, bc.ResultKeyPath))
+			}
+			if ok && hasCount && index >= count {
+				ok = false
+			}
+			if !ok {
+				unkeyed = append(unkeyed, slot.resp)
+				continue
+			}
+			for len(slots) <= index {
+				slots = append(slots, nil)
+			}
+			switch existing := slots[index]; {
+			case existing == nil:
+				slots[index] = &slot
+			case slot.succeeded && !existing.succeeded:
+				slots[index] = &slot
+			case existing.succeeded && !slot.succeeded:
+				// The request succeeded; a failed duplicate adds nothing.
+			default:
+				unkeyed = append(unkeyed, slot.resp)
+			}
 		}
-		if !ok || (index < len(slots) && slots[index] != nil) {
-			unkeyed = append(unkeyed, resp)
-			continue
-		}
-		for len(slots) <= index {
-			slots = append(slots, nil)
-		}
-		slots[index] = &resp
 	}
 
 	responses := make([]Response, 0, len(slots)+len(unkeyed))
 	for _, slot := range slots {
 		if slot == nil {
-			missing := "missing"
+			missing := providers.BatchSlotMissing
 			responses = append(responses, Response{FinishReason: &missing})
 			continue
 		}
-		responses = append(responses, *slot)
+		responses = append(responses, slot.resp)
 	}
-	return append(responses, unkeyed...), nil
+	return append(responses, unkeyed...)
 }
 
-// parseBatchResultLine decodes one result line. A line whose body is missing
-// at bc.ResultBodyPath, or does not decode, becomes a failed Response.
-func parseBatchResultLine(provider string, line []byte, wrapper map[string]any, bc *providers.BatchDef, raw bool) Response {
-	responseBytes := line
-	if bc.ResultBodyPath != "" {
-		// Slice the ORIGINAL bytes rather than decode-and-re-marshal.
-		// The old path round-tripped through map[string]any, so what
-		// reached DecodeResponse was Go's rendering of the body: keys
-		// re-sorted, `<` escaped to \u003c, and every integer past
-		// float64's exact range rewritten. That was invisible while the
-		// decoder only read scalars out of it, and stopped being
-		// invisible when ADR-085 started capturing a verbatim payload
-		// from the same bytes.
-		responseBytes = extractRawJSONPath(line, bc.ResultBodyPath)
-	}
-	if len(responseBytes) > 0 && responseBytes[0] == '{' {
-		// Batch is Chat-Completions-only (ADR-055): empty wire shape selects the
-		// provider's declared response paths, not the Responses output[] arm.
-		if resp, err := DecodeResponse(provider, "", responseBytes); err == nil {
-			if raw {
-				resp.Raw = append(json.RawMessage(nil), responseBytes...)
+// parseBatchResultLine decodes one result line. The line succeeded when the
+// value at bc.ResultStatusPath is one of bc.ResultSuccessValues (any value when
+// the provider declares no status path) and its body decodes. Every other line
+// becomes a failed Response: empty text, the first reason path that resolves
+// as FinishReason (providers.BatchSlotError when none does) and the first
+// message path that resolves as FinishMessage.
+func parseBatchResultLine(provider string, line []byte, wrapper map[string]any, bc *providers.BatchDef, raw bool) batchSlot {
+	signalled := bc.ResultStatusPath == "" || slices.Contains(bc.ResultSuccessValues, extractPath(wrapper, bc.ResultStatusPath))
+	if signalled {
+		responseBytes := line
+		if bc.ResultBodyPath != "" {
+			// Slice the ORIGINAL bytes rather than decode-and-re-marshal.
+			// The old path round-tripped through map[string]any, so what
+			// reached DecodeResponse was Go's rendering of the body: keys
+			// re-sorted, `<` escaped to \u003c, and every integer past
+			// float64's exact range rewritten. That was invisible while the
+			// decoder only read scalars out of it, and stopped being
+			// invisible when ADR-085 started capturing a verbatim payload
+			// from the same bytes.
+			responseBytes = extractRawJSONPath(line, bc.ResultBodyPath)
+		}
+		if len(responseBytes) > 0 && responseBytes[0] == '{' {
+			// Batch is Chat-Completions-only (ADR-055): empty wire shape selects
+			// the provider's declared response paths, not the Responses arm.
+			if resp, err := decodeResponseRaw(provider, "", responseBytes, raw); err == nil {
+				return batchSlot{resp: resp, succeeded: true}
 			}
-			return resp
 		}
 	}
 
-	reason := "error"
-	if bc.ResultStatusPath != "" {
-		if status := extractPath(wrapper, bc.ResultStatusPath); status != "" {
-			reason = status
-		}
+	reason := firstPath(wrapper, bc.ResultReasonPaths)
+	if reason == "" {
+		reason = providers.BatchSlotError
 	}
-	failed := Response{FinishReason: &reason}
-	if bc.ResultErrorPath != "" {
-		failed.FinishMessage = optString(extractPath(wrapper, bc.ResultErrorPath))
+	failed := Response{
+		FinishReason:  &reason,
+		FinishMessage: optString(firstPath(wrapper, bc.ResultMessagePaths)),
 	}
-	if raw {
-		failed.Raw = append(json.RawMessage(nil), line...)
-	}
-	return failed
+	return batchSlot{resp: attachRaw(failed, line, raw)}
 }
 
-// batchRequestIndex reads N out of the "req-N" id the SDK sends with request
-// N. Any other id reports false.
+// firstPath returns the value at the first path that resolves to a non-empty
+// string, or "" when none does.
+func firstPath(data map[string]any, paths []string) string {
+	for _, path := range paths {
+		if v := extractPath(data, path); v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+// batchRequestIndex reads N out of the providers.BatchRequestIDPrefix + N id
+// the SDK sends with request N. Any other id reports false.
 func batchRequestIndex(id string) (int, bool) {
-	digits, ok := strings.CutPrefix(id, "req-")
+	digits, ok := strings.CutPrefix(id, providers.BatchRequestIDPrefix)
 	if !ok || digits == "" {
 		return 0, false
 	}
