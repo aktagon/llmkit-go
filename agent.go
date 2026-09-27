@@ -205,10 +205,7 @@ func (a *legacyAgent) runToolLoop(ctx context.Context) (Response, error) {
 				FinishMessage: finishMessage,
 				ProviderTurn:  turn,
 			}
-			if a.opts.raw {
-				resp.Raw = append(json.RawMessage(nil), respBody...)
-			}
-			return resp, nil
+			return attachRaw(resp, respBody, a.opts.raw), nil
 		}
 
 		// Record the assistant turn. toolCalls is the projection the loop runs
