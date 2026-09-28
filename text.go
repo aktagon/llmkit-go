@@ -124,7 +124,7 @@ func (b *Text) Prompt(ctx context.Context, finalText string) (Response, error) {
 //   - System  -> req.System
 //   - History -> req.Messages
 //   - Schema  -> req.Schema
-//   - parts   -> req.User (concatenated Text parts, joined by spaces)
+//   - parts   -> req.User (Text parts, joined by newlines)
 //   - image Parts -> req.Images (base64 data URIs; ADR-060). A future
 //     slice may collapse User+Images onto a single Part-based request shape.
 //   - files   -> req.Files
@@ -195,7 +195,8 @@ func (b *Text) buildRequest(finalText string) (Request, []Option) {
 }
 
 // splitTextAndImages separates a Parts slice into the legacy Request
-// shape: Text parts join into a single User string (space-separated),
+// shape: Text parts join into a single User string (newline-separated,
+// the join every SDK holds via the text-parts-openai request-wire golden),
 // Image parts become InputImage entries via base64 data URIs.
 //
 // This is a phase-3 bridge — it lets the typed-builder front end ride
@@ -214,7 +215,7 @@ func splitTextAndImages(parts []Part) (string, []InputImage) {
 			})
 		case p.Text != "":
 			if text != "" {
-				text += " "
+				text += "\n"
 			}
 			text += p.Text
 		}
