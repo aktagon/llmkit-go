@@ -479,14 +479,20 @@ func buildURL(p Provider, cfg providerSpec) string {
 	return base + endpoint
 }
 
-// resolveOptionKey returns the wire (JSON) key for param on (provider, model).
+// resolveOptionKey returns the wire (JSON) key for param on (provider, model)
+// under the effective chat wire shape.
 //
-// Per-model overrides (ADR-024) outrank the provider default table: an exact
-// ModelID match wins outright, otherwise the longest-prefix glob wins, and
-// failing any override the provider's default supported-options key is used.
-// This is the single resolution path; both the MaxTokens site and the general
-// option loop call it (OPT-005).
-func resolveOptionKey(provider, model string, param providers.OptionKey, supported map[providers.OptionKey]string) (string, bool) {
+// A wire-shape key (BUG-075) outranks everything: the Responses shape names
+// MaxTokens max_output_tokens for every model. Next, per-model overrides
+// (ADR-024) outrank the provider default table: an exact ModelID match wins
+// outright, otherwise the longest-prefix glob wins, and failing any override
+// the provider's default supported-options key is used. This is the single
+// resolution path; both the MaxTokens site and the general option loop call it
+// (OPT-005).
+func resolveOptionKey(provider, model, chatWireShape string, param providers.OptionKey, supported map[providers.OptionKey]string) (string, bool) {
+	if key, ok := providers.WireShapeOptionOverrides(chatWireShape)[param]; ok {
+		return key, true
+	}
 	bestKey := ""
 	bestLen := -1
 	for _, ov := range providers.ModelOptionOverrides(provider) {
@@ -548,7 +554,7 @@ func buildRequest(p Provider, req Request, msgs []msg, o *options, cfg providerS
 
 	// Provider-specific max tokens key (per-model override aware, ADR-024)
 	supported := providers.SupportedOptions(p.Name)
-	if key, ok := resolveOptionKey(p.Name, model, providers.OptionMaxTokens, supported); ok {
+	if key, ok := resolveOptionKey(p.Name, model, cfg.ChatWireShape, providers.OptionMaxTokens, supported); ok {
 		body[key] = maxTokens
 	}
 
@@ -583,9 +589,9 @@ func buildRequest(p Provider, req Request, msgs []msg, o *options, cfg providerS
 	// Generation options — may be nested under a wrapper key (e.g., generationConfig for Google)
 	if cfg.WrapsOptionsIn != "" {
 		optBody := map[string]any{}
-		addOptions(body, optBody, o, p.Name, model)
+		addOptions(body, optBody, o, p.Name, model, cfg.ChatWireShape)
 		// Also move max tokens into the wrapper
-		if key, ok := resolveOptionKey(p.Name, model, providers.OptionMaxTokens, supported); ok {
+		if key, ok := resolveOptionKey(p.Name, model, cfg.ChatWireShape, providers.OptionMaxTokens, supported); ok {
 			setNestedField(optBody, key, maxTokens)
 			delete(body, strings.SplitN(key, ".", 2)[0])
 		}
@@ -593,7 +599,7 @@ func buildRequest(p Provider, req Request, msgs []msg, o *options, cfg providerS
 			body[cfg.WrapsOptionsIn] = optBody
 		}
 	} else {
-		addOptions(body, body, o, p.Name, model)
+		addOptions(body, body, o, p.Name, model, cfg.ChatWireShape)
 	}
 
 	// Safety settings — top-level field for Gemini (safetySettings array).
@@ -639,18 +645,6 @@ func buildRequest(p Provider, req Request, msgs []msg, o *options, cfg providerS
 	// still rides alongside the provider key.
 	mergeCallerHeaders(headers, p)
 
-	// ADR-055 Responses wire-shape body fixup: the Responses API names the
-	// output-token cap max_output_tokens and rejects max_tokens with a 400
-	// (live-verified 2026-07-02). Every other body field is shared with Chat
-	// Completions, so this single rename is the only option-key divergence in
-	//
-	if cfg.ChatWireShape == providers.ChatResponsesOpenAI {
-		if v, ok := body["max_tokens"]; ok {
-			body["max_output_tokens"] = v
-			delete(body, "max_tokens")
-		}
-	}
-
 	return body, headers
 }
 
@@ -673,12 +667,12 @@ func mapRole(role string, mappings map[string]string) string {
 // (e.g. {"thinking":{"type":"adaptive"}} alongside Anthropic's
 // output_config.effort). root is the true body root; for providers that wrap
 // options (WrapsOptionsIn), target is the wrapper object and root differs.
-func addOptions(root, target map[string]any, o *options, provider, model string) {
+func addOptions(root, target map[string]any, o *options, provider, model, chatWireShape string) {
 	supported := providers.SupportedOptions(provider)
 	overrides := providers.OptionOverrides(provider)
 
 	apply := func(key providers.OptionKey, value any) {
-		jsonKey, ok := resolveOptionKey(provider, model, key, supported)
+		jsonKey, ok := resolveOptionKey(provider, model, chatWireShape, key, supported)
 		if !ok {
 			return
 		}
