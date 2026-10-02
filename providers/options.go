@@ -413,3 +413,17 @@ func ModelOptionOverrides(provider string) []ModelOptionOverrideDef {
 		return nil
 	}
 }
+
+// WireShapeOptionOverrides returns the wire keys a chat wire shape uses for
+// generation params, for every model. They outrank ModelOptionOverrides and
+// the provider's supported-options table (BUG-075).
+func WireShapeOptionOverrides(chatWireShape string) map[OptionKey]string {
+	switch chatWireShape {
+	case ChatResponsesOpenAI:
+		return map[OptionKey]string{
+			OptionMaxTokens: "max_output_tokens",
+		}
+	default:
+		return nil
+	}
+}
