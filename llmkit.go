@@ -617,9 +617,10 @@ func buildRequest(p Provider, req Request, msgs []msg, o *options, cfg providerS
 		addStructuredOutput(body, headers, req.Schema, p.Name, cfg)
 	}
 
-	// Files API beta (BUG-017): a document/source:file block referencing an
-	// uploaded file requires the same anthropic-beta the upload used. Compose
+	// Upload beta (BUG-017): a request that references an uploaded file carries
+	// the beta the provider's upload declares (uploadBetaHeader). Compose
 	// with any existing value (e.g. structured output) rather than overwrite.
+	// Anthropic declares none since its Files API left beta (BUG-078).
 	if len(req.Files) > 0 {
 		if fu := providers.FileUploadConfig(p.Name); fu != nil && fu.BetaHeader != "" {
 			headers["anthropic-beta"] = appendBeta(headers["anthropic-beta"], fu.BetaHeader)
