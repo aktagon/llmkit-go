@@ -612,6 +612,7 @@ func buildRequest(p Provider, req Request, msgs []msg, o *options, cfg providerS
 	//
 	//
 	//
+	//
 	if len(req.Files) > 0 {
 		if fu := providers.FileUploadConfig(p.Name); fu != nil && fu.BetaHeader != "" {
 			headers["anthropic-beta"] = appendBeta(headers["anthropic-beta"], fu.BetaHeader)
