@@ -643,10 +643,13 @@ func buildRequest(p Provider, req Request, msgs []msg, o *options, cfg providerS
 	//
 	//
 	//
+	//
 	if cfg.ChatWireShape == providers.ChatResponsesOpenAI {
-		if v, ok := body["max_tokens"]; ok {
-			body["max_output_tokens"] = v
-			delete(body, "max_tokens")
+		for _, key := range []string{"max_tokens", "max_completion_tokens"} {
+			if v, ok := body[key]; ok {
+				body["max_output_tokens"] = v
+				delete(body, key)
+			}
 		}
 	}
 
