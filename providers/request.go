@@ -337,7 +337,7 @@ func FileUploadConfig(provider string) *FileUploadDef {
 			Endpoint:         "/v1/files",
 			FieldName:        "file",
 			ExtraFields:      ``,
-			BetaHeader:       "files-api-2025-04-14",
+			BetaHeader:       "",
 			ResponseIdPath:   "id",
 			ResponseUriPath:  "",
 			ResponseNamePath: "filename",
