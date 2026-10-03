@@ -640,13 +640,16 @@ func buildRequest(p Provider, req Request, msgs []msg, o *options, cfg providerS
 
 	// ADR-055 Responses wire-shape body fixup: the Responses API names the
 	// output-token cap max_output_tokens and rejects max_tokens with a 400
-	// (live-verified 2026-07-02). Every other body field is shared with Chat
-	// Completions, so this single rename is the only option-key divergence in
+	// (live-verified 2026-07-02). A per-model override may already have renamed
+	// the cap: gpt-5 and the o-series carry max_completion_tokens, which
+	// Responses rejects too (BUG-075), so both keys are renamed. Behavior held
 	//
 	if cfg.ChatWireShape == providers.ChatResponsesOpenAI {
-		if v, ok := body["max_tokens"]; ok {
-			body["max_output_tokens"] = v
-			delete(body, "max_tokens")
+		for _, key := range []string{"max_tokens", "max_completion_tokens"} {
+			if v, ok := body[key]; ok {
+				body["max_output_tokens"] = v
+				delete(body, key)
+			}
 		}
 	}
 
