@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.1] — 2026-10-04
+
+### Fixed
+
+- OpenAI Responses protocol: gpt-5 and o-series models now send the output-token cap as `max_output_tokens`. They sent `max_completion_tokens`, which the Responses API rejects with HTTP 400.
+- Anthropic requests no longer send `anthropic-beta: files-api-2025-04-14`. The Files API left beta, and with that header an upload returned the older response shape, without `expires_at`.
+
+## [2.2.0] — 2026-07-25
+
+### Added
+
+- `DecodeResponse(provider, chatWireShape, body)` turns a provider's chat response body into a `Response`, the same way the client reads it. `EncodeResponse(provider, chatWireShape, resp)` writes a `Response` back into that provider's body shape. Both are pure functions: no client, no key, no network. `EncodeResponse` returns a `*ValidationError` for a field it cannot write back faithfully.
+
+## [2.1.0] — 2026-07-22
+
+### Fixed
+
+- Middleware now runs for speech generation and transcription requests, as the new `speech_generation` and `transcription` operations, and its pre phase can veto them. Before, these requests ran no middleware, so a policy hook could not block them. For transcription it runs on the sync and async calls, not on waits or polls.
+
 ## [2.0.1] — 2026-07-19
 
 ### Security
