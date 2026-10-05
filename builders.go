@@ -6,6 +6,8 @@
 package llmkit
 
 import (
+	"time"
+
 	"github.com/aktagon/llmkit-go/v2/providers"
 )
 
@@ -20,12 +22,18 @@ type providerConfig struct {
 	// headers are custom HTTP headers added via Client.AddHeader
 	// (ADR-052); copied onto every request's Provider.
 	headers map[string]string
+	// timeout is the wait for the next response bytes, set via
+	// Client.Timeout (BUG-062); copied onto every request's Provider.
+	timeout time.Duration
 }
+
+// defaultTimeout is the defaultSeconds fact of Timeout.
+const defaultTimeout = 600 * time.Second
 
 // toProvider lowers the internal config to a Provider for the
 // internal request runtime.
 func (pc providerConfig) toProvider(model string) Provider {
-	return Provider{Name: pc.name, APIKey: pc.apiKey, Model: model, BaseURL: pc.baseURL, Headers: pc.headers}
+	return Provider{Name: pc.name, APIKey: pc.apiKey, Model: model, BaseURL: pc.baseURL, Headers: pc.headers, Timeout: pc.timeout}
 }
 
 // Client is the entry point for the typed-builder API. Each
@@ -51,7 +59,7 @@ type Client struct {
 }
 
 func newClient(p providers.ProviderName, apiKey string) *Client {
-	c := &Client{provider: providerConfig{name: string(p), apiKey: apiKey}}
+	c := &Client{provider: providerConfig{name: string(p), apiKey: apiKey, timeout: defaultTimeout}}
 	c.Text = &Text{client: c}
 	c.Image = &Image{client: c}
 	c.Music = &Music{client: c}
@@ -127,6 +135,16 @@ func (c *Client) AddHeader(name, value string) *Client {
 // endpoint. Returns the same *Client for chaining.
 func (c *Client) BaseURL(url string) *Client {
 	c.provider.baseURL = url
+	return c
+}
+
+// Timeout sets how long this client waits for the next bytes from
+// the provider before the request fails with a timeout error. The
+// wait covers the response headers and every gap between body
+// chunks, so a long healthy stream never times out. Zero or less
+// disables it. Returns the same *Client for chaining.
+func (c *Client) Timeout(d time.Duration) *Client {
+	c.provider.timeout = d
 	return c
 }
 
