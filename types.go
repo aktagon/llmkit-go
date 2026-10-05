@@ -18,6 +18,9 @@ type Provider struct {
 	// static required header, so a gateway header (e.g. cf-aig-authorization)
 	// rides alongside the provider key without clobbering it.
 	Headers map[string]string
+	// Timeout is how long a request waits for the next response bytes
+	// (Client.Timeout, BUG-062). Zero or less disables it.
+	Timeout time.Duration
 }
 
 // Capability names one of the SDK's modelled capabilities. The set mirrors
