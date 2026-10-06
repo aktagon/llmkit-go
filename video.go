@@ -163,10 +163,7 @@ func submitVideo(ctx context.Context, p Provider, req VideoRequest, opts ...Vide
 		return VideoHandle{}, err
 	}
 
-	client := o.httpClient
-	if client == nil {
-		client = http.DefaultClient
-	}
+	client := withRequestTimeout(o.httpClient, p.Timeout)
 	headers := buildAuthHeaders(p, cfg)
 
 	requestID, err := dispatchVideoSubmit(ctx, client, p, cfg, vgCfg, req.Model, req.OutputURI, parts, headers)
@@ -339,10 +336,7 @@ func (h VideoHandle) Wait(ctx context.Context, opts ...VideoOption) (VideoRespon
 		headers["Ai-trace-id"] = newVideoTraceID()
 	}
 
-	client := o.httpClient
-	if client == nil {
-		client = http.DefaultClient
-	}
+	client := withRequestTimeout(o.httpClient, p.Timeout)
 
 	deadline := time.Now().Add(videoPollTimeout)
 

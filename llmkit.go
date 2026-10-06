@@ -45,6 +45,7 @@ func (c *Client) Supports(cap Capability) bool {
 // public surface is (*Text).Stream in stream.go (plan-018 D1.3b).
 func promptStream(ctx context.Context, p Provider, req Request, callback StreamCallback, opts ...Option) (Response, error) {
 	o := resolveOptions(opts)
+	o.httpClient = withRequestTimeout(o.httpClient, p.Timeout)
 
 	if err := validateProvider(p); err != nil {
 		return Response{}, err
@@ -192,6 +193,7 @@ func uploadFile(ctx context.Context, p Provider, data []byte, name, mime string,
 	}
 
 	o := resolveOptions(opts)
+	o.httpClient = withRequestTimeout(o.httpClient, p.Timeout)
 
 	model, err := resolveModel(p, cfg)
 	if err != nil {
