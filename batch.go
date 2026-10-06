@@ -22,6 +22,7 @@ import (
 // in batch_builder.go.
 func submitBatch(ctx context.Context, p Provider, reqs []Request, opts ...Option) (BatchHandle, error) {
 	o := resolveOptions(opts)
+	o.httpClient = withRequestTimeout(o.httpClient, p.Timeout)
 
 	if err := validateProvider(p); err != nil {
 		return BatchHandle{}, err
@@ -201,6 +202,7 @@ func (a batchAdapter) result(ctx context.Context, raw pollBody) ([]Response, err
 // at the deadline backstop rather than mislabelling a Failed terminal.
 func newBatchAdapter(handle BatchHandle, o *options) (batchAdapter, error) {
 	p := handle.Provider
+	o.httpClient = withRequestTimeout(o.httpClient, p.Timeout)
 	cfg, ok := providerSpecs()[p.Name]
 	if !ok {
 		return batchAdapter{}, &ValidationError{Field: "provider", Message: "unknown: " + p.Name}
