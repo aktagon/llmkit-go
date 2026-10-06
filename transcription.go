@@ -106,10 +106,7 @@ func submitTranscription(ctx context.Context, p Provider, req TranscriptionReque
 		return TranscriptionHandle{}, &ValidationError{Field: "parts", Message: p.Name + " does not accept audio bytes; pass a public audio URL"}
 	}
 
-	client := o.httpClient
-	if client == nil {
-		client = http.DefaultClient
-	}
+	client := withRequestTimeout(o.httpClient, p.Timeout)
 	base := transcriptionBaseURL(p, cfg)
 	headers := buildAuthHeaders(p, cfg)
 
@@ -264,10 +261,7 @@ func newTranscriptionAdapter(h TranscriptionHandle, o *transcriptionOptions) (tr
 		return transcriptionAdapter{}, &ValidationError{Field: "provider", Message: p.Name + " does not support transcription"}
 	}
 
-	client := o.httpClient
-	if client == nil {
-		client = http.DefaultClient
-	}
+	client := withRequestTimeout(o.httpClient, p.Timeout)
 	base := transcriptionBaseURL(p, cfg)
 	headers := buildAuthHeaders(p, cfg)
 	pollURL := base + strings.Replace(tcCfg.PollEndpoint, "{id}", h.ID, 1)
@@ -318,10 +312,7 @@ func transcribeSync(ctx context.Context, p Provider, req TranscriptionRequest, o
 		return TranscriptionResponse{}, err
 	}
 
-	client := o.httpClient
-	if client == nil {
-		client = http.DefaultClient
-	}
+	client := withRequestTimeout(o.httpClient, p.Timeout)
 	base := transcriptionBaseURL(p, cfg)
 	headers := cloneStringMap(buildAuthHeaders(p, cfg))
 

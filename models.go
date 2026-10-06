@@ -140,8 +140,8 @@ func (b *ScopedModels) runList(ctx context.Context) ([]ModelInfo, error) {
 	if !pok {
 		return nil, ErrModelsNotSupported
 	}
-	httpClient := defaultHTTPClient()
 	provider := b.client.provider.toProvider("")
+	httpClient := withRequestTimeout(http.DefaultClient, provider.Timeout)
 
 	baseEvent := providers.Event{
 		Op:       providers.OpModelsList,
@@ -182,8 +182,8 @@ func (b *ScopedModels) runGet(ctx context.Context, id string) (ModelInfo, error)
 	if !pok {
 		return ModelInfo{}, ErrModelsNotSupported
 	}
-	httpClient := defaultHTTPClient()
 	provider := b.client.provider.toProvider("")
+	httpClient := withRequestTimeout(http.DefaultClient, provider.Timeout)
 
 	baseEvent := providers.Event{
 		Op:       providers.OpModelsList,
@@ -388,13 +388,4 @@ func (b *ScopedModels) enrich(records []providers.ParsedModelRecord) []ModelInfo
 		out = append(out, info)
 	}
 	return out
-}
-
-// defaultHTTPClient returns the package-default *http.Client used by
-// catalogue calls. Today there is no Models.WithHTTPClient chain method,
-// so each call constructs a fresh client. The 30s timeout matches the
-// other live paths' default (see go/agent.go's Agent.HTTPClient
-// fallback).
-func defaultHTTPClient() *http.Client {
-	return &http.Client{Timeout: 30 * time.Second}
 }

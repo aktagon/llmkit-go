@@ -46,9 +46,11 @@ type toolResult struct {
 
 // newLegacyAgent creates a new agent for multi-turn conversations.
 func newLegacyAgent(p Provider, opts ...Option) *legacyAgent {
+	o := resolveOptions(opts)
+	o.httpClient = withRequestTimeout(o.httpClient, p.Timeout)
 	return &legacyAgent{
 		provider: p,
-		opts:     resolveOptions(opts),
+		opts:     o,
 	}
 }
 

@@ -144,6 +144,9 @@ func (c *Client) BaseURL(url string) *Client {
 // chunks, so a long healthy stream never times out. Zero or less
 // disables it. Returns the same *Client for chaining.
 func (c *Client) Timeout(d time.Duration) *Client {
+	if d <= 0 {
+		d = -1 // Provider.Timeout: zero means the default, negative disables
+	}
 	c.provider.timeout = d
 	return c
 }

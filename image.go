@@ -367,10 +367,7 @@ func generateImage(ctx context.Context, p Provider, req ImageRequest, opts ...Im
 		return ImageResponse{}, err
 	}
 
-	client := o.httpClient
-	if client == nil {
-		client = http.DefaultClient
-	}
+	client := withRequestTimeout(o.httpClient, p.Timeout)
 	headers := imageAuthHeaders(p, cfg)
 
 	respBody, err := dispatchImageHTTP(ctx, client, p, cfg, imgCfg, req.Model, parts, o, headers)

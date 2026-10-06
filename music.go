@@ -140,10 +140,7 @@ func generateMusic(ctx context.Context, p Provider, req MusicRequest, opts ...Mu
 		return MusicResponse{}, err
 	}
 
-	client := o.httpClient
-	if client == nil {
-		client = http.DefaultClient
-	}
+	client := withRequestTimeout(o.httpClient, p.Timeout)
 	headers := imageAuthHeaders(p, cfg)
 
 	respBody, err := dispatchMusicHTTP(ctx, client, p, cfg, mgCfg, req.Model, parts, headers)
