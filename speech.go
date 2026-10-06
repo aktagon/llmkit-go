@@ -96,7 +96,7 @@ func generateSpeech(ctx context.Context, p Provider, req SpeechRequest, opts ...
 		return SpeechResponse{}, err
 	}
 
-	client := http.DefaultClient
+	client := withRequestTimeout(http.DefaultClient, p.Timeout)
 	headers := imageAuthHeaders(p, cfg)
 
 	respBody, err := dispatchSpeechHTTP(ctx, client, p, cfg, sgCfg, req, headers)

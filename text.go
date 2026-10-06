@@ -18,6 +18,7 @@ func (b *Text) Prompt(ctx context.Context, finalText string) (Response, error) {
 	req, opts := b.buildRequest(finalText)
 	p := b.client.provider.toProvider(b.model)
 	o := resolveOptions(opts)
+	o.httpClient = withRequestTimeout(o.httpClient, p.Timeout)
 
 	if err := validateProvider(p); err != nil {
 		return Response{}, err

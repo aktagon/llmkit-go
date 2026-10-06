@@ -19,7 +19,8 @@ type Provider struct {
 	// rides alongside the provider key without clobbering it.
 	Headers map[string]string
 	// Timeout is how long a request waits for the next response bytes
-	// (Client.Timeout, BUG-062). Zero or less disables it.
+	// (Client.Timeout, BUG-062). Zero means the 600 s default, so a
+	// Provider built by hand still times out; negative disables it.
 	Timeout time.Duration
 }
 
