@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.2] — 2026-10-07
+
+### Changed
+- Source and doc comments ship again, so `go doc` and pkg.go.dev show descriptions.
+- The error for a chat protocol on a terminal other than `Prompt` no longer ends with an internal reference.
+- The video example no longer shows a keychain command; set `XAI_API_KEY` in your environment.
+
 ## [2.2.1] — 2026-10-04
 
 ### Fixed
