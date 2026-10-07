@@ -423,7 +423,7 @@ func rejectNonDefaultProtocol(protocol, terminal string) error {
 	}
 	return &ValidationError{
 		Field:   "protocol",
-		Message: "protocol (e.g. Responses) is only supported on the prompt terminal, not " + terminal + " (ADR-055)",
+		Message: "protocol (e.g. Responses) is only supported on the prompt terminal, not " + terminal,
 	}
 }
 
