@@ -6,8 +6,7 @@
 //
 // Run with:
 //
-//	XAI_API_KEY=your-key \
-//	go run ./examples/video-gen
+//	XAI_API_KEY=your-key go run ./examples/video-gen
 package main
 
 import (
