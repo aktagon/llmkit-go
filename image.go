@@ -895,7 +895,7 @@ func imageAuthHeaders(p Provider, cfg providerSpec) map[string]string {
 // parseImageResponse decodes inline image parts and concatenates text parts.
 // The response parser is selected by the config's response wire family
 // (imgCfg.ResponseShape), never by provider name (BUG-024). imgCfg's
-// UsageInputPath/UsageOutputPath are dotted-from-root and empty when the
+// UsageInputPath/UsageOutputPath/UsageReasoningPath are dotted-from-root and empty when the
 // endpoint reports no usage. provider is still used for the Google-only
 // finish-signal paths in the GoogleParts branch.
 func parseImageResponse(imgCfg *providers.ImageGenDef, provider string, body []byte) (ImageResponse, error) {
@@ -908,7 +908,7 @@ func parseImageResponse(imgCfg *providers.ImageGenDef, provider string, body []b
 	case "DataArrayB64Json":
 		// OpenAI/xAI/Recraft data[].b64_json shape. SVG bytes (Recraft vector
 		// models) are sniffed to image/svg+xml inside parseImageResponseDataArray.
-		return parseImageResponseDataArray(raw, imgCfg.UsageInputPath, imgCfg.UsageOutputPath), nil
+		return parseImageResponseDataArray(raw, imgCfg.UsageInputPath, imgCfg.UsageOutputPath, imgCfg.UsageReasoningPath), nil
 	case "VertexPredictions":
 		return parseVertexImageResponse(raw), nil
 	}
@@ -920,8 +920,9 @@ func parseImageResponse(imgCfg *providers.ImageGenDef, provider string, body []b
 		Images: images,
 		Text:   text,
 		Usage: Usage{
-			Input:  optIntPath(raw, imgCfg.UsageInputPath),
-			Output: optIntPath(raw, imgCfg.UsageOutputPath),
+			Input:     optIntPath(raw, imgCfg.UsageInputPath),
+			Output:    optIntPath(raw, imgCfg.UsageOutputPath),
+			Reasoning: optIntPath(raw, imgCfg.UsageReasoningPath),
 		},
 		FinishReason:  finishReason,
 		FinishMessage: finishMessage,
@@ -939,7 +940,7 @@ func parseImageResponse(imgCfg *providers.ImageGenDef, provider string, body []b
 //   - inputPath / outputPath are the dotted paths to extract from `usage`.
 //     Pass empty strings when the provider doesn't report token counts
 //     (xAI reports usage.cost_in_usd_ticks instead).
-func parseImageResponseDataArray(raw map[string]any, inputPath, outputPath string) ImageResponse {
+func parseImageResponseDataArray(raw map[string]any, inputPath, outputPath, reasoningPath string) ImageResponse {
 	data, _ := raw["data"].([]any)
 	var images []ImageData
 	var revised []string
@@ -970,8 +971,9 @@ func parseImageResponseDataArray(raw map[string]any, inputPath, outputPath strin
 		}
 	}
 	tokens := Usage{
-		Input:  optIntPath(raw, inputPath),
-		Output: optIntPath(raw, outputPath),
+		Input:     optIntPath(raw, inputPath),
+		Output:    optIntPath(raw, outputPath),
+		Reasoning: optIntPath(raw, reasoningPath),
 	}
 	return ImageResponse{
 		Images: images,
