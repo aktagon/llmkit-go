@@ -2,16 +2,35 @@
 
 package providers
 
-// Image input/output mode discriminators.
+// Carried-input discriminators: the inputs a request variant carries (ADR-096).
 const (
-	ImageInputInlineParts     = "InlineParts"
-	ImageInputMultipartForm   = "MultipartForm"
-	ImageInputJSONInlineRefs  = "JSONInlineRefs"
-	ImageInputJSONPredict     = "JSONPredict"
-	ImageInputJSONGenerations = "JSONGenerations"
-	ImageOutputBase64Inline   = "Base64Inline"
-	ImageOutputURLOrBase64    = "URLOrBase64"
+	TextOnly            = "TextOnly"
+	WithReferenceImages = "WithReferenceImages"
 )
+
+// Image request-shape discriminators: each names one request body (ADR-096).
+const (
+	InlineParts           = "InlineParts"
+	JSONGenerationsOpenAI = "JSONGenerationsOpenAI"
+	MultipartForm         = "MultipartForm"
+	JSONInlineRefs        = "JSONInlineRefs"
+	JSONPredict           = "JSONPredict"
+	JSONGenerations       = "JSONGenerations"
+)
+
+// Image output mode discriminators.
+const (
+	ImageOutputBase64Inline = "Base64Inline"
+	ImageOutputURLOrBase64  = "URLOrBase64"
+)
+
+// RequestVariant is one wire request of an image or video config, keyed by
+// the inputs it carries (ADR-096).
+type RequestVariant struct {
+	Carries  string // TextOnly | WithReferenceImages
+	Shape    string // image request shape (InlineParts, ...); "" on a video variant
+	Endpoint string // path; "" = use provider main endpoint
+}
 
 // ImageModelDef describes one image-generation model and its whitelisted
 // aspect ratios and output sizes. Values are the strings sent to the provider
@@ -31,17 +50,14 @@ type ImageModelDef struct {
 }
 
 // ImageGenDef holds one provider's image-generation configuration.
-// GenEndpoint and EditEndpoint are forward-compat overrides; empty means
-// reuse the provider's main endpoint template (Google).
+// Variants lists one request per carried input, TextOnly first.
 type ImageGenDef struct {
-	InputMode          string // ImageInputInlineParts | ImageInputMultipartForm | ImageInputJSONInlineRefs | ImageInputJSONPredict | ImageInputJSONGenerations
 	OutputMode         string // ImageOutputBase64Inline | ImageOutputURLOrBase64
 	ResponseShape      string // GoogleParts | DataArrayB64Json | VertexPredictions (BUG-024)
 	UsageInputPath     string // dotted-from-root usage-token path; empty when unreported
 	UsageOutputPath    string
 	UsageReasoningPath string // thinking-token path; empty when not reported separately
-	GenEndpoint        string // override; empty = use provider main endpoint
-	EditEndpoint       string // override; empty = use GenEndpoint
+	Variants           []RequestVariant
 	Models             []ImageModelDef
 }
 
@@ -51,14 +67,15 @@ func ImageGenConfig(provider string) *ImageGenDef {
 	switch ProviderName(provider) {
 	case Google:
 		return &ImageGenDef{
-			InputMode:          "InlineParts",
 			OutputMode:         "Base64Inline",
 			ResponseShape:      "GoogleParts",
 			UsageInputPath:     "usageMetadata.promptTokenCount",
 			UsageOutputPath:    "usageMetadata.candidatesTokenCount",
 			UsageReasoningPath: "usageMetadata.thoughtsTokenCount",
-			GenEndpoint:        "",
-			EditEndpoint:       "",
+			Variants: []RequestVariant{
+				{Carries: "TextOnly", Shape: "InlineParts", Endpoint: ""},
+				{Carries: "WithReferenceImages", Shape: "InlineParts", Endpoint: ""},
+			},
 			Models: []ImageModelDef{
 				{
 					ModelID:            "gemini-3-pro-image-preview",
@@ -80,14 +97,15 @@ func ImageGenConfig(provider string) *ImageGenDef {
 		}
 	case Grok:
 		return &ImageGenDef{
-			InputMode:          "JSONInlineRefs",
 			OutputMode:         "Base64Inline",
 			ResponseShape:      "DataArrayB64Json",
 			UsageInputPath:     "",
 			UsageOutputPath:    "",
 			UsageReasoningPath: "",
-			GenEndpoint:        "/v1/images/generations",
-			EditEndpoint:       "/v1/images/edits",
+			Variants: []RequestVariant{
+				{Carries: "TextOnly", Shape: "JSONInlineRefs", Endpoint: "/v1/images/generations"},
+				{Carries: "WithReferenceImages", Shape: "JSONInlineRefs", Endpoint: "/v1/images/edits"},
+			},
 			Models: []ImageModelDef{
 				{
 					ModelID:            "grok-imagine-image-quality",
@@ -101,14 +119,15 @@ func ImageGenConfig(provider string) *ImageGenDef {
 		}
 	case OpenAI:
 		return &ImageGenDef{
-			InputMode:          "MultipartForm",
 			OutputMode:         "Base64Inline",
 			ResponseShape:      "DataArrayB64Json",
 			UsageInputPath:     "usage.input_tokens",
 			UsageOutputPath:    "usage.output_tokens",
 			UsageReasoningPath: "",
-			GenEndpoint:        "/v1/images/generations",
-			EditEndpoint:       "/v1/images/edits",
+			Variants: []RequestVariant{
+				{Carries: "TextOnly", Shape: "JSONGenerationsOpenAI", Endpoint: "/v1/images/generations"},
+				{Carries: "WithReferenceImages", Shape: "MultipartForm", Endpoint: "/v1/images/edits"},
+			},
 			Models: []ImageModelDef{
 				{
 					ModelID:            "gpt-image-1",
@@ -146,14 +165,14 @@ func ImageGenConfig(provider string) *ImageGenDef {
 		}
 	case Openrouter:
 		return &ImageGenDef{
-			InputMode:          "JSONGenerations",
 			OutputMode:         "Base64Inline",
 			ResponseShape:      "DataArrayB64Json",
 			UsageInputPath:     "usage.prompt_tokens",
 			UsageOutputPath:    "usage.completion_tokens",
 			UsageReasoningPath: "",
-			GenEndpoint:        "/v1/images",
-			EditEndpoint:       "",
+			Variants: []RequestVariant{
+				{Carries: "TextOnly", Shape: "JSONGenerations", Endpoint: "/v1/images"},
+			},
 			Models: []ImageModelDef{
 				{
 					ModelID:            "google/gemini-2.5-flash-image",
@@ -215,14 +234,14 @@ func ImageGenConfig(provider string) *ImageGenDef {
 		}
 	case Recraft:
 		return &ImageGenDef{
-			InputMode:          "JSONGenerations",
 			OutputMode:         "Base64Inline",
 			ResponseShape:      "DataArrayB64Json",
 			UsageInputPath:     "",
 			UsageOutputPath:    "",
 			UsageReasoningPath: "",
-			GenEndpoint:        "/v1/images/generations",
-			EditEndpoint:       "",
+			Variants: []RequestVariant{
+				{Carries: "TextOnly", Shape: "JSONGenerations", Endpoint: "/v1/images/generations"},
+			},
 			Models: []ImageModelDef{
 				{
 					ModelID:            "recraftv3",
@@ -244,38 +263,38 @@ func ImageGenConfig(provider string) *ImageGenDef {
 		}
 	case Vertex:
 		return &ImageGenDef{
-			InputMode:          "JSONPredict",
 			OutputMode:         "Base64Inline",
 			ResponseShape:      "VertexPredictions",
 			UsageInputPath:     "",
 			UsageOutputPath:    "",
 			UsageReasoningPath: "",
-			GenEndpoint:        "",
-			EditEndpoint:       "",
+			Variants: []RequestVariant{
+				{Carries: "TextOnly", Shape: "JSONPredict", Endpoint: ""},
+			},
 			Models: []ImageModelDef{
 				{
 					ModelID:            "imagen-3.0-fast-generate-001",
 					Label:              "Imagen 3 Fast",
 					AspectRatios:       []string{"16:9", "1:1", "3:4", "4:3", "9:16"},
 					ImageSizes:         []string{},
-					MaxInputImages:     1,
-					SupportsImageInput: true,
+					MaxInputImages:     0,
+					SupportsImageInput: false,
 				},
 				{
 					ModelID:            "imagen-3.0-generate-002",
 					Label:              "Imagen 3",
 					AspectRatios:       []string{"16:9", "1:1", "3:4", "4:3", "9:16"},
 					ImageSizes:         []string{},
-					MaxInputImages:     1,
-					SupportsImageInput: true,
+					MaxInputImages:     0,
+					SupportsImageInput: false,
 				},
 				{
 					ModelID:            "imagen-4.0-generate-preview-06-06",
 					Label:              "Imagen 4 Preview",
 					AspectRatios:       []string{"16:9", "1:1", "3:4", "4:3", "9:16"},
 					ImageSizes:         []string{},
-					MaxInputImages:     1,
-					SupportsImageInput: true,
+					MaxInputImages:     0,
+					SupportsImageInput: false,
 				},
 			},
 		}
