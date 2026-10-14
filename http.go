@@ -175,19 +175,26 @@ type multipartFile struct {
 	bytes     []byte
 }
 
+// multipartField is one plain string field inside a multipart/form-data
+// request. A slice of them keeps the field order fixed on the wire.
+type multipartField struct {
+	name  string
+	value string
+}
+
 // doMultipartPostMulti sends a multipart POST with one or more file parts
 // and zero-or-more plain string fields. Mirrors doMultipartPost's wire
-// shape — extra fields written first, then files in the given order. On
-// non-2xx the body is returned alongside an *APIError so callers can hand
-// it to parseError.
+// shape — fields written first in the given order, then files in the given
+// order. On non-2xx the body is returned alongside an *APIError so callers
+// can hand it to parseError.
 func doMultipartPostMulti(ctx context.Context, client *http.Client, url string,
-	files []multipartFile, fields map[string]string, headers map[string]string) ([]byte, error) {
+	files []multipartFile, fields []multipartField, headers map[string]string) ([]byte, error) {
 
 	var buf bytes.Buffer
 	w := multipart.NewWriter(&buf)
 
-	for k, v := range fields {
-		if err := w.WriteField(k, v); err != nil {
+	for _, f := range fields {
+		if err := w.WriteField(f.name, f.value); err != nil {
 			return nil, err
 		}
 	}
