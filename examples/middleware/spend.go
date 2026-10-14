@@ -14,8 +14,8 @@ import (
 	"os"
 	"sync"
 
-	"github.com/aktagon/llmkit-go/v2"
-	"github.com/aktagon/llmkit-go/v2/providers"
+	"github.com/aktagon/llmkit-go/v3"
+	"github.com/aktagon/llmkit-go/v3/providers"
 )
 
 // Price is USD per 1M tokens for input / output.
