@@ -146,6 +146,18 @@ func submitVideo(ctx context.Context, p Provider, req VideoRequest, opts ...Vide
 			}
 		}
 	}
+	// ADR-096: a seed frame selects the WithReferenceImages submit request;
+	// a config with no such variant cannot send it.
+	imageCount := 0
+	for _, part := range parts {
+		if part.Image != nil {
+			imageCount++
+		}
+	}
+	variant, err := selectRequestVariant(p.Name, vgCfg.Variants, imageCount)
+	if err != nil {
+		return VideoHandle{}, err
+	}
 	// VID-005: output-uri providers (Bedrock Nova Reel) write the video to the
 	// caller's own S3 bucket, so the submit MUST carry a destination URI. Reject
 	// pre-flight rather than letting the provider 400.
@@ -166,7 +178,7 @@ func submitVideo(ctx context.Context, p Provider, req VideoRequest, opts ...Vide
 	client := withRequestTimeout(o.httpClient, p.Timeout)
 	headers := buildAuthHeaders(p, cfg)
 
-	requestID, err := dispatchVideoSubmit(ctx, client, p, cfg, vgCfg, req.Model, req.OutputURI, parts, headers)
+	requestID, err := dispatchVideoSubmit(ctx, client, p, cfg, vgCfg, variant, req.Model, req.OutputURI, parts, headers)
 	postEv := baseEvent
 	postEv.Err = err
 	postEv.Duration = time.Since(start)
@@ -178,7 +190,8 @@ func submitVideo(ctx context.Context, p Provider, req VideoRequest, opts ...Vide
 }
 
 // dispatchVideoSubmit POSTs the submit body and returns the provider-assigned
-// poll handle id. The submit endpoint is resolved from config (absolute when
+// poll handle id. The submit endpoint is the selected request variant's
+// (ADR-096), resolved against the video base (absolute when
 // the video host differs from the chat base) and the handle id is read from the
 //
 // code branches.
@@ -197,6 +210,7 @@ func dispatchVideoSubmit(
 	p Provider,
 	cfg providerSpec,
 	vgCfg *providers.VideoGenDef,
+	variant providers.RequestVariant,
 	model string,
 	outputURI string,
 	parts []Part,
@@ -279,7 +293,7 @@ func dispatchVideoSubmit(
 	// {model} in the submit endpoint is substituted with the per-call model
 	// (Veo's :predictLongRunning path); a no-op for providers that carry the
 	// model in the body. Query-param auth (Google ?key=) is appended last.
-	submitEndpoint := strings.ReplaceAll(vgCfg.GenEndpoint, "{model}", model)
+	submitEndpoint := strings.ReplaceAll(variant.Endpoint, "{model}", model)
 	submitURL := appendVideoAuth(base+submitEndpoint, p, cfg)
 
 	var respBody []byte

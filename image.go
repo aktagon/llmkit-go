@@ -251,30 +251,32 @@ func generateImage(ctx context.Context, p Provider, req ImageRequest, opts ...Im
 			imageCount++
 		}
 	}
-	// BUG-096: both limits are llmkit wire facts per model. MaxInputImages 0
-	// means no llmkit limit; the provider decides volume.
-	if imageCount > 0 && !model.SupportsImageInput {
-		return ImageResponse{}, &ValidationError{
-			Field:   "parts",
-			Message: req.Model + " takes no image parts",
-		}
-	}
-	if model.MaxInputImages > 0 && imageCount > model.MaxInputImages {
-		return ImageResponse{}, &ValidationError{
-			Field:   "parts",
-			Message: fmt.Sprintf("%d image parts exceeds maximum %d for %s", imageCount, model.MaxInputImages, req.Model),
-		}
+	if err := validateImageArity(model, imageCount); err != nil {
+		return ImageResponse{}, err
 	}
 
-	// Per-provider knob validation. Quality, OutputFormat, Background are
-	// OpenAI-only on the wire; Count (n) is OpenAI + xAI; Mask is OpenAI
-	// edits-only (i.e. MultipartForm with image parts present). Catch
+	// ADR-096: the request's parts pick the wire request; a config with no
+	// variant for those inputs cannot send it.
+	variant, err := selectRequestVariant(p.Name, imgCfg.Variants, imageCount)
+	if err != nil {
+		return ImageResponse{}, err
+	}
+
+	// Per-request-shape knob validation. Quality, OutputFormat, Background
+	// are OpenAI-only on the wire; Count (n) is OpenAI + xAI + Recraft +
+	// Vertex; Mask rides only the OpenAI multipart edits body. Catch
 	// mismatches here so the runtime returns a clean ValidationError
 	// instead of shipping the field and waiting for the provider to
 	// reject (or silently ignore) it. Mirrors llmkit.go sampling-knob
 	// validation.
-	switch imgCfg.InputMode {
-	case providers.ImageInputInlineParts: // Google
+	if o.mask != nil && variant.Shape != providers.MultipartForm {
+		if variant.Shape == providers.JSONGenerationsOpenAI {
+			return ImageResponse{}, &ValidationError{Field: "mask", Message: "requires at least one image part (edits branch only)"}
+		}
+		return ImageResponse{}, &ValidationError{Field: "mask", Message: "not supported by " + p.Name}
+	}
+	switch variant.Shape {
+	case providers.InlineParts: // Google
 		if o.quality != "" {
 			return ImageResponse{}, &ValidationError{Field: "quality", Message: "not supported by " + p.Name}
 		}
@@ -287,14 +289,11 @@ func generateImage(ctx context.Context, p Provider, req ImageRequest, opts ...Im
 		if o.count != nil {
 			return ImageResponse{}, &ValidationError{Field: "count", Message: "not supported by " + p.Name}
 		}
-		if o.mask != nil {
-			return ImageResponse{}, &ValidationError{Field: "mask", Message: "not supported by " + p.Name}
-		}
 		if o.safetyFilter != "" {
 			return ImageResponse{}, &ValidationError{Field: "safety_filter", Message: "not supported by " + p.Name + "; use SafetySettings for text-gen"}
 		}
 		// safetySettings valid for InlineParts (Google); wired in buildImageBody
-	case providers.ImageInputJSONInlineRefs: // xAI Grok
+	case providers.JSONInlineRefs: // xAI Grok
 		if o.quality != "" {
 			return ImageResponse{}, &ValidationError{Field: "quality", Message: "not supported by " + p.Name}
 		}
@@ -304,26 +303,20 @@ func generateImage(ctx context.Context, p Provider, req ImageRequest, opts ...Im
 		if o.background != "" {
 			return ImageResponse{}, &ValidationError{Field: "background", Message: "not supported by " + p.Name}
 		}
-		if o.mask != nil {
-			return ImageResponse{}, &ValidationError{Field: "mask", Message: "not supported by " + p.Name}
-		}
 		if o.safetyFilter != "" {
 			return ImageResponse{}, &ValidationError{Field: "safety_filter", Message: "not supported by " + p.Name}
 		}
 		if len(o.safetySettings) > 0 {
 			return ImageResponse{}, &ValidationError{Field: "safety_settings", Message: "not supported by " + p.Name}
 		}
-	case providers.ImageInputMultipartForm: // OpenAI
-		if o.mask != nil && imageCount == 0 {
-			return ImageResponse{}, &ValidationError{Field: "mask", Message: "requires at least one image part (edits branch only)"}
-		}
+	case providers.JSONGenerationsOpenAI, providers.MultipartForm: // OpenAI
 		if o.safetyFilter != "" {
 			return ImageResponse{}, &ValidationError{Field: "safety_filter", Message: "not supported by " + p.Name}
 		}
 		if len(o.safetySettings) > 0 {
 			return ImageResponse{}, &ValidationError{Field: "safety_settings", Message: "not supported by " + p.Name}
 		}
-	case providers.ImageInputJSONPredict: // Vertex Imagen
+	case providers.JSONPredict: // Vertex Imagen
 		if o.quality != "" {
 			return ImageResponse{}, &ValidationError{Field: "quality", Message: "not supported by " + p.Name}
 		}
@@ -337,7 +330,7 @@ func generateImage(ctx context.Context, p Provider, req ImageRequest, opts ...Im
 			return ImageResponse{}, &ValidationError{Field: "safety_settings", Message: "not supported by " + p.Name + "; use SafetyFilter for Vertex Imagen"}
 		}
 		// safetyFilter is valid for Vertex Imagen; wired in buildVertexBody
-	case providers.ImageInputJSONGenerations: // Recraft
+	case providers.JSONGenerations: // Recraft, OpenRouter
 		// Recraft's flat generations body carries only size (-> `size`) and
 		// count (-> `n`); aspect_ratio is not a Recraft wire field (it sizes
 		// by an explicit WxH `size`), and the gpt-image / safety knobs are
@@ -355,9 +348,6 @@ func generateImage(ctx context.Context, p Provider, req ImageRequest, opts ...Im
 		}
 		if o.background != "" {
 			return ImageResponse{}, &ValidationError{Field: "background", Message: "not supported by " + p.Name}
-		}
-		if o.mask != nil {
-			return ImageResponse{}, &ValidationError{Field: "mask", Message: "not supported by " + p.Name}
 		}
 		if o.safetyFilter != "" {
 			return ImageResponse{}, &ValidationError{Field: "safety_filter", Message: "not supported by " + p.Name}
@@ -380,7 +370,7 @@ func generateImage(ctx context.Context, p Provider, req ImageRequest, opts ...Im
 	client := withRequestTimeout(o.httpClient, p.Timeout)
 	headers := imageAuthHeaders(p, cfg)
 
-	respBody, err := dispatchImageHTTP(ctx, client, p, cfg, imgCfg, req.Model, parts, o, headers)
+	respBody, err := dispatchImageHTTP(ctx, client, p, cfg, variant, req.Model, parts, o, headers)
 	if err != nil {
 		postEv := baseEvent
 		postEv.Err = err
@@ -404,102 +394,86 @@ func generateImage(ctx context.Context, p Provider, req ImageRequest, opts ...Im
 	return resp, parseErr
 }
 
-// dispatchImageHTTP picks a wire shape per provider config:
+// validateImageArity rejects image parts the model does not take.
+// BUG-096: both limits are llmkit wire facts per model. MaxInputImages 0
+// means no llmkit limit; the provider decides volume.
+func validateImageArity(model *providers.ImageModelDef, imageCount int) error {
+	if imageCount > 0 && !model.SupportsImageInput {
+		return &ValidationError{
+			Field:   "parts",
+			Message: model.ModelID + " takes no image parts",
+		}
+	}
+	if model.MaxInputImages > 0 && imageCount > model.MaxInputImages {
+		return &ValidationError{
+			Field:   "parts",
+			Message: fmt.Sprintf("%d image parts exceeds maximum %d for %s", imageCount, model.MaxInputImages, model.ModelID),
+		}
+	}
+	return nil
+}
+
+// dispatchImageHTTP sends the request variant the parts selected (ADR-096),
+// switching on its request shape, never on provider name:
 //
-//   - InlineParts (Google): JSON body, all parts inlined; uses the provider's
-//     main endpoint template (substitutes {model}).
-//   - MultipartForm + image parts present (OpenAI edits): multipart/form-data
-//     POST to imgCfg.EditEndpoint with one image[] field per image part and
-//     the concatenated text as `prompt`.
-//   - MultipartForm + no image parts (OpenAI generations): JSON POST to
-//     imgCfg.GenEndpoint. response_format is omitted (gpt-image-* rejects it).
-//   - JSONInlineRefs + image parts (xAI Grok edits): JSON POST to
-//     imgCfg.EditEndpoint; refs encoded as data URLs in `image:` (single)
-//     or `images: [...]` (multi); response_format=b64_json forced.
-//   - JSONInlineRefs + no image parts (xAI Grok generations): JSON POST to
-//     imgCfg.GenEndpoint; same body shape minus image refs.
-//   - JSONGenerations (Recraft): flat JSON POST to imgCfg.GenEndpoint;
-//     {model, prompt, response_format:"b64_json", size, n}. Text-to-image
-//     only (image parts are rejected upstream by the SupportsImageInput gate).
+//   - InlineParts (Google): JSON body, all parts inlined.
+//   - JSONGenerationsOpenAI (OpenAI, text only): JSON body. response_format
+//     is omitted (gpt-image-* rejects it).
+//   - MultipartForm (OpenAI, with reference images): multipart/form-data
+//     with one image[] field per image part and the concatenated text as
+//     `prompt`.
+//   - JSONInlineRefs (xAI Grok): JSON body; refs, when present, encoded as
+//     data URLs in `image:` (single) or `images: [...]` (multi);
+//     response_format=b64_json forced.
+//   - JSONPredict (Vertex Imagen, text only): instances/parameters body.
+//   - JSONGenerations (Recraft, OpenRouter, text only): flat JSON
+//     {model, prompt, response_format:"b64_json", size, n}.
+//
+// The URL is the base plus the variant's Endpoint, or the provider's main
+// endpoint template (with {model} substituted) when Endpoint is empty.
 func dispatchImageHTTP(
 	ctx context.Context,
 	client *http.Client,
 	p Provider,
 	cfg providerSpec,
-	imgCfg *providers.ImageGenDef,
+	variant providers.RequestVariant,
 	model string,
 	parts []Part,
 	o *imageOptions,
 	headers map[string]string,
 ) ([]byte, error) {
-	hasImages := false
-	for _, part := range parts {
-		if part.Image != nil {
-			hasImages = true
-			break
+	url := buildImageURL(p, cfg, model)
+	if variant.Endpoint != "" {
+		base := p.BaseURL
+		if base == "" {
+			base = cfg.BaseURL
 		}
-	}
-	base := p.BaseURL
-	if base == "" {
-		base = cfg.BaseURL
+		url = base + variant.Endpoint
 	}
 
-	if imgCfg.InputMode == providers.ImageInputJSONInlineRefs {
-		var body map[string]any
-		var url string
-		if hasImages {
-			body = buildXAIEditBody(parts, model, o)
-			url = base + imgCfg.EditEndpoint
-		} else {
-			body = buildXAIGenBody(parts, model, o)
-			url = base + imgCfg.GenEndpoint
-		}
-		jsonBody, err := json.Marshal(body)
-		if err != nil {
-			return nil, fmt.Errorf("marshal image request: %w", err)
-		}
-		return doPost(ctx, client, url, jsonBody, headers)
+	var body map[string]any
+	switch variant.Shape {
+	case providers.MultipartForm:
+		files, fields := buildOpenAIEditMultipart(parts, model, o)
+		return doMultipartPostMulti(ctx, client, url, files, fields, headers)
+	case providers.JSONGenerationsOpenAI:
+		body = buildOpenAIGenBody(parts, model, o)
+	case providers.JSONInlineRefs:
+		body = buildXAIBody(parts, model, o)
+	case providers.JSONPredict:
+		body = buildVertexBody(parts, o)
+	case providers.JSONGenerations:
+		body = buildRecraftGenBody(parts, model, o)
+	case providers.InlineParts:
+		body = buildImageBody(parts, o)
+	default:
+		return nil, fmt.Errorf("image request shape %q has no body builder", variant.Shape)
 	}
-
-	if imgCfg.InputMode == providers.ImageInputJSONPredict {
-		body := buildVertexBody(parts, o)
-		jsonBody, err := json.Marshal(body)
-		if err != nil {
-			return nil, fmt.Errorf("marshal image request: %w", err)
-		}
-		endpoint := strings.ReplaceAll(cfg.Endpoint, "{model}", model)
-		return doPost(ctx, client, base+endpoint, jsonBody, headers)
-	}
-
-	if imgCfg.InputMode == providers.ImageInputJSONGenerations {
-		body := buildRecraftGenBody(parts, model, o)
-		jsonBody, err := json.Marshal(body)
-		if err != nil {
-			return nil, fmt.Errorf("marshal image request: %w", err)
-		}
-		return doPost(ctx, client, base+imgCfg.GenEndpoint, jsonBody, headers)
-	}
-
-	if imgCfg.InputMode == providers.ImageInputMultipartForm {
-		if hasImages {
-			files, fields := buildOpenAIEditMultipart(parts, model, o)
-			return doMultipartPostMulti(ctx, client, base+imgCfg.EditEndpoint, files, fields, headers)
-		}
-		body := buildOpenAIGenBody(parts, model, o)
-		jsonBody, err := json.Marshal(body)
-		if err != nil {
-			return nil, fmt.Errorf("marshal image request: %w", err)
-		}
-		return doPost(ctx, client, base+imgCfg.GenEndpoint, jsonBody, headers)
-	}
-
-	// Default: InlineParts (Google).
-	body := buildImageBody(parts, o)
 	jsonBody, err := json.Marshal(body)
 	if err != nil {
 		return nil, fmt.Errorf("marshal image request: %w", err)
 	}
-	return doPost(ctx, client, buildImageURL(p, cfg, model), jsonBody, headers)
+	return doPost(ctx, client, url, jsonBody, headers)
 }
 
 // buildOpenAIGenBody assembles the JSON body for /v1/images/generations.
@@ -606,35 +580,13 @@ func buildOpenAIEditMultipart(parts []Part, model string, o *imageOptions) ([]mu
 	return files, fields
 }
 
-// buildXAIGenBody assembles the JSON body for xAI Grok /v1/images/generations.
-// Image-size maps to `resolution` (xAI's name); aspect_ratio maps as-is.
-// response_format=b64_json is forced because xAI defaults to URL.
-func buildXAIGenBody(parts []Part, model string, o *imageOptions) map[string]any {
-	body := map[string]any{
-		"model":           model,
-		"prompt":          joinTextParts(parts),
-		"response_format": "b64_json",
-	}
-	if o.aspectRatio != "" {
-		body["aspect_ratio"] = o.aspectRatio
-	}
-	if o.imageSize != "" {
-		body["resolution"] = o.imageSize
-	}
-	if o.count != nil {
-		body["n"] = *o.count
-	}
-	for k, v := range o.extraFields {
-		body[k] = v
-	}
-	return body
-}
-
-// buildXAIEditBody assembles the JSON body for xAI Grok /v1/images/edits.
-// Single image part → `image: {url: "data:..."}`. Multiple image parts →
-// `images: [{url: "data:..."}, ...]` in caller order. Text parts join into
-// `prompt`. Same response_format / option mapping as the gen body.
-func buildXAIEditBody(parts []Part, model string, o *imageOptions) map[string]any {
+// buildXAIBody assembles the JSON body for xAI Grok's /v1/images/generations
+// (text only) and /v1/images/edits (with reference images). Text parts join
+// into `prompt`. Image-size maps to `resolution` (xAI's name); aspect_ratio
+// maps as-is. response_format=b64_json is forced because xAI defaults to URL.
+// One image part → `image: {url: "data:..."}`; several → `images: [{url:
+// "data:..."}, ...]` in caller order; none → no image field.
+func buildXAIBody(parts []Part, model string, o *imageOptions) map[string]any {
 	body := map[string]any{
 		"model":           model,
 		"prompt":          joinTextParts(parts),
@@ -664,8 +616,6 @@ func buildXAIEditBody(parts []Part, model string, o *imageOptions) map[string]an
 	}
 	switch len(refs) {
 	case 0:
-		// Caller passed no image parts but we landed on the edit path —
-		// shouldn't happen given dispatchImageHTTP's gate. Treat as gen.
 	case 1:
 		body["image"] = refs[0]
 	default:
@@ -680,29 +630,15 @@ func buildXAIEditBody(parts []Part, model string, o *imageOptions) map[string]an
 
 // buildVertexBody assembles the Vertex AI Imagen :predict request body.
 // Vertex uses an instances/parameters envelope: instance carries the
-// per-call inputs (prompt, image ref for editing, mask for inpainting);
-// parameters carries config (sampleCount, aspectRatio). Extra fields
-// like negativePrompt and safetySetting spread into parameters via
+// prompt; parameters carries config (sampleCount, aspectRatio). The Imagen
+// generate models take text only (BUG-101), so image parts never reach
+// here: the SupportsImageInput gate rejects them first. Extra fields like
+// negativePrompt and safetySetting spread into parameters via
 // imageOptions.extraFields so callers can reach Imagen-specific knobs
 // without typed chain methods.
 func buildVertexBody(parts []Part, o *imageOptions) map[string]any {
 	instance := map[string]any{
 		"prompt": joinTextParts(parts),
-	}
-	for _, part := range parts {
-		if part.Image != nil {
-			instance["image"] = map[string]any{
-				"bytesBase64Encoded": base64.StdEncoding.EncodeToString(part.Image.Bytes),
-			}
-			break // Vertex Imagen takes a single edit-target image
-		}
-	}
-	if o.mask != nil {
-		instance["mask"] = map[string]any{
-			"image": map[string]any{
-				"bytesBase64Encoded": base64.StdEncoding.EncodeToString(o.mask.Bytes),
-			},
-		}
 	}
 
 	parameters := map[string]any{}
@@ -825,8 +761,8 @@ func contains(haystack []string, needle string) bool {
 // generation. Walks the normalised []Part in order: text parts emit
 // {text}, image parts emit {inlineData}. Caller-controlled ordering is
 // preserved on the wire — required for compositional generation. Other
-// providers will diverge — when OpenAI lands (plan 016) this function
-// gets a dispatch on cfg.InputMode.
+// providers build their own bodies; dispatchImageHTTP selects this one for
+// the InlineParts request shape.
 func buildImageBody(parts []Part, o *imageOptions) map[string]any {
 	wire := make([]map[string]any, 0, len(parts))
 	for _, p := range parts {
