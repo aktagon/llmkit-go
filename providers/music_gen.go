@@ -22,6 +22,8 @@ type MusicModelDef struct {
 	// (queryable, never gated). SampleRateHz is 0 when unverified.
 	SampleRateHz           int
 	AvailableOutputFormats []string
+	// SupportsImageInput reports whether llmkit sends Image Parts for this model.
+	SupportsImageInput bool
 }
 
 // MusicGenDef holds one provider's music-generation configuration.
@@ -52,6 +54,7 @@ func MusicGenConfig(provider string) *MusicGenDef {
 					OutputMime:             "audio/mpeg",
 					SampleRateHz:           0,
 					AvailableOutputFormats: []string{"audio/mpeg"},
+					SupportsImageInput:     false,
 				},
 				{
 					ModelID:                "lyria-3-pro-preview",
@@ -61,6 +64,7 @@ func MusicGenConfig(provider string) *MusicGenDef {
 					OutputMime:             "audio/mpeg",
 					SampleRateHz:           0,
 					AvailableOutputFormats: []string{"audio/mpeg"},
+					SupportsImageInput:     false,
 				},
 			},
 		}
@@ -78,6 +82,7 @@ func MusicGenConfig(provider string) *MusicGenDef {
 					OutputMime:             "audio/mpeg",
 					SampleRateHz:           44100,
 					AvailableOutputFormats: []string{"audio/mpeg", "audio/wav"},
+					SupportsImageInput:     false,
 				},
 			},
 		}
@@ -95,6 +100,7 @@ func MusicGenConfig(provider string) *MusicGenDef {
 					OutputMime:             "audio/wav",
 					SampleRateHz:           48000,
 					AvailableOutputFormats: []string{"audio/wav"},
+					SupportsImageInput:     false,
 				},
 			},
 		}
