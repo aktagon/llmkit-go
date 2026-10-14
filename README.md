@@ -329,9 +329,8 @@ resp, err := c.Image.Model("imagen-3.0-generate-002").
     Generate(ctx, "A red circle")
 ```
 
-Edit-mode (single image into `instances[0].image`) and inpainting
-(`Mask(mime, bytes)` into `instances[0].mask.image`) work the same way.
-Imagen-specific knobs like `negativePrompt` and `safetySetting` are
+Imagen is text-to-image only: image parts and a mask are rejected before
+the request is sent. Imagen-specific knobs like `negativePrompt` and `safetySetting` are
 reachable through `ExtraFields(...)` — they spread into the request's
 `parameters` block. Vertex's `:predict` response does not carry token
 counts; `resp.Usage` stays zero.
