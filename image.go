@@ -5,7 +5,9 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -536,9 +538,12 @@ func buildOpenAIGenBody(parts []Part, model string, o *imageOptions) map[string]
 
 // buildOpenAIEditMultipart assembles the multipart form for /v1/images/edits.
 // Each image Part becomes one image[] file field in caller order; text
-// Parts are concatenated into the `prompt` form field. extraFields with
-// scalar values become string fields; non-scalars are JSON-encoded.
-func buildOpenAIEditMultipart(parts []Part, model string, o *imageOptions) ([]multipartFile, map[string]string) {
+// Parts are concatenated into the `prompt` form field. The text fields keep
+// a fixed order (model, prompt, the typed options, then extraFields sorted
+// by key), so the encoded body is the same on every call (BUG-097).
+// extraFields with scalar values become string fields; non-scalars are
+// JSON-encoded.
+func buildOpenAIEditMultipart(parts []Part, model string, o *imageOptions) ([]multipartFile, []multipartField) {
 	files := make([]multipartFile, 0)
 	idx := 0
 	for _, part := range parts {
@@ -569,32 +574,32 @@ func buildOpenAIEditMultipart(parts []Part, model string, o *imageOptions) ([]mu
 			bytes:     o.mask.Bytes,
 		})
 	}
-	fields := map[string]string{
-		"model":  model,
-		"prompt": joinTextParts(parts),
+	fields := []multipartField{
+		{"model", model},
+		{"prompt", joinTextParts(parts)},
 	}
 	if o.imageSize != "" {
-		fields["size"] = o.imageSize
+		fields = append(fields, multipartField{"size", o.imageSize})
 	}
 	if o.quality != "" {
-		fields["quality"] = o.quality
+		fields = append(fields, multipartField{"quality", o.quality})
 	}
 	if o.outputFormat != "" {
-		fields["output_format"] = o.outputFormat
+		fields = append(fields, multipartField{"output_format", o.outputFormat})
 	}
 	if o.background != "" {
-		fields["background"] = o.background
+		fields = append(fields, multipartField{"background", o.background})
 	}
 	if o.count != nil {
-		fields["n"] = fmt.Sprintf("%d", *o.count)
+		fields = append(fields, multipartField{"n", fmt.Sprintf("%d", *o.count)})
 	}
-	for k, v := range o.extraFields {
-		switch s := v.(type) {
+	for _, k := range slices.Sorted(maps.Keys(o.extraFields)) {
+		switch s := o.extraFields[k].(type) {
 		case string:
-			fields[k] = s
+			fields = append(fields, multipartField{k, s})
 		default:
-			if encoded, err := json.Marshal(v); err == nil {
-				fields[k] = string(encoded)
+			if encoded, err := json.Marshal(s); err == nil {
+				fields = append(fields, multipartField{k, string(encoded)})
 			}
 		}
 	}
