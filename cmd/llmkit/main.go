@@ -7,8 +7,8 @@ import (
 	"log"
 	"os"
 
-	"github.com/aktagon/llmkit-go/v2"
-	"github.com/aktagon/llmkit-go/v2/providers"
+	"github.com/aktagon/llmkit-go/v3"
+	"github.com/aktagon/llmkit-go/v3/providers"
 )
 
 func main() {

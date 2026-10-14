@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aktagon/llmkit-go/v2/providers"
+	"github.com/aktagon/llmkit-go/v3/providers"
 )
 
 // ImageRequest is the canonical image-generation request.
@@ -26,7 +26,7 @@ import (
 //     generation where caller-controlled ordering matters.
 //
 // Pre-flight validation requires exactly one of Prompt or Parts to be
-// non-empty (XOR). Image-typed parts respect ImageGenConfig.MaxInputCount.
+// non-empty (XOR). Image-typed parts respect the model's SupportsImageInput and MaxInputImages.
 type ImageRequest struct {
 	Model  string
 	Prompt string
@@ -249,10 +249,18 @@ func generateImage(ctx context.Context, p Provider, req ImageRequest, opts ...Im
 			imageCount++
 		}
 	}
-	if imageCount > imgCfg.MaxInputCount {
+	// BUG-096: both limits are llmkit wire facts per model. MaxInputImages 0
+	// means no llmkit limit; the provider decides volume.
+	if imageCount > 0 && !model.SupportsImageInput {
 		return ImageResponse{}, &ValidationError{
 			Field:   "parts",
-			Message: fmt.Sprintf("%d image parts exceeds maximum %d for %s", imageCount, imgCfg.MaxInputCount, p.Name),
+			Message: req.Model + " takes no image parts",
+		}
+	}
+	if model.MaxInputImages > 0 && imageCount > model.MaxInputImages {
+		return ImageResponse{}, &ValidationError{
+			Field:   "parts",
+			Message: fmt.Sprintf("%d image parts exceeds maximum %d for %s", imageCount, model.MaxInputImages, req.Model),
 		}
 	}
 
@@ -332,7 +340,7 @@ func generateImage(ctx context.Context, p Provider, req ImageRequest, opts ...Im
 		// count (-> `n`); aspect_ratio is not a Recraft wire field (it sizes
 		// by an explicit WxH `size`), and the gpt-image / safety knobs are
 		// OpenAI / Google / Vertex only. Image parts are rejected upstream by
-		// the MaxInputCount==0 gate (text-to-image only). Style and other
+		// the SupportsImageInput gate (text-to-image only). Style and other
 		// provider-specific knobs ride ExtraFields.
 		if o.aspectRatio != "" {
 			return ImageResponse{}, &ValidationError{Field: "aspect_ratio", Message: "not supported by " + p.Name + "; use ImageSize (Recraft sizes by WxH)"}
@@ -410,7 +418,7 @@ func generateImage(ctx context.Context, p Provider, req ImageRequest, opts ...Im
 //     imgCfg.GenEndpoint; same body shape minus image refs.
 //   - JSONGenerations (Recraft): flat JSON POST to imgCfg.GenEndpoint;
 //     {model, prompt, response_format:"b64_json", size, n}. Text-to-image
-//     only (image parts are rejected upstream by MaxInputCount==0).
+//     only (image parts are rejected upstream by the SupportsImageInput gate).
 func dispatchImageHTTP(
 	ctx context.Context,
 	client *http.Client,
