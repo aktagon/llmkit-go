@@ -8,7 +8,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/aktagon/llmkit-go/v2/providers"
+	"github.com/aktagon/llmkit-go/v3/providers"
 )
 
 // Prompt executes the chained ChatCompletion request against the

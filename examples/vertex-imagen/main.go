@@ -18,7 +18,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/aktagon/llmkit-go/v2"
+	"github.com/aktagon/llmkit-go/v3"
 )
 
 const imagenModel = "imagen-3.0-generate-002"

@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aktagon/llmkit-go/v2/providers"
+	"github.com/aktagon/llmkit-go/v3/providers"
 )
 
 // BatchHandle is defined in builders.go (typed-builder API surface);

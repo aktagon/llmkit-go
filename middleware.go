@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/aktagon/llmkit-go/v2/providers"
+	"github.com/aktagon/llmkit-go/v3/providers"
 )
 
 // MiddlewareVetoError wraps a pre-phase veto. Callers can errors.As against

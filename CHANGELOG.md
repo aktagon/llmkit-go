@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **BREAKING — image input limits are per model, and the provider-level count is gone.**
+  `ImageGenDef.MaxInputCount` is removed. It mixed two kinds of number: wire limits, and
+  provider maxima (Google 14, OpenAI and Grok 16) that no source confirmed.
+  When a provider raised its limit, image generation rejected calls the
+  provider would accept. Each image model now carries `ImageModelDef.SupportsImageInput`,
+  added as the last field. Image generation rejects image parts when it is
+  false (OpenRouter and Recraft models), and rejects more than
+  `ImageModelDef.MaxInputImages` when that is not 0 (Vertex Imagen: 1). Every
+  other model sends all image parts and lets the provider decide.
+  Migration: read `ImageModelDef.SupportsImageInput` and `ImageModelDef.MaxInputImages`
+  on the model instead of the provider-level count.
+
+- **BREAKING — the module path is now `github.com/aktagon/llmkit-go/v3`.**
+  Go releases a major version under a new import path. Update `go.mod` and
+  every import from `github.com/aktagon/llmkit-go/v2` to
+  `github.com/aktagon/llmkit-go/v3`, then run `go mod tidy`.
+
 - **Text parts join with a newline.** The text builder joins parts added with
   `Text(...)` and the prompt with a newline. It used to join them with a space,
   so the request no longer depends on which SDK sent it.
@@ -65,7 +82,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Breaking
 
-- Module import path is now `github.com/aktagon/llmkit-go/v2` (Go semantic import versioning for v2+). Update every import — `import llmkit "github.com/aktagon/llmkit-go/v2"`, `github.com/aktagon/llmkit-go/v2/providers`, `go get github.com/aktagon/llmkit-go/v2` — and the CLI install `go install github.com/aktagon/llmkit-go/v2/cmd/llmkit@latest`. No source changes beyond the path.
+- Module import path is now `github.com/aktagon/llmkit-go/v3` (Go semantic import versioning for v2+). Update every import — `import llmkit "github.com/aktagon/llmkit-go/v3"`, `github.com/aktagon/llmkit-go/v3/providers`, `go get github.com/aktagon/llmkit-go/v3` — and the CLI install `go install github.com/aktagon/llmkit-go/v3/cmd/llmkit@latest`. No source changes beyond the path.
 - Clean async-job API. Batch is now a single async terminal on the `Text` builder — `c.Text.<chain>.Batch(ctx, "q3", "q4")` returns a `BatchHandle` (batch is a text execution mode, parallel to `Stream`), and `handle.Wait(ctx)` blocks for the ordered results. The old two-terminal surface is collapsed: the blocking `c.Text.Batch(...)` (which returned `[]Response`) and `c.Text.SubmitBatch(...)` are both gone — `Batch` now returns the handle, and the blocking one-liner is the compose `h, _ := c.Text.<chain>.Batch(ctx, ...); h.Wait(ctx)` (no `run()` sugar). `BatchHandle.Wait`/`Poll` are unchanged. Migration: `c.Text.<chain>.SubmitBatch(ctx, ...)` → `c.Text.<chain>.Batch(ctx, ...)`; the old blocking `c.Text.<chain>.Batch(ctx, ...)` → `h := c.Text.<chain>.Batch(ctx, ...); h.Wait(ctx)`.
 
 ### Added

@@ -9,7 +9,7 @@ package llmkit
 import (
 	"context"
 
-	"github.com/aktagon/llmkit-go/v2/providers"
+	"github.com/aktagon/llmkit-go/v3/providers"
 )
 
 // Models is the catalogue builder. Chain methods are immutable;

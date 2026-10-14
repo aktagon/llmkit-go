@@ -7,7 +7,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/aktagon/llmkit-go/v2/providers"
+	"github.com/aktagon/llmkit-go/v3/providers"
 )
 
 // legacyAgent manages multi-turn conversations with optional tool calling.
