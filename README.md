@@ -55,13 +55,13 @@ are guaranteed to match the public surface.
 | fireworks  | accounts/fireworks/models/gpt-oss-120b  | FIREWORKS_API_KEY  | chat          |
 | google     | gemini-2.5-flash                        | GOOGLE_API_KEY     | chat          |
 | grok       | grok-3-fast                             | XAI_API_KEY        | chat          |
-| groq       | llama-3.3-70b-versatile                 | GROQ_API_KEY       | chat          |
+| groq       | openai/gpt-oss-120b                     | GROQ_API_KEY       | chat          |
 | jan        | none - set with .Model()                | JAN_API_KEY        | chat          |
 | llamacpp   | none - set with .Model()                | LLAMACPP_API_KEY   | chat          |
 | lmstudio   | none - set with .Model()                | LM_STUDIO_API_KEY  | chat          |
 | minimax    | MiniMax-Text-01                         | MINIMAX_API_KEY    | chat          |
 | mistral    | mistral-large-latest                    | MISTRAL_API_KEY    | chat          |
-| moonshot   | moonshot-v1-8k                          | MOONSHOT_API_KEY   | chat          |
+| moonshot   | kimi-k2.6                               | MOONSHOT_API_KEY   | chat          |
 | ollama     | none - set with .Model()                | OLLAMA_API_KEY     | chat          |
 | openai     | gpt-4o-2024-08-06                       | OPENAI_API_KEY     | chat          |
 | openrouter | openai/gpt-4o                           | OPENROUTER_API_KEY | chat          |
