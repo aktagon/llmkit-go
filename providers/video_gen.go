@@ -261,6 +261,15 @@ func VideoGenConfig(provider string) *VideoGenDef {
 			RequiresOutputURI: false,
 			Models: []VideoModelDef{
 				{
+					ModelID:              "veo-3.1-generate-001",
+					Label:                "Veo 3.1",
+					SupportsImageToVideo: false,
+					MaxDurationSeconds:   8,
+					OutputMime:           "video/mp4",
+					Resolutions:          []string{"1080p", "4k", "720p"},
+					MaxInputImages:       0,
+				},
+				{
 					ModelID:              "veo-3.1-generate-preview",
 					Label:                "Veo 3.1",
 					SupportsImageToVideo: false,
