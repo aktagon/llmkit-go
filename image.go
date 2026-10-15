@@ -160,9 +160,11 @@ func WithImageMask(mime string, data []byte) ImageOption {
 	}
 }
 
-// WithImageSafetyFilter sets the global safety threshold for Vertex Imagen.
-// Wire field: parameters.safetySetting. Use ImageSafetyFilter* constants or
-// a raw string. ValidationError on all other image-gen providers.
+// WithImageSafetyFilter sets a global image safety threshold. Every image
+// provider returns ValidationError for it.
+//
+// Deprecated: no provider accepts this since 2026-10-15 (Vertex Imagen shut
+// down, BUG-101); removed at the next major.
 func WithImageSafetyFilter(threshold string) ImageOption {
 	return func(o *imageOptions) { o.safetyFilter = threshold }
 }
@@ -263,8 +265,8 @@ func generateImage(ctx context.Context, p Provider, req ImageRequest, opts ...Im
 	}
 
 	// Per-request-shape knob validation. Quality, OutputFormat, Background
-	// are OpenAI-only on the wire; Count (n) is OpenAI + xAI + Recraft +
-	// Vertex; Mask rides only the OpenAI multipart edits body. Catch
+	// are OpenAI-only on the wire; Count (n) is OpenAI + xAI + Recraft;
+	// Mask rides only the OpenAI multipart edits body. Catch
 	// mismatches here so the runtime returns a clean ValidationError
 	// instead of shipping the field and waiting for the provider to
 	// reject (or silently ignore) it. Mirrors llmkit.go sampling-knob
@@ -316,25 +318,11 @@ func generateImage(ctx context.Context, p Provider, req ImageRequest, opts ...Im
 		if len(o.safetySettings) > 0 {
 			return ImageResponse{}, &ValidationError{Field: "safety_settings", Message: "not supported by " + p.Name}
 		}
-	case providers.JSONPredict: // Vertex Imagen
-		if o.quality != "" {
-			return ImageResponse{}, &ValidationError{Field: "quality", Message: "not supported by " + p.Name}
-		}
-		if o.outputFormat != "" {
-			return ImageResponse{}, &ValidationError{Field: "output_format", Message: "not supported by " + p.Name}
-		}
-		if o.background != "" {
-			return ImageResponse{}, &ValidationError{Field: "background", Message: "not supported by " + p.Name}
-		}
-		if len(o.safetySettings) > 0 {
-			return ImageResponse{}, &ValidationError{Field: "safety_settings", Message: "not supported by " + p.Name + "; use SafetyFilter for Vertex Imagen"}
-		}
-		// safetyFilter is valid for Vertex Imagen; wired in buildVertexBody
 	case providers.JSONGenerations: // Recraft, OpenRouter
 		// Recraft's flat generations body carries only size (-> `size`) and
 		// count (-> `n`); aspect_ratio is not a Recraft wire field (it sizes
 		// by an explicit WxH `size`), and the gpt-image / safety knobs are
-		// OpenAI / Google / Vertex only. Image parts are rejected upstream by
+		// OpenAI / Google only. Image parts are rejected upstream by
 		// the SupportsImageInput gate (text-to-image only). Style and other
 		// provider-specific knobs ride ExtraFields.
 		if o.aspectRatio != "" {
@@ -425,7 +413,6 @@ func validateImageArity(model *providers.ImageModelDef, imageCount int) error {
 //   - JSONInlineRefs (xAI Grok): JSON body; refs, when present, encoded as
 //     data URLs in `image:` (single) or `images: [...]` (multi);
 //     response_format=b64_json forced.
-//   - JSONPredict (Vertex Imagen, text only): instances/parameters body.
 //   - JSONGenerations (Recraft, OpenRouter, text only): flat JSON
 //     {model, prompt, response_format:"b64_json", size, n}.
 //
@@ -460,8 +447,6 @@ func dispatchImageHTTP(
 		body = buildOpenAIGenBody(parts, model, o)
 	case providers.JSONInlineRefs:
 		body = buildXAIBody(parts, model, o)
-	case providers.JSONPredict:
-		body = buildVertexBody(parts, o)
 	case providers.JSONGenerations:
 		body = buildRecraftGenBody(parts, model, o)
 	case providers.InlineParts:
@@ -626,41 +611,6 @@ func buildXAIBody(parts []Part, model string, o *imageOptions) map[string]any {
 		body[k] = v
 	}
 	return body
-}
-
-// buildVertexBody assembles the Vertex AI Imagen :predict request body.
-// Vertex uses an instances/parameters envelope: instance carries the
-// prompt; parameters carries config (sampleCount, aspectRatio). The Imagen
-// generate models take text only (BUG-101), so image parts never reach
-// here: the SupportsImageInput gate rejects them first. Extra fields like
-// negativePrompt and safetySetting spread into parameters via
-// imageOptions.extraFields so callers can reach Imagen-specific knobs
-// without typed chain methods.
-func buildVertexBody(parts []Part, o *imageOptions) map[string]any {
-	instance := map[string]any{
-		"prompt": joinTextParts(parts),
-	}
-
-	parameters := map[string]any{}
-	if o.count != nil {
-		parameters["sampleCount"] = *o.count
-	} else {
-		parameters["sampleCount"] = 1
-	}
-	if o.aspectRatio != "" {
-		parameters["aspectRatio"] = o.aspectRatio
-	}
-	if o.safetyFilter != "" {
-		parameters["safetySetting"] = o.safetyFilter
-	}
-	for k, v := range o.extraFields {
-		parameters[k] = v
-	}
-
-	return map[string]any{
-		"instances":  []map[string]any{instance},
-		"parameters": parameters,
-	}
 }
 
 // buildRecraftGenBody assembles the JSON body for Recraft's text-to-image
@@ -858,8 +808,6 @@ func parseImageResponse(imgCfg *providers.ImageGenDef, provider string, body []b
 		// OpenAI/xAI/Recraft data[].b64_json shape. SVG bytes (Recraft vector
 		// models) are sniffed to image/svg+xml inside parseImageResponseDataArray.
 		return parseImageResponseDataArray(raw, imgCfg.UsageInputPath, imgCfg.UsageOutputPath, imgCfg.UsageReasoningPath), nil
-	case "VertexPredictions":
-		return parseVertexImageResponse(raw), nil
 	}
 
 	// GoogleParts: candidates[].content.parts inline data.
@@ -929,41 +877,6 @@ func parseImageResponseDataArray(raw map[string]any, inputPath, outputPath, reas
 		Text:   strings.Join(revised, "\n"),
 		Usage:  tokens,
 	}
-}
-
-// parseVertexImageResponse decodes Vertex AI Imagen :predict responses.
-// Shape: {"predictions": [{"bytesBase64Encoded": "...", "mimeType": "..."}]}.
-// Vertex does not return token counts in the predict response, so Usage
-// stays zero.
-func parseVertexImageResponse(raw map[string]any) ImageResponse {
-	preds, _ := raw["predictions"].([]any)
-	var images []ImageData
-	var finishReason string
-	for _, item := range preds {
-		entry, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-		if finishReason == "" {
-			if rai, ok := entry["raiFilteredReason"].(string); ok && rai != "" {
-				finishReason = rai
-			}
-		}
-		b64, _ := entry["bytesBase64Encoded"].(string)
-		if b64 == "" {
-			continue
-		}
-		mime, _ := entry["mimeType"].(string)
-		if mime == "" {
-			mime = "image/png"
-		}
-		decoded, err := base64.StdEncoding.DecodeString(b64)
-		if err != nil {
-			continue
-		}
-		images = append(images, ImageData{MimeType: mime, Bytes: decoded})
-	}
-	return ImageResponse{Images: images, FinishReason: optString(finishReason)}
 }
 
 // extractGoogleImageParts walks candidates[0].content.parts, returning every

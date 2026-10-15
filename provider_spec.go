@@ -1317,7 +1317,7 @@ var providerSpecRegistry = map[string]providerSpec{
 		Name:                "vertex",
 		BaseURL:             "https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/models",
 		Endpoint:            "/{model}:predict",
-		DefaultModel:        "imagen-3.0-generate-002",
+		DefaultModel:        "lyria-002",
 		EnvVar:              "VERTEX_BEARER_TOKEN",
 		DefaultMaxTokens:    0,
 		ResponseTextPath:    "",
