@@ -43,7 +43,8 @@ func (c *Client) Supports(cap Capability) bool {
 
 // promptStream is the internal streaming implementation. The
 // public surface is (*Text).Stream in stream.go (plan-018 D1.3b).
-func promptStream(ctx context.Context, p Provider, req Request, callback StreamCallback, opts ...Option) (Response, error) {
+// protocol is the Text.Protocol token (ADR-055); "" keeps the default.
+func promptStream(ctx context.Context, p Provider, req Request, protocol string, callback StreamCallback, opts ...Option) (Response, error) {
 	o := resolveOptions(opts)
 	o.httpClient = withRequestTimeout(o.httpClient, p.Timeout)
 
@@ -67,7 +68,14 @@ func promptStream(ctx context.Context, p Provider, req Request, callback StreamC
 		return Response{}, &ValidationError{Field: "provider", Message: "unknown: " + p.Name}
 	}
 
-	streamCfg := providers.StreamConfig(p.Name)
+	// ADR-055: a non-default protocol (Responses) overrides the endpoint and
+	// wire shape, and the wire shape selects the stream facts (HANDOFF-087).
+	cfg, err = resolveChatProtocol(cfg, protocol)
+	if err != nil {
+		return Response{}, err
+	}
+
+	streamCfg, finishReasonPath := streamSettings(p.Name, cfg)
 	if streamCfg == nil {
 		return Response{}, &ValidationError{Field: "provider", Message: "streaming not supported: " + p.Name}
 	}
@@ -129,7 +137,7 @@ func promptStream(ctx context.Context, p Provider, req Request, callback StreamC
 		callback(chunk)
 	}
 
-	usage, finishReason, err := doStreamPost(ctx, o.httpClient, url, jsonBody, headers, streamCfg, cfg.StreamFinishReasonPath, wrappedCallback)
+	usage, finishReason, err := doStreamPost(ctx, o.httpClient, url, jsonBody, headers, streamCfg, finishReasonPath, wrappedCallback)
 	postEv := baseEvent
 	postEv.Usage = usage
 	postEv.Err = err
@@ -144,6 +152,17 @@ func promptStream(ctx context.Context, p Provider, req Request, callback StreamC
 		Usage:        usage,
 		FinishReason: finishReason,
 	}, nil
+}
+
+// streamSettings selects the stream facts and the stream finish locator for
+// the call's effective wire shape. A shape that declares its own (OpenAI
+// Responses: event-typed SSE) outranks the provider's, which describe the
+// provider's default protocol (HANDOFF-087).
+func streamSettings(provider string, cfg providerSpec) (*providers.StreamDef, string) {
+	if sd := providers.WireShapeStreamConfig(cfg.ChatWireShape); sd != nil {
+		return sd, providers.WireShapeStreamFinishReasonPath(cfg.ChatWireShape)
+	}
+	return providers.StreamConfig(provider), cfg.StreamFinishReasonPath
 }
 
 // buildStreamURL constructs the streaming endpoint URL.
@@ -411,12 +430,11 @@ func protocolWireShape(token string) string {
 	return ""
 }
 
-// rejectNonDefaultProtocol enforces that Protocol (e.g. Responses) is opt-in
-// only on the sync prompt terminal (ADR-055 slice 1). The batch and stream
-// terminals raise a loud ValidationError rather than silently sending the
-// default Chat Completions request — a silent drop of an explicit opt-in is a
-// footgun, and the four SDKs stay uniform (streaming/batch Responses is a
-// documented follow-up slice).
+// rejectNonDefaultProtocol enforces that Protocol (e.g. Responses) is not
+// accepted by the batch terminal (ADR-055 slice 1). Batch raises a loud
+// ValidationError rather than silently sending the default Chat Completions
+// request — a silent drop of an explicit opt-in is a footgun. The stream
+// terminal accepts it (HANDOFF-087).
 func rejectNonDefaultProtocol(protocol, terminal string) error {
 	if protocol == "" {
 		return nil
