@@ -420,7 +420,8 @@ func parseVertexMusicResponse(raw map[string]any, fallbackMime string) MusicResp
 }
 
 // parseGeminiMusicResponse walks candidates[0].content.parts, decoding each
-// inlineData audio part and concatenating text parts (generated lyrics).
+// inlineData audio part and concatenating text parts (generated lyrics). A
+// filtered call has no content; candidates[0].finishMessage explains why.
 func parseGeminiMusicResponse(raw map[string]any, fallbackMime string) MusicResponse {
 	candidates, _ := raw["candidates"].([]any)
 	if len(candidates) == 0 {
@@ -452,7 +453,13 @@ func parseGeminiMusicResponse(raw map[string]any, fallbackMime string) MusicResp
 		}
 	}
 	finishReason, _ := first["finishReason"].(string)
-	return MusicResponse{Audio: audio, Text: strings.Join(textParts, ""), FinishReason: optString(finishReason)}
+	finishMessage, _ := first["finishMessage"].(string)
+	return MusicResponse{
+		Audio:         audio,
+		Text:          strings.Join(textParts, ""),
+		FinishReason:  optString(finishReason),
+		FinishMessage: optString(finishMessage),
+	}
 }
 
 // parseMinimaxMusicResponse decodes MiniMax /v1/music_generation responses.
