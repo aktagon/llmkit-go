@@ -303,6 +303,12 @@ func (b *Image) Model(name string) *Image     { out := *b; out.model = name; ret
 func (b *Image) OutputFormat(s string) *Image { out := *b; out.outputFormat = s; return &out }
 func (b *Image) Quality(s string) *Image      { out := *b; out.quality = s; return &out }
 func (b *Image) Raw() *Image                  { out := *b; out.raw = true; return &out }
+
+// SafetyFilter sets a single image safety threshold. Every image provider rejects it
+// with a validation error.
+//
+// Deprecated: no provider accepts this since 2026-10-15 (Vertex Imagen
+// shut down, BUG-101); removed at the next major.
 func (b *Image) SafetyFilter(s string) *Image { out := *b; out.safetyFilter = s; return &out }
 func (b *Image) SafetySettings(s []SafetySetting) *Image {
 	out := *b

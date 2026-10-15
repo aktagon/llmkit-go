@@ -107,7 +107,10 @@ const (
 	HarmBlockThresholdHighOnly       = "BLOCK_ONLY_HIGH"
 )
 
-// Vertex Imagen safety filter threshold constants for SafetyFilter.
+// Image safety filter threshold constants for SafetyFilter.
+//
+// Deprecated: no provider accepts these since 2026-10-15 (Vertex Imagen shut
+// down, BUG-101); removed at the next major.
 const (
 	ImageSafetyFilterBlockFew      = "block_few"
 	ImageSafetyFilterBlockSome     = "block_some"
