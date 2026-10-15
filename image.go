@@ -259,7 +259,7 @@ func generateImage(ctx context.Context, p Provider, req ImageRequest, opts ...Im
 
 	// ADR-096: the request's parts pick the wire request; a config with no
 	// variant for those inputs cannot send it.
-	variant, err := selectRequestVariant(p.Name, imgCfg.Variants, imageCount, providers.WithReferenceImages)
+	variant, err := selectRequestVariant(p.Name, imgCfg.Variants, partsCarry(imageCount, providers.WithReferenceImages))
 	if err != nil {
 		return ImageResponse{}, err
 	}

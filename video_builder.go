@@ -16,9 +16,11 @@ func (b *Video) Submit(ctx context.Context, finalText string) (VideoHandle, erro
 	}
 
 	req := VideoRequest{
-		Model:     b.model,
-		Parts:     parts,
-		OutputURI: b.outputURI,
+		Model:           b.model,
+		Parts:           parts,
+		OutputURI:       b.outputURI,
+		LastFrame:       b.lastFrame,
+		ReferenceImages: b.referenceImages,
 	}
 
 	var opts []VideoOption

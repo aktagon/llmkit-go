@@ -425,12 +425,14 @@ func (b *Transcription) Model(name string) *Transcription { out := *b; out.model
 // call. Chain methods return new instances (immutable); skipped
 // terminals live in hand-written text.go / image.go.
 type Video struct {
-	client     *Client
-	middleware []MiddlewareFn
-	parts      []Part
-	model      string
-	outputURI  string
-	raw        bool
+	client          *Client
+	middleware      []MiddlewareFn
+	referenceImages []MediaRef
+	parts           []Part
+	lastFrame       *MediaRef
+	model           string
+	outputURI       string
+	raw             bool
 }
 
 func (b *Video) AddMiddleware(fns ...MiddlewareFn) *Video {
@@ -438,11 +440,26 @@ func (b *Video) AddMiddleware(fns ...MiddlewareFn) *Video {
 	out.middleware = append(append([]MiddlewareFn{}, b.middleware...), fns...)
 	return &out
 }
+
+// AddReferenceImage appends an asset reference image, such as a person, character or
+// product the video keeps. Add at most 3, without Image or LastFrame.
+func (b *Video) AddReferenceImage(mime string, data []byte) *Video {
+	out := *b
+	out.referenceImages = append(append([]MediaRef{}, b.referenceImages...), MediaRef{MimeType: mime, Bytes: data})
+	return &out
+} // ordered
 func (b *Video) Image(mime string, data []byte) *Video {
 	out := *b
 	out.parts = append(append([]Part{}, b.parts...), Part{Image: &MediaRef{MimeType: mime, Bytes: data}})
 	return &out
-}                                            // ordered
+} // ordered
+// LastFrame sets the final frame a video ends on. Send it with a first frame (Image)
+// on a model that takes a last frame; otherwise it is rejected before send.
+func (b *Video) LastFrame(mime string, data []byte) *Video {
+	out := *b
+	out.lastFrame = &MediaRef{MimeType: mime, Bytes: append([]byte(nil), data...)}
+	return &out
+}
 func (b *Video) Model(name string) *Video    { out := *b; out.model = name; return &out }
 func (b *Video) OutputURI(uri string) *Video { out := *b; out.outputURI = uri; return &out }
 func (b *Video) Raw() *Video                 { out := *b; out.raw = true; return &out }

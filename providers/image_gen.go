@@ -7,6 +7,7 @@ const (
 	TextOnly            = "TextOnly"
 	WithReferenceImages = "WithReferenceImages"
 	WithSeedFrame       = "WithSeedFrame"
+	WithLastFrame       = "WithLastFrame"
 )
 
 // Image request-shape discriminators: each names one request body (ADR-096).
@@ -31,7 +32,9 @@ const (
 // RequestVariant is one wire request of an image or video config, keyed by
 // the inputs it carries (ADR-096).
 type RequestVariant struct {
-	Carries  string // TextOnly | WithReferenceImages | WithSeedFrame
+	// Carries lists the carried inputs (TextOnly | WithReferenceImages |
+	// WithSeedFrame | WithLastFrame); a first-and-last-frame variant carries two.
+	Carries  []string
 	Shape    string // image request shape (InlineParts, ...); "" on a video variant
 	Endpoint string // path; "" = use provider main endpoint
 }
@@ -77,8 +80,8 @@ func ImageGenConfig(provider string) *ImageGenDef {
 			UsageOutputPath:    "usageMetadata.candidatesTokenCount",
 			UsageReasoningPath: "usageMetadata.thoughtsTokenCount",
 			Variants: []RequestVariant{
-				{Carries: "TextOnly", Shape: "InlineParts", Endpoint: ""},
-				{Carries: "WithReferenceImages", Shape: "InlineParts", Endpoint: ""},
+				{Carries: []string{"TextOnly"}, Shape: "InlineParts", Endpoint: ""},
+				{Carries: []string{"WithReferenceImages"}, Shape: "InlineParts", Endpoint: ""},
 			},
 			Models: []ImageModelDef{
 				{
@@ -107,8 +110,8 @@ func ImageGenConfig(provider string) *ImageGenDef {
 			UsageOutputPath:    "",
 			UsageReasoningPath: "",
 			Variants: []RequestVariant{
-				{Carries: "TextOnly", Shape: "JSONInlineRefs", Endpoint: "/v1/images/generations"},
-				{Carries: "WithReferenceImages", Shape: "JSONInlineRefs", Endpoint: "/v1/images/edits"},
+				{Carries: []string{"TextOnly"}, Shape: "JSONInlineRefs", Endpoint: "/v1/images/generations"},
+				{Carries: []string{"WithReferenceImages"}, Shape: "JSONInlineRefs", Endpoint: "/v1/images/edits"},
 			},
 			Models: []ImageModelDef{
 				{
@@ -129,8 +132,8 @@ func ImageGenConfig(provider string) *ImageGenDef {
 			UsageOutputPath:    "usage.output_tokens",
 			UsageReasoningPath: "",
 			Variants: []RequestVariant{
-				{Carries: "TextOnly", Shape: "JSONGenerationsOpenAI", Endpoint: "/v1/images/generations"},
-				{Carries: "WithReferenceImages", Shape: "MultipartForm", Endpoint: "/v1/images/edits"},
+				{Carries: []string{"TextOnly"}, Shape: "JSONGenerationsOpenAI", Endpoint: "/v1/images/generations"},
+				{Carries: []string{"WithReferenceImages"}, Shape: "MultipartForm", Endpoint: "/v1/images/edits"},
 			},
 			Models: []ImageModelDef{
 				{
@@ -175,7 +178,7 @@ func ImageGenConfig(provider string) *ImageGenDef {
 			UsageOutputPath:    "usage.completion_tokens",
 			UsageReasoningPath: "",
 			Variants: []RequestVariant{
-				{Carries: "TextOnly", Shape: "JSONGenerations", Endpoint: "/v1/images"},
+				{Carries: []string{"TextOnly"}, Shape: "JSONGenerations", Endpoint: "/v1/images"},
 			},
 			Models: []ImageModelDef{
 				{
@@ -244,7 +247,7 @@ func ImageGenConfig(provider string) *ImageGenDef {
 			UsageOutputPath:    "",
 			UsageReasoningPath: "",
 			Variants: []RequestVariant{
-				{Carries: "TextOnly", Shape: "JSONGenerations", Endpoint: "/v1/images/generations"},
+				{Carries: []string{"TextOnly"}, Shape: "JSONGenerations", Endpoint: "/v1/images/generations"},
 			},
 			Models: []ImageModelDef{
 				{
