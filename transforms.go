@@ -851,6 +851,7 @@ func transformBedrockConverse(body map[string]any, msgs []msg, req Request, cfg 
 	if len(msgs) > 0 {
 		callT := selectToolCallTransform(cfg)
 		resultT := selectToolResultTransform(cfg)
+		prevResult := false
 		for _, m := range msgs {
 			// Bedrock never replays: ChatBedrock declares
 			// assistantTurnUnanchored rather than a position (ADR-085
@@ -863,9 +864,20 @@ func transformBedrockConverse(body map[string]any, msgs []msg, req Request, cfg 
 			if turn, ok := m.(msgTurn); ok {
 				m = turn.fallback
 			}
+			_, isResult := m.(msgResult)
 			switch m := m.(type) {
 			case msgResult:
-				out = append(out, resultT(m.result, cfg.RoleMappings))
+				// Converse wants every toolResult answering one assistant
+				// turn inside ONE user message; one message per result is a
+				// 400 (live, 2026-10-15). A result that follows a result
+				// joins the message the first one opened.
+				entry := resultT(m.result, cfg.RoleMappings)
+				if prevResult {
+					last := out[len(out)-1]
+					last["content"] = append(last["content"].([]map[string]any), entry["content"].([]map[string]any)...)
+				} else {
+					out = append(out, entry)
+				}
 			case msgCalls:
 				out = append(out, callT(m.calls, cfg.RoleMappings)...)
 			case msgText:
@@ -876,6 +888,7 @@ func transformBedrockConverse(body map[string]any, msgs []msg, req Request, cfg 
 			default:
 				panic(fmt.Sprintf("unhandled msg variant %T", m))
 			}
+			prevResult = isResult
 		}
 	} else if req.User != "" {
 		var content []map[string]any
