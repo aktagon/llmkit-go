@@ -130,7 +130,7 @@ func (c *Client) AddHeader(name, value string) *Client {
 
 // BaseURL overrides the provider's default endpoint root for this
 // client. Required for providers whose default base URL is a
-// template the caller must substitute (e.g. Vertex AI Imagen) and
+// template the caller must substitute (e.g. Vertex AI) and
 // to point an OpenAI-compatible provider or gateway at a self-hosted
 // endpoint. Returns the same *Client for chaining.
 func (c *Client) BaseURL(url string) *Client {
