@@ -15,14 +15,35 @@ import (
 // SpeechRequest is the canonical text-to-speech request (ADR-049).
 //
 // Model is required: speech-generation models are explicit choices and the
-// text-generation default does not synthesize audio. Voice is required and is
-// validated pre-flight against the provider's voice catalogue (SPK-004). Text
-// is the single utterance to speak — single-turn, no Message/Role wrapper
-// (SPK-003).
+// text-generation default does not synthesize audio. Voice is a free-form
+// voice id, required unless Speakers are set; llmkit keeps no voice catalogue
+// and an unknown voice fails at the provider. Text is the single utterance to
+// speak — single-turn, no Message/Role wrapper (SPK-003) — and must be empty
+// when Lines are set. Style is an optional delivery style (BUG-091). Speakers
+// and Lines make a multi-speaker request.
 type SpeechRequest struct {
-	Model string
+	Model    string
+	Voice    string
+	Style    string
+	Speakers []SpeechSpeaker
+	Lines    []SpeechLine
+	Text     string
+}
+
+// SpeechSpeaker is one named speaker of a multi-speaker request and the
+// voice it speaks in (BUG-091). Set with (*Speech).AddSpeaker.
+type SpeechSpeaker struct {
+	Name  string
 	Voice string
-	Text  string
+}
+
+// SpeechLine is one line of a multi-speaker request: the declared speaker who
+// says it, an optional delivery style, and the text (BUG-091). Set with
+// (*Speech).AddLine and (*Speech).AddStyledLine.
+type SpeechLine struct {
+	Speaker string
+	Style   string
+	Text    string
 }
 
 // AudioData and SpeechResponse are declared in go/structs.go (ADR-018).
@@ -49,8 +70,8 @@ func resolveSpeechOptions(opts []SpeechOption) *speechOptions {
 }
 
 // generateSpeech synthesizes speech audio from text. Pre-flight validation
-// rejects an unknown model and a voice outside the provider's catalogue before
-// any HTTP call (the music model-validation discipline). The audio is returned
+// rejects an unknown model, and speakers, lines or a style the model does not
+// take, before any HTTP call (the music model-validation discipline). The audio is returned
 // as a single decoded AudioData (one synthesis, one clip — ADR-049 OQ-4).
 //
 // Internal helper — the public surface is (*Speech).Generate in speech_builder.go.
@@ -63,11 +84,8 @@ func generateSpeech(ctx context.Context, p Provider, req SpeechRequest, opts ...
 	if req.Model == "" {
 		return SpeechResponse{}, &ValidationError{Field: "model", Message: "required for speech generation"}
 	}
-	if req.Text == "" {
-		return SpeechResponse{}, &ValidationError{Field: "text", Message: "required for speech generation"}
-	}
-	if req.Voice == "" {
-		return SpeechResponse{}, &ValidationError{Field: "voice", Message: "required for speech generation"}
+	if err := validateSpeechInputs(req); err != nil {
+		return SpeechResponse{}, err
 	}
 
 	cfg, ok := providerSpecs()[p.Name]
@@ -82,8 +100,8 @@ func generateSpeech(ctx context.Context, p Provider, req SpeechRequest, opts ...
 	if model == nil {
 		return SpeechResponse{}, &ValidationError{Field: "model", Message: req.Model + " is not a known speech-generation model for " + p.Name}
 	}
-	if !voiceInCatalogue(sgCfg, req.Voice) {
-		return SpeechResponse{}, &ValidationError{Field: "voice", Message: req.Voice + " is not a known voice for " + p.Name}
+	if err := validateSpeechModel(req, model); err != nil {
+		return SpeechResponse{}, err
 	}
 
 	baseEvent := providers.Event{
@@ -123,7 +141,10 @@ func generateSpeech(ctx context.Context, p Provider, req SpeechRequest, opts ...
 // dispatchSpeechHTTP picks a wire shape per provider config (never by provider
 // name — the wire shape is the single discriminator). SpeechInworld is a
 // flat-JSON POST whose response carries base64 audio at audioContent;
-// SpeechOpenAI is a flat-JSON POST whose response body is the raw audio bytes.
+// SpeechOpenAI is a flat-JSON POST whose response body is the raw audio bytes;
+// SpeechGemini is an Interactions API POST whose audio sits in steps[].
+// Query-param-key providers (Google) carry the key in the URL, as on every
+// other Google call; doPost redacts the URL from transport errors (VULN-001).
 func dispatchSpeechHTTP(
 	ctx context.Context,
 	client *http.Client,
@@ -145,11 +166,16 @@ func dispatchSpeechHTTP(
 	if !strings.HasPrefix(url, "http") {
 		url = base + endpoint
 	}
+	if cfg.AuthScheme == providers.AuthQueryParamKey {
+		url += "?" + cfg.AuthQueryParam + "=" + p.APIKey
+	}
 
 	var body map[string]any
 	switch sgCfg.WireShape {
 	case providers.SpeechShapeOpenAI:
 		body = buildOpenAISpeechBody(req)
+	case providers.SpeechShapeGemini:
+		body = buildGeminiSpeechBody(req)
 	default: // SpeechShapeInworld
 		body = buildInworldSpeechBody(req)
 	}
@@ -181,13 +207,128 @@ func buildInworldSpeechBody(req SpeechRequest) map[string]any {
 // Slice 1 fixes response_format=mp3 (KISS; the model's outputMime is audio/mpeg
 // to match), so the response body is mp3 audio bytes. Format selection is a
 // later slice (ADR-051).
+// Style is sent as instructions (BUG-091), which gpt-4o-mini-tts accepts.
 func buildOpenAISpeechBody(req SpeechRequest) map[string]any {
-	return map[string]any{
+	body := map[string]any{
 		"model":           req.Model,
 		"input":           req.Text,
 		"voice":           req.Voice,
 		"response_format": "mp3",
 	}
+	if req.Style != "" {
+		body["instructions"] = req.Style
+	}
+	return body
+}
+
+// buildGeminiSpeechBody assembles the Gemini TTS request body on the
+// Interactions API (BUG-091): one user_input turn and an audio response.
+// Single voice: one text item and speech_config [{voice}]; a Style annotates
+// the text item. Multi-speaker: one text item per line, each annotated with
+// its speaker and optional style, and speech_config {speakers}. response_format
+// mime/sample_rate and streaming are out of scope. store is always false: the
+// Interactions API keeps requests by default.
+func buildGeminiSpeechBody(req SpeechRequest) map[string]any {
+	var content []any
+	var speechConfig any
+	if len(req.Speakers) > 0 {
+		for _, line := range req.Lines {
+			meta := map[string]any{"type": "speech_metadata", "speaker": line.Speaker}
+			if line.Style != "" {
+				meta["style"] = line.Style
+			}
+			content = append(content, map[string]any{"type": "text", "text": line.Text, "annotations": []any{meta}})
+		}
+		speakers := make([]any, 0, len(req.Speakers))
+		for _, s := range req.Speakers {
+			speakers = append(speakers, map[string]any{"speaker": s.Name, "voice": s.Voice})
+		}
+		speechConfig = map[string]any{"speakers": speakers}
+	} else {
+		item := map[string]any{"type": "text", "text": req.Text}
+		if req.Style != "" {
+			item["annotations"] = []any{map[string]any{"type": "speech_metadata", "style": req.Style}}
+		}
+		content = []any{item}
+		speechConfig = []any{map[string]any{"voice": req.Voice}}
+	}
+	return map[string]any{
+		"model":             req.Model,
+		"input":             []any{map[string]any{"type": "user_input", "content": content}},
+		"response_format":   map[string]any{"type": "audio"},
+		"generation_config": map[string]any{"speech_config": speechConfig},
+		"store":             false,
+	}
+}
+
+// validateSpeechInputs checks the request on its own, before the provider
+// config is read (BUG-091). The messages are the same in every SDK.
+func validateSpeechInputs(req SpeechRequest) error {
+	if len(req.Lines) == 0 && req.Text == "" {
+		return &ValidationError{Field: "text", Message: "required for speech generation"}
+	}
+	if len(req.Lines) > 0 && req.Text != "" {
+		return &ValidationError{Field: "text", Message: "must be empty when lines are set"}
+	}
+	if len(req.Speakers) == 0 {
+		if req.Voice == "" {
+			return &ValidationError{Field: "voice", Message: "required for speech generation"}
+		}
+	} else {
+		if req.Voice != "" {
+			return &ValidationError{Field: "voice", Message: "cannot be set together with speakers"}
+		}
+		if req.Style != "" {
+			return &ValidationError{Field: "style", Message: "cannot be set together with speakers; style each line instead"}
+		}
+		if len(req.Lines) == 0 {
+			return &ValidationError{Field: "lines", Message: "required when speakers are set"}
+		}
+	}
+	for _, line := range req.Lines {
+		if !speakerDeclared(req.Speakers, line.Speaker) {
+			return &ValidationError{Field: "lines", Message: line.Speaker + " is not a declared speaker"}
+		}
+	}
+	return nil
+}
+
+// validateSpeechModel checks the request against the model's speaker and
+// style facts (BUG-091).
+func validateSpeechModel(req SpeechRequest, model *providers.SpeechModelDef) error {
+	if len(req.Speakers) > 0 {
+		if model.MaxSpeakers == 0 {
+			return &ValidationError{Field: "speakers", Message: model.ModelID + " does not support multiple speakers"}
+		}
+		if len(req.Speakers) != model.MaxSpeakers {
+			return &ValidationError{Field: "speakers", Message: fmt.Sprintf("exactly %d speakers are required, got %d", model.MaxSpeakers, len(req.Speakers))}
+		}
+	}
+	if !model.SupportsSpeechStyle && speechHasStyle(req) {
+		return &ValidationError{Field: "style", Message: model.ModelID + " does not support a speech style"}
+	}
+	return nil
+}
+
+func speakerDeclared(speakers []SpeechSpeaker, name string) bool {
+	for _, s := range speakers {
+		if s.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+func speechHasStyle(req SpeechRequest) bool {
+	if req.Style != "" {
+		return true
+	}
+	for _, line := range req.Lines {
+		if line.Style != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func findSpeechModel(cfg *providers.SpeechGenDef, modelID string) *providers.SpeechModelDef {
@@ -199,15 +340,6 @@ func findSpeechModel(cfg *providers.SpeechGenDef, modelID string) *providers.Spe
 	return nil
 }
 
-func voiceInCatalogue(cfg *providers.SpeechGenDef, voice string) bool {
-	for _, v := range cfg.Voices {
-		if v == voice {
-			return true
-		}
-	}
-	return false
-}
-
 // parseSpeechResponse decodes the synthesized audio per the wire shape's audio
 // response encoding (ADR-051 OAA-002). "rawBody" (OpenAI) takes the response
 // body verbatim as the audio bytes; "base64Envelope" (Inworld) parses a JSON
@@ -217,6 +349,12 @@ func parseSpeechResponse(providerName, audioEncoding, fallbackMime string, body 
 	switch audioEncoding {
 	case "rawBody":
 		return SpeechResponse{Audio: AudioData{MimeType: fallbackMime, Bytes: body}}, nil
+	case "base64InteractionSteps":
+		var raw map[string]any
+		if err := json.Unmarshal(body, &raw); err != nil {
+			return SpeechResponse{}, fmt.Errorf("%s speech response: unmarshal: %w", providerName, err)
+		}
+		return parseInteractionStepsSpeechResponse(providerName, raw, fallbackMime)
 	default: // base64Envelope
 		var raw map[string]any
 		if err := json.Unmarshal(body, &raw); err != nil {
@@ -241,4 +379,40 @@ func parseInworldSpeechResponse(providerName string, raw map[string]any, fallbac
 		return SpeechResponse{}, fmt.Errorf("%s speech response: invalid base64 in audioContent: %w", providerName, err)
 	}
 	return SpeechResponse{Audio: AudioData{MimeType: fallbackMime, Bytes: decoded}}, nil
+}
+
+// parseInteractionStepsSpeechResponse decodes a Gemini TTS Interactions API
+// reply (BUG-091). Google's documented path is
+// [.steps[] | select(.type=="model_output") | .content[] | select(.type=="audio")] | last | .data:
+// the LAST audio item across the model_output steps wins. The item's mime_type
+// is used when present, else the model's outputMime. No audio item, or invalid
+// base64, is a decoding error (HANDOFF-036 A5).
+func parseInteractionStepsSpeechResponse(providerName string, raw map[string]any, fallbackMime string) (SpeechResponse, error) {
+	var last map[string]any
+	steps, _ := raw["steps"].([]any)
+	for _, s := range steps {
+		step, _ := s.(map[string]any)
+		if step == nil || step["type"] != "model_output" {
+			continue
+		}
+		content, _ := step["content"].([]any)
+		for _, c := range content {
+			if item, _ := c.(map[string]any); item != nil && item["type"] == "audio" {
+				last = item
+			}
+		}
+	}
+	b64, _ := last["data"].(string)
+	if b64 == "" {
+		return SpeechResponse{}, fmt.Errorf("%s speech response: no audio item in steps[model_output].content", providerName)
+	}
+	decoded, err := base64.StdEncoding.DecodeString(b64)
+	if err != nil {
+		return SpeechResponse{}, fmt.Errorf("%s speech response: invalid base64 in audio data: %w", providerName, err)
+	}
+	mime := fallbackMime
+	if m, _ := last["mime_type"].(string); m != "" {
+		mime = m
+	}
+	return SpeechResponse{Audio: AudioData{MimeType: mime, Bytes: decoded}}, nil
 }

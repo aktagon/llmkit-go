@@ -6,6 +6,7 @@ package providers
 const (
 	TextOnly            = "TextOnly"
 	WithReferenceImages = "WithReferenceImages"
+	WithSeedFrame       = "WithSeedFrame"
 )
 
 // Image request-shape discriminators: each names one request body (ADR-096).
@@ -30,7 +31,7 @@ const (
 // RequestVariant is one wire request of an image or video config, keyed by
 // the inputs it carries (ADR-096).
 type RequestVariant struct {
-	Carries  string // TextOnly | WithReferenceImages
+	Carries  string // TextOnly | WithReferenceImages | WithSeedFrame
 	Shape    string // image request shape (InlineParts, ...); "" on a video variant
 	Endpoint string // path; "" = use provider main endpoint
 }

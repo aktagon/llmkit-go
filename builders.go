@@ -359,18 +359,47 @@ func (b *Music) Text(s string) *Music {
 // terminals live in hand-written text.go / image.go.
 type Speech struct {
 	client     *Client
+	lines      []SpeechLine
 	middleware []MiddlewareFn
+	speakers   []SpeechSpeaker
 	model      string
+	style      string
 	voice      string
 }
 
+// AddLine appends a line said by a declared speaker. Lines are spoken in call
+// order. When lines are set, the text passed to Generate must be empty.
+func (b *Speech) AddLine(speaker, text string) *Speech {
+	out := *b
+	out.lines = append(append([]SpeechLine{}, b.lines...), SpeechLine{Speaker: speaker, Text: text})
+	return &out
+} // ordered
 func (b *Speech) AddMiddleware(fns ...MiddlewareFn) *Speech {
 	out := *b
 	out.middleware = append(append([]MiddlewareFn{}, b.middleware...), fns...)
 	return &out
 }
+
+// AddSpeaker declares a named speaker and its voice for a multi-speaker speech
+// request. Declare exactly 2 speakers, and do not set a Voice with them.
+func (b *Speech) AddSpeaker(name, voice string) *Speech {
+	out := *b
+	out.speakers = append(append([]SpeechSpeaker{}, b.speakers...), SpeechSpeaker{Name: name, Voice: voice})
+	return &out
+} // ordered
+// AddStyledLine appends a line said by a declared speaker in a delivery style, such as
+// "calm and relaxed". Otherwise it works like AddLine.
+func (b *Speech) AddStyledLine(speaker, style, text string) *Speech {
+	out := *b
+	out.lines = append(append([]SpeechLine{}, b.lines...), SpeechLine{Speaker: speaker, Style: style, Text: text})
+	return &out
+}                                           // ordered
 func (b *Speech) Model(name string) *Speech { out := *b; out.model = name; return &out }
-func (b *Speech) Voice(id string) *Speech   { out := *b; out.voice = id; return &out }
+
+// Style sets the delivery style for a single-voice speech request, such as
+// "cheerful". A model that does not take a style rejects it before send.
+func (b *Speech) Style(s string) *Speech  { out := *b; out.style = s; return &out }
+func (b *Speech) Voice(id string) *Speech { out := *b; out.voice = id; return &out }
 
 // === *Transcription — Transcription builder ===
 
