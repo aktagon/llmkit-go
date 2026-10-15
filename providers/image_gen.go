@@ -14,8 +14,11 @@ const (
 	JSONGenerationsOpenAI = "JSONGenerationsOpenAI"
 	MultipartForm         = "MultipartForm"
 	JSONInlineRefs        = "JSONInlineRefs"
-	JSONPredict           = "JSONPredict"
-	JSONGenerations       = "JSONGenerations"
+	// JSONPredict is the former Vertex Imagen :predict body.
+	//
+	// Deprecated: no provider accepts this since 2026-10-15 (Vertex Imagen shut down, BUG-101); removed at the next major.
+	JSONPredict     = "JSONPredict"
+	JSONGenerations = "JSONGenerations"
 )
 
 // Image output mode discriminators.
@@ -53,7 +56,7 @@ type ImageModelDef struct {
 // Variants lists one request per carried input, TextOnly first.
 type ImageGenDef struct {
 	OutputMode         string // ImageOutputBase64Inline | ImageOutputURLOrBase64
-	ResponseShape      string // GoogleParts | DataArrayB64Json | VertexPredictions (BUG-024)
+	ResponseShape      string // GoogleParts | DataArrayB64Json (BUG-024)
 	UsageInputPath     string // dotted-from-root usage-token path; empty when unreported
 	UsageOutputPath    string
 	UsageReasoningPath string // thinking-token path; empty when not reported separately
@@ -255,43 +258,6 @@ func ImageGenConfig(provider string) *ImageGenDef {
 					ModelID:            "recraftv3_vector",
 					Label:              "Recraft V3 (vector / SVG)",
 					AspectRatios:       []string{},
-					ImageSizes:         []string{},
-					MaxInputImages:     0,
-					SupportsImageInput: false,
-				},
-			},
-		}
-	case Vertex:
-		return &ImageGenDef{
-			OutputMode:         "Base64Inline",
-			ResponseShape:      "VertexPredictions",
-			UsageInputPath:     "",
-			UsageOutputPath:    "",
-			UsageReasoningPath: "",
-			Variants: []RequestVariant{
-				{Carries: "TextOnly", Shape: "JSONPredict", Endpoint: ""},
-			},
-			Models: []ImageModelDef{
-				{
-					ModelID:            "imagen-3.0-fast-generate-001",
-					Label:              "Imagen 3 Fast",
-					AspectRatios:       []string{"16:9", "1:1", "3:4", "4:3", "9:16"},
-					ImageSizes:         []string{},
-					MaxInputImages:     0,
-					SupportsImageInput: false,
-				},
-				{
-					ModelID:            "imagen-3.0-generate-002",
-					Label:              "Imagen 3",
-					AspectRatios:       []string{"16:9", "1:1", "3:4", "4:3", "9:16"},
-					ImageSizes:         []string{},
-					MaxInputImages:     0,
-					SupportsImageInput: false,
-				},
-				{
-					ModelID:            "imagen-4.0-generate-preview-06-06",
-					Label:              "Imagen 4 Preview",
-					AspectRatios:       []string{"16:9", "1:1", "3:4", "4:3", "9:16"},
 					ImageSizes:         []string{},
 					MaxInputImages:     0,
 					SupportsImageInput: false,
