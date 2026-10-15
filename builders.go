@@ -130,7 +130,7 @@ func (c *Client) AddHeader(name, value string) *Client {
 
 // BaseURL overrides the provider's default endpoint root for this
 // client. Required for providers whose default base URL is a
-// template the caller must substitute (e.g. Vertex AI Imagen) and
+// template the caller must substitute (e.g. Vertex AI) and
 // to point an OpenAI-compatible provider or gateway at a self-hosted
 // endpoint. Returns the same *Client for chaining.
 func (c *Client) BaseURL(url string) *Client {
@@ -303,6 +303,12 @@ func (b *Image) Model(name string) *Image     { out := *b; out.model = name; ret
 func (b *Image) OutputFormat(s string) *Image { out := *b; out.outputFormat = s; return &out }
 func (b *Image) Quality(s string) *Image      { out := *b; out.quality = s; return &out }
 func (b *Image) Raw() *Image                  { out := *b; out.raw = true; return &out }
+
+// SafetyFilter sets a single image safety threshold. Every image provider rejects it
+// with a validation error.
+//
+// Deprecated: no provider accepts this since 2026-10-15 (Vertex Imagen
+// shut down, BUG-101); removed at the next major.
 func (b *Image) SafetyFilter(s string) *Image { out := *b; out.safetyFilter = s; return &out }
 func (b *Image) SafetySettings(s []SafetySetting) *Image {
 	out := *b
