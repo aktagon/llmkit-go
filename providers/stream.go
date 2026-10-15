@@ -460,3 +460,39 @@ func StreamConfig(provider string) *StreamDef {
 		return nil
 	}
 }
+
+// WireShapeStreamConfig returns the streaming config a chat wire shape declares
+// for every provider that selects it, or nil when the provider's StreamConfig
+// holds (OpenAI Responses streams events, not Chat Completions chunks).
+func WireShapeStreamConfig(chatWireShape string) *StreamDef {
+	switch chatWireShape {
+	case ChatResponsesOpenAI:
+		return &StreamDef{
+			Endpoint:        "",
+			Param:           "stream",
+			ParamValue:      "true",
+			DeltaTextPath:   "delta",
+			DoneSignal:      "",
+			UsesEventTypes:  true,
+			ContentEvent:    "response.output_text.delta",
+			DoneEvent:       "",
+			UsageEvent:      "response.completed",
+			UsageInputPath:  "response.usage.input_tokens",
+			UsageOutputPath: "response.usage.output_tokens",
+			UsageOptIn:      false,
+		}
+	default:
+		return nil
+	}
+}
+
+// WireShapeStreamFinishReasonPath returns the ADR-013 stream finish locator
+// read with WireShapeStreamConfig; empty when the shape declares none.
+func WireShapeStreamFinishReasonPath(chatWireShape string) string {
+	switch chatWireShape {
+	case ChatResponsesOpenAI:
+		return "response.completed:response.status"
+	default:
+		return ""
+	}
+}
