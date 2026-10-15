@@ -124,7 +124,7 @@ var providerSpecRegistry = map[string]providerSpec{
 		ReasoningTokensPath:     "usage.output_tokens_details.thinking_tokens",
 		FinishReasonPath:        "stop_reason",
 		FinishMessagePath:       "",
-		StreamFinishReasonPath:  "message_stop:stop_reason",
+		StreamFinishReasonPath:  "message_delta:delta.stop_reason",
 		StreamFinishMessagePath: "",
 		WrapsOptionsIn:          "",
 		SafetySettingsWirePath:  "",
