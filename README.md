@@ -34,7 +34,7 @@ yield a new `*Text`.
 
 See [`examples/`](examples/) for runnable single-file demos
 (`quickstart`, `agent`, `stream`, `upload`, `image-gen`,
-`image-gen-openai`, `middleware`, `vertex-imagen`). The shapes shown
+`image-gen-openai`, `middleware`). The shapes shown
 below are exercised against mock HTTP servers by
 [`example_test.go`](example_test.go), so the documented call shapes
 are guaranteed to match the public surface.
@@ -264,7 +264,6 @@ trusts the API boundary instead of carrying a stale list.
 | Google   | Nano Banana Pro                | 1:1, 2:3, 3:2, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9, 21:9                             | 1K, 2K, 4K                          |
 | OpenAI   | gpt-image-2 / 1.5 / 1 / 1-mini | n/a (size only)                                                                 | any (e.g. `1024x1024`, `1536x1024`) |
 | xAI      | grok-imagine-image-quality     | 1:1, 2:3, 3:2, 3:4, 4:3, 9:16, 16:9, 1:2, 2:1, 19.5:9, 9:19.5, 20:9, 9:20, auto | 1k, 2k                              |
-| Vertex   | imagen-3.0 / 4.0               | 1:1, 9:16, 16:9, 3:4, 4:3                                                       | fixed per model                     |
 
 OpenAI gpt-image-\* models accept arbitrary sizes within documented
 bounds (max edge ≤3840, both edges multiples of 16, ratio ≤3:1, total
@@ -308,33 +307,6 @@ Up to 14 reference images per Google request, 16 per OpenAI request.
 See `examples/image-gen` (Google) and `examples/image-gen-openai` (OpenAI)
 for end-to-end runnable samples.
 
-#### Vertex AI Imagen (Google Cloud)
-
-Vertex Imagen uses a different endpoint family (`:predict`) and OAuth
-auth instead of API keys. The SDK takes a bearer token (string); caller
-manages OAuth refresh externally (e.g. `gcloud auth print-access-token`,
-service-account JSON, or workload identity).
-
-```go
-// Caller substitutes {project_id} and {location} before passing the URL.
-const baseURL = "https://us-central1-aiplatform.googleapis.com" +
-    "/v1/projects/my-gcp-project/locations/us-central1/publishers/google/models"
-
-token := os.Getenv("VERTEX_BEARER_TOKEN") // e.g. `gcloud auth print-access-token`
-c := llmkit.Vertex(token).BaseURL(baseURL)
-
-resp, err := c.Image.Model("imagen-3.0-generate-002").
-    AspectRatio("16:9").
-    Count(2).
-    Generate(ctx, "A red circle")
-```
-
-Imagen is text-to-image only: image parts and a mask are rejected before
-the request is sent. Imagen-specific knobs like `negativePrompt` and `safetySetting` are
-reachable through `ExtraFields(...)` — they spread into the request's
-`parameters` block. Vertex's `:predict` response does not carry token
-counts; `resp.Usage` stays zero.
-
 ### Music — text-to-music
 
 Generate audio from a text prompt. Use the typed-builder chain on
@@ -366,7 +338,11 @@ Instrumental-only models reject lyrics before the request is sent.
 | Google   | `lyria-3-pro-preview`, `lyria-3-clip-preview`  | yes    | MP3        |
 | MiniMax  | `music-2.6`                                    | yes    | MP3        |
 
-Vertex Lyria 2 uses the same OAuth bearer flow as Vertex Imagen above.
+Vertex uses OAuth bearer auth instead of API keys. Pass an access token
+(e.g. from `gcloud auth print-access-token`) and a base URL with your
+`{project_id}` and `{location}` filled in:
+`https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/models`.
+The SDK does not refresh the token.
 See `examples/music-gen` for an end-to-end runnable sample.
 
 ### Video — text-to-video
@@ -395,8 +371,7 @@ See `examples/video-gen` for an end-to-end runnable sample.
 ### Safety Settings
 
 Control content filtering for Gemini providers. `SafetySettings` applies to text
-generation, streaming, agents, and Gemini image generation. `SafetyFilter` applies
-to Vertex Imagen only.
+generation, streaming, agents, and Gemini image generation.
 
 ```go
 import llmkit "github.com/aktagon/llmkit-go/v3"
@@ -408,16 +383,15 @@ resp, err := c.Text.
         {Category: llmkit.HarmCategoryHarassment, Threshold: llmkit.HarmBlockThresholdHighOnly},
     }).
     Prompt(ctx, "Write a story")
-
-// Vertex Imagen
-img, err := c.Image.Model("imagen-3.0-generate-002").
-    SafetyFilter(llmkit.ImageSafetyFilterBlockFew).
-    Generate(ctx, "A landscape")
 ```
 
-`SafetySettings` on Vertex Imagen and `SafetyFilter` on non-Imagen providers return
-a `*ValidationError`. The `HarmCategory*`, `HarmBlockThreshold*`, and
-`ImageSafetyFilter*` constants cover all documented values; raw strings also work.
+`SafetySettings` on a non-Gemini provider returns a `*ValidationError`. The
+`HarmCategory*` and `HarmBlockThreshold*` constants cover all documented
+values; raw strings also work.
+
+`SafetyFilter` and the `ImageSafetyFilter*` constants are deprecated. They
+served Vertex Imagen, which Google shut down; every provider now returns a
+`*ValidationError` for them. They will be removed in the next major version.
 
 ### Model catalogue
 
