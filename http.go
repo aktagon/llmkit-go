@@ -331,7 +331,7 @@ func doSigV4Get(ctx context.Context, client *http.Client, url string,
 // doStreamPost sends a POST request and processes SSE events via callback.
 // Returns accumulated usage and the stream-time finish-reason after the
 // stream ends. finishReasonPath uses ADR-013 form: `event_name:json.path`
-// (event-typed SSE — Anthropic message_stop) or bare `json.path`
+// (event-typed SSE — Anthropic message_delta) or bare `json.path`
 // (data-only SSE — OpenAI / Grok / Google). Empty disables capture.
 func doStreamPost(ctx context.Context, client *http.Client, url string, body []byte, headers map[string]string,
 	streamCfg *providers.StreamDef, finishReasonPath string, callback func(string)) (Usage, *string, error) {
@@ -395,9 +395,9 @@ func doStreamPost(ctx context.Context, client *http.Client, url string, body []b
 			break
 		}
 
-		// Parse the data frame BEFORE the event-level done break: providers
-		// like Anthropic carry finish_reason on the message_stop event's body,
-		// and dropping the parse here would discard that signal (ADR-013).
+		// Parse the data frame BEFORE the event-level done break, so a finish
+		// locator that names the done event still sees its body (ADR-013).
+		// Anthropic's locator is message_delta:delta.stop_reason.
 		var parsed map[string]any
 		parseErr := json.Unmarshal([]byte(data), &parsed)
 
@@ -434,8 +434,12 @@ func doStreamPost(ctx context.Context, client *http.Client, url string, body []b
 					callback(text)
 				}
 			}
-			// Extract usage from usage events
+			// Extract usage from usage events. Anthropic's message_delta
+			// carries the cumulative input AND output counts.
 			if currentEvent == streamCfg.UsageEvent {
+				if v := optIntPath(parsed, streamCfg.UsageInputPath); v != nil {
+					usage.Input = v
+				}
 				if v := optIntPath(parsed, streamCfg.UsageOutputPath); v != nil {
 					usage.Output = v
 				}
