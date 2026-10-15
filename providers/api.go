@@ -32,6 +32,7 @@ type APIResponseFieldDef struct {
 func APIOptions() []APIOptionDef {
 	return []APIOptionDef{
 		{GoFunc: "WithAddLine", SubOptions: []APISubOptionDef{}},
+		{GoFunc: "WithAddReferenceImage", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithAddSpeaker", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithAddStyledLine", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithAddTool", SubOptions: []APISubOptionDef{}},
@@ -49,6 +50,7 @@ func APIOptions() []APIOptionDef {
 		{GoFunc: "WithImage", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithImageSize", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithIncludeText", SubOptions: []APISubOptionDef{}},
+		{GoFunc: "WithLastFrame", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithLyrics", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithMask", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithMaxTokens", SubOptions: []APISubOptionDef{}},

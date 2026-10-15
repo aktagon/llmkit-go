@@ -40,7 +40,20 @@ type VideoRequest struct {
 	// S3 bucket). Required when the provider's config sets RequiresOutputURI;
 	// ignored otherwise. Set it on the builder via (*Video).OutputURI.
 	OutputURI string
+
+	// LastFrame is the final frame the video ends on, sent with a first frame
+	// (an image part). Set it on the builder via (*Video).LastFrame (BUG-089).
+	LastFrame *MediaRef
+
+	// ReferenceImages are asset images the video keeps, at most
+	// maxVideoReferenceImages, never with a first or last frame. Set them on
+	// the builder via (*Video).AddReferenceImage (BUG-089).
+	ReferenceImages []MediaRef
 }
+
+// maxVideoReferenceImages is the most asset reference images a Veo request
+// takes (Gemini API and Vertex Veo pages, read 2026-10-15).
+const maxVideoReferenceImages = 3
 
 // VideoData, VideoResponse, and VideoHandle are declared in go/structs.go
 // (ADR-018, API-PDS-002).
@@ -146,15 +159,18 @@ func submitVideo(ctx context.Context, p Provider, req VideoRequest, opts ...Vide
 			}
 		}
 	}
-	// ADR-096: a seed frame selects the WithSeedFrame submit request;
-	// a config with no such variant cannot send it.
 	imageCount := 0
 	for _, part := range parts {
 		if part.Image != nil {
 			imageCount++
 		}
 	}
-	variant, err := selectRequestVariant(p.Name, vgCfg.Variants, imageCount, providers.WithSeedFrame)
+	if err := validateVideoFrames(model, imageCount, req); err != nil {
+		return VideoHandle{}, err
+	}
+	// ADR-096: the carried inputs select the submit request; a config with
+	// no such variant cannot send it.
+	variant, err := selectRequestVariant(p.Name, vgCfg.Variants, videoCarries(imageCount, req))
 	if err != nil {
 		return VideoHandle{}, err
 	}
@@ -178,7 +194,7 @@ func submitVideo(ctx context.Context, p Provider, req VideoRequest, opts ...Vide
 	client := withRequestTimeout(o.httpClient, p.Timeout)
 	headers := buildAuthHeaders(p, cfg)
 
-	requestID, err := dispatchVideoSubmit(ctx, client, p, cfg, vgCfg, variant, req.Model, req.OutputURI, parts, headers)
+	requestID, err := dispatchVideoSubmit(ctx, client, p, cfg, vgCfg, variant, req, parts, headers)
 	postEv := baseEvent
 	postEv.Err = err
 	postEv.Duration = time.Since(start)
@@ -211,12 +227,12 @@ func dispatchVideoSubmit(
 	cfg providerSpec,
 	vgCfg *providers.VideoGenDef,
 	variant providers.RequestVariant,
-	model string,
-	outputURI string,
+	req VideoRequest,
 	parts []Part,
 	headers map[string]string,
 ) (string, error) {
 	base := videoBaseURL(p, cfg, vgCfg)
+	model, outputURI := req.Model, req.OutputURI
 
 	var body map[string]any
 	switch vgCfg.WireShape {
@@ -258,12 +274,27 @@ func dispatchVideoSubmit(
 			return "", err
 		}
 		if seed != nil {
-			instance["image"] = map[string]any{
-				"bytesBase64Encoded": base64.StdEncoding.EncodeToString(seed.Bytes),
-				"mimeType":           videoSeedMime(seed),
-			}
+			instance["image"] = veoImage(seed)
+		}
+		// Last frame and asset reference images (BUG-089): same
+		// {bytesBase64Encoded, mimeType} wrapper. Reference images force an
+		// 8-second video, sent as the NUMBER 8 on both APIs (live 2026-10-15:
+		// the Gemini API rejects the string "8" its docs show).
+		if req.LastFrame != nil {
+			instance["lastFrame"] = veoImage(req.LastFrame)
 		}
 		body = map[string]any{"instances": []map[string]any{instance}}
+		if len(req.ReferenceImages) > 0 {
+			refs := make([]map[string]any, 0, len(req.ReferenceImages))
+			for i := range req.ReferenceImages {
+				refs = append(refs, map[string]any{
+					"image":         veoImage(&req.ReferenceImages[i]),
+					"referenceType": "asset",
+				})
+			}
+			instance["referenceImages"] = refs
+			body["parameters"] = map[string]any{"durationSeconds": 8}
+		}
 	case providers.VideoShapeBedrock:
 		// Nova Reel carries the model in the BODY (modelId, unlike the Converse
 		// chat path) and writes the mp4 to the caller's S3 bucket. The optional
@@ -1026,6 +1057,48 @@ func videoSeedImage(parts []Part) (*MediaRef, error) {
 		seed = part.Image
 	}
 	return seed, nil
+}
+
+// veoImage is a Veo image object: raw base64 bytes and the MIME type.
+func veoImage(img *MediaRef) map[string]any {
+	return map[string]any{
+		"bytesBase64Encoded": base64.StdEncoding.EncodeToString(img.Bytes),
+		"mimeType":           videoSeedMime(img),
+	}
+}
+
+// validateVideoFrames rejects a last frame or reference images the model or
+// the request cannot carry, before any HTTP call (BUG-089). The rules run in
+// this order in every SDK, so a request that breaks two gets the same error.
+func validateVideoFrames(model *providers.VideoModelDef, imageCount int, req VideoRequest) error {
+	refs := len(req.ReferenceImages)
+	switch {
+	case req.LastFrame != nil && !model.SupportsLastFrame:
+		return &ValidationError{Field: "last_frame", Message: model.ModelID + " does not accept a last frame"}
+	case refs > 0 && !model.SupportsReferenceImages:
+		return &ValidationError{Field: "reference_images", Message: model.ModelID + " does not accept reference images"}
+	case refs > maxVideoReferenceImages:
+		return &ValidationError{Field: "reference_images", Message: fmt.Sprintf("at most %d reference images, got %d", maxVideoReferenceImages, refs)}
+	case refs > 0 && (imageCount > 0 || req.LastFrame != nil):
+		// Live 2026-10-15: Veo answers 400 "Unsupported video generation
+		// request"; Vertex documents the inputs as exclusive.
+		return &ValidationError{Field: "reference_images", Message: "cannot be combined with a first or last frame"}
+	case req.LastFrame != nil && imageCount == 0:
+		return &ValidationError{Field: "last_frame", Message: "requires a first frame"}
+	}
+	return nil
+}
+
+// videoCarries is the request's carried inputs (ADR-096): reference images,
+// a seed frame with an optional last frame, or text only.
+func videoCarries(imageCount int, req VideoRequest) []string {
+	switch {
+	case len(req.ReferenceImages) > 0:
+		return []string{providers.WithReferenceImages}
+	case imageCount > 0 && req.LastFrame != nil:
+		return []string{providers.WithSeedFrame, providers.WithLastFrame}
+	}
+	return partsCarry(imageCount, providers.WithSeedFrame)
 }
 
 // videoSeedMime is the seed frame's MIME, defaulting to image/png.
