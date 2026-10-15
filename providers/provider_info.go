@@ -279,7 +279,7 @@ var providerInfoTable = map[ProviderName]ProviderInfo{
 		ID:              Vertex,
 		Slug:            "vertex",
 		EnvVar:          "VERTEX_BEARER_TOKEN",
-		DefaultModel:    "imagen-3.0-generate-002",
+		DefaultModel:    "lyria-002",
 		BaseURL:         "https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/models",
 		BrowserCallable: false,
 	},
