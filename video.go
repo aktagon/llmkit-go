@@ -603,6 +603,9 @@ func newVideoTraceID() string {
 //
 //   - VideoQwen: {"output": {"task_status": "SUCCEEDED"|"FAILED"|"CANCELED"|
 //     "PENDING"|"RUNNING"|"UNKNOWN", "video_url"}}.
+//
+//   - VideoOpenRouter: {"status": "completed"|"failed"|"cancelled"|"expired"|
+//     "pending"|"in_progress", "unsigned_urls": [url], "error": "..."}.
 func parseVideoPoll(vgCfg *providers.VideoGenDef, body []byte) (VideoResponse, bool, error) {
 	var raw map[string]any
 	if err := json.Unmarshal(body, &raw); err != nil {
@@ -629,6 +632,20 @@ func parseVideoPoll(vgCfg *providers.VideoGenDef, body []byte) (VideoResponse, b
 		case "failed", "cancelled":
 			return VideoResponse{}, false, fmt.Errorf("video generation %s", status)
 		default: // queued, in_progress (or any non-terminal status)
+			return VideoResponse{}, false, nil
+		}
+	case providers.VideoShapeOpenRouter:
+		status, _ := raw["status"].(string)
+		switch status {
+		case "completed":
+			return videoResultFromOpenRouter(vgCfg, raw), true, nil
+		case "failed", "cancelled", "expired":
+			msg, _ := raw["error"].(string)
+			if msg == "" {
+				msg = status
+			}
+			return VideoResponse{}, false, fmt.Errorf("video generation %s: %s", status, msg)
+		default: // pending, in_progress (or any non-terminal status)
 			return VideoResponse{}, false, nil
 		}
 	case providers.VideoShapeZhipu:
@@ -828,6 +845,20 @@ func videoResultFromTogether(vgCfg *providers.VideoGenDef, raw map[string]any) V
 		return VideoResponse{}
 	}
 	url, _ := outputs["video_url"].(string)
+	return VideoResponse{Videos: []VideoData{{MimeType: mime, URL: url}}}
+}
+
+// videoResultFromOpenRouter extracts the finished video from an OpenRouter
+// poll response. OpenRouter uses download delivery: unsigned_urls[0] is an
+// absolute content URL that needs the API key, so it goes into VideoData.URL
+// for the download step. The signed urls[] array is a secret and is never read.
+func videoResultFromOpenRouter(vgCfg *providers.VideoGenDef, raw map[string]any) VideoResponse {
+	mime := videoFallbackMime(vgCfg)
+	urls, _ := raw["unsigned_urls"].([]any)
+	if len(urls) == 0 {
+		return VideoResponse{}
+	}
+	url, _ := urls[0].(string)
 	return VideoResponse{Videos: []VideoData{{MimeType: mime, URL: url}}}
 }
 
