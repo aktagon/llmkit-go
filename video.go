@@ -638,7 +638,14 @@ func parseVideoPoll(vgCfg *providers.VideoGenDef, body []byte) (VideoResponse, b
 		status, _ := raw["status"].(string)
 		switch status {
 		case "completed":
-			return videoResultFromOpenRouter(vgCfg, raw), true, nil
+			// A completed poll without unsigned_urls[0] must be an error, not an
+			// empty success: download delivery would otherwise return no video
+			// (mirrors the Veo done-without-uri guard).
+			result := videoResultFromOpenRouter(vgCfg, raw)
+			if len(result.Videos) == 0 || result.Videos[0].URL == "" {
+				return VideoResponse{}, false, fmt.Errorf("video generation: completed but carried no unsigned_urls")
+			}
+			return result, true, nil
 		case "failed", "cancelled", "expired":
 			msg, _ := raw["error"].(string)
 			if msg == "" {
