@@ -116,6 +116,14 @@ func ImageGenConfig(provider string) *ImageGenDef {
 			},
 			Models: []ImageModelDef{
 				{
+					ModelID:            "grok-imagine-image-2.0",
+					Label:              "Grok Imagine Image 2.0",
+					AspectRatios:       []string{"16:9", "19.5:9", "1:1", "1:2", "20:9", "21:9", "2:1", "2:3", "3:2", "3:4", "4:3", "9:16", "9:19.5", "9:20", "auto"},
+					ImageSizes:         []string{},
+					MaxInputImages:     0,
+					SupportsImageInput: true,
+				},
+				{
 					ModelID:            "grok-imagine-image-quality",
 					Label:              "Grok Imagine Quality",
 					AspectRatios:       []string{"16:9", "19.5:9", "1:1", "1:2", "20:9", "2:1", "2:3", "3:2", "3:4", "4:3", "9:16", "9:19.5", "9:20", "auto"},
@@ -164,6 +172,22 @@ func ImageGenConfig(provider string) *ImageGenDef {
 				{
 					ModelID:            "gpt-image-2",
 					Label:              "GPT Image 2",
+					AspectRatios:       []string{},
+					ImageSizes:         []string{},
+					MaxInputImages:     0,
+					SupportsImageInput: true,
+				},
+				{
+					ModelID:            "gpt-image-2.5-flare",
+					Label:              "GPT Image 2.5 Flare",
+					AspectRatios:       []string{},
+					ImageSizes:         []string{},
+					MaxInputImages:     0,
+					SupportsImageInput: true,
+				},
+				{
+					ModelID:            "gpt-image-2.5-sunburst",
+					Label:              "GPT Image 2.5 Sunburst",
 					AspectRatios:       []string{},
 					ImageSizes:         []string{},
 					MaxInputImages:     0,
