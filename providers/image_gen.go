@@ -182,6 +182,22 @@ func ImageGenConfig(provider string) *ImageGenDef {
 			},
 			Models: []ImageModelDef{
 				{
+					ModelID:            "bytedance-seed/seedream-4.5",
+					Label:              "Seedream 4.5",
+					AspectRatios:       []string{},
+					ImageSizes:         []string{},
+					MaxInputImages:     0,
+					SupportsImageInput: false,
+				},
+				{
+					ModelID:            "bytedance-seed/seedream-5-0-flash",
+					Label:              "Seedream 5.0 Flash",
+					AspectRatios:       []string{},
+					ImageSizes:         []string{},
+					MaxInputImages:     0,
+					SupportsImageInput: false,
+				},
+				{
 					ModelID:            "google/gemini-2.5-flash-image",
 					Label:              "Nano Banana (Gemini 2.5 Flash Image)",
 					AspectRatios:       []string{},
@@ -214,6 +230,14 @@ func ImageGenConfig(provider string) *ImageGenDef {
 					SupportsImageInput: false,
 				},
 				{
+					ModelID:            "meta/muse-image",
+					Label:              "Muse Image",
+					AspectRatios:       []string{},
+					ImageSizes:         []string{},
+					MaxInputImages:     0,
+					SupportsImageInput: false,
+				},
+				{
 					ModelID:            "openai/gpt-5-image",
 					Label:              "GPT-5 Image",
 					AspectRatios:       []string{},
@@ -232,6 +256,30 @@ func ImageGenConfig(provider string) *ImageGenDef {
 				{
 					ModelID:            "openai/gpt-5.4-image-2",
 					Label:              "GPT-5.4 Image 2",
+					AspectRatios:       []string{},
+					ImageSizes:         []string{},
+					MaxInputImages:     0,
+					SupportsImageInput: false,
+				},
+				{
+					ModelID:            "openai/gpt-image-2",
+					Label:              "GPT Image 2",
+					AspectRatios:       []string{},
+					ImageSizes:         []string{},
+					MaxInputImages:     0,
+					SupportsImageInput: false,
+				},
+				{
+					ModelID:            "openai/gpt-image-2.5-sunburst",
+					Label:              "GPT Image 2.5 Sunburst",
+					AspectRatios:       []string{},
+					ImageSizes:         []string{},
+					MaxInputImages:     0,
+					SupportsImageInput: false,
+				},
+				{
+					ModelID:            "tencent/hy-image-v3.5-preview",
+					Label:              "Hy Image 3.5 Preview",
 					AspectRatios:       []string{},
 					ImageSizes:         []string{},
 					MaxInputImages:     0,
