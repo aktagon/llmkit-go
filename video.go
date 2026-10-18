@@ -310,6 +310,25 @@ func dispatchVideoSubmit(
 				"s3OutputDataConfig": map[string]any{"s3Uri": outputURI},
 			},
 		}
+	case providers.VideoShapeOpenRouter:
+		body = map[string]any{
+			"model":  model,
+			"prompt": joinPromptText(parts),
+		}
+		// Image-to-video (HANDOFF-091): each frame is an OpenRouter
+		// ContentPartImage plus frame_type, first_frame then last_frame
+		// (live probe 2026-10-18; openrouter.ai/openapi.json).
+		seed, err := videoSeedImage(parts)
+		if err != nil {
+			return "", err
+		}
+		if seed != nil {
+			frames := []map[string]any{openRouterFrame(seed, "first_frame")}
+			if req.LastFrame != nil {
+				frames = append(frames, openRouterFrame(req.LastFrame, "last_frame"))
+			}
+			body["frame_images"] = frames
+		}
 	default:
 		body = map[string]any{
 			"model":  model,
@@ -1095,6 +1114,13 @@ func videoSeedImage(parts []Part) (*MediaRef, error) {
 		seed = part.Image
 	}
 	return seed, nil
+}
+
+// openRouterFrame is one OpenRouter frame_images item.
+func openRouterFrame(img *MediaRef, frameType string) map[string]any {
+	frame := imageURLContentPart(img)
+	frame["frame_type"] = frameType
+	return frame
 }
 
 // veoImage is a Veo image object: raw base64 bytes and the MIME type.
