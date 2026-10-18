@@ -318,12 +318,12 @@ func generateImage(ctx context.Context, p Provider, req ImageRequest, opts ...Im
 		if len(o.safetySettings) > 0 {
 			return ImageResponse{}, &ValidationError{Field: "safety_settings", Message: "not supported by " + p.Name}
 		}
-	case providers.JSONGenerations: // Recraft, OpenRouter
+	case providers.JSONGenerations, providers.JSONGenerationsInputRefs: // Recraft, OpenRouter
 		// Recraft's flat generations body carries only size (-> `size`) and
 		// count (-> `n`); aspect_ratio is not a Recraft wire field (it sizes
 		// by an explicit WxH `size`), and the gpt-image / safety knobs are
-		// OpenAI / Google only. Image parts are rejected upstream by
-		// the SupportsImageInput gate (text-to-image only). Style and other
+		// OpenAI / Google only. JSONGenerationsInputRefs is the same body
+		// plus input_references, so the same knobs apply. Style and other
 		// provider-specific knobs ride ExtraFields.
 		if o.aspectRatio != "" {
 			return ImageResponse{}, &ValidationError{Field: "aspect_ratio", Message: "not supported by " + p.Name + "; use ImageSize (Recraft sizes by WxH)"}
@@ -415,6 +415,8 @@ func validateImageArity(model *providers.ImageModelDef, imageCount int) error {
 //     response_format=b64_json forced.
 //   - JSONGenerations (Recraft, OpenRouter, text only): flat JSON
 //     {model, prompt, response_format:"b64_json", size, n}.
+//   - JSONGenerationsInputRefs (OpenRouter, with reference images): the
+//     JSONGenerations body plus input_references.
 //
 // The URL is the base plus the variant's Endpoint, or the provider's main
 // endpoint template (with {model} substituted) when Endpoint is empty.
@@ -449,6 +451,9 @@ func dispatchImageHTTP(
 		body = buildXAIBody(parts, model, o)
 	case providers.JSONGenerations:
 		body = buildRecraftGenBody(parts, model, o)
+	case providers.JSONGenerationsInputRefs:
+		body = buildRecraftGenBody(parts, model, o)
+		body["input_references"] = imageURLContentParts(parts)
 	case providers.InlineParts:
 		body = buildImageBody(parts, o)
 	default:
@@ -636,6 +641,32 @@ func buildRecraftGenBody(parts []Part, model string, o *imageOptions) map[string
 		body[k] = v
 	}
 	return body
+}
+
+// imageURLContentParts maps each image part, in caller order, to an
+// OpenRouter ContentPartImage {type:"image_url", image_url:{url}} with the
+// bytes as a base64 data URL (live probe 2026-10-18).
+func imageURLContentParts(parts []Part) []map[string]any {
+	refs := make([]map[string]any, 0)
+	for _, part := range parts {
+		if part.Image == nil {
+			continue
+		}
+		refs = append(refs, imageURLContentPart(part.Image))
+	}
+	return refs
+}
+
+// imageURLContentPart is one OpenRouter ContentPartImage for img.
+func imageURLContentPart(img *MediaRef) map[string]any {
+	mime := img.MimeType
+	if mime == "" {
+		mime = "image/png"
+	}
+	return map[string]any{
+		"type":      "image_url",
+		"image_url": map[string]any{"url": "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(img.Bytes)},
+	}
 }
 
 func joinTextParts(parts []Part) string {
