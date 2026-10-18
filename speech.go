@@ -3,6 +3,7 @@ package llmkit
 import (
 	"context"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -142,7 +143,9 @@ func generateSpeech(ctx context.Context, p Provider, req SpeechRequest, opts ...
 // name — the wire shape is the single discriminator). SpeechInworld is a
 // flat-JSON POST whose response carries base64 audio at audioContent;
 // SpeechOpenAI is a flat-JSON POST whose response body is the raw audio bytes;
-// SpeechGemini is an Interactions API POST whose audio sits in steps[].
+// SpeechGemini is an Interactions API POST whose audio sits in steps[];
+// SpeechMiniMax is a flat-JSON POST whose response carries hex audio at
+// data.audio.
 // Query-param-key providers (Google) carry the key in the URL, as on every
 // other Google call; doPost redacts the URL from transport errors (VULN-001).
 func dispatchSpeechHTTP(
@@ -154,7 +157,12 @@ func dispatchSpeechHTTP(
 	req SpeechRequest,
 	headers map[string]string,
 ) ([]byte, error) {
+	// Speech base: explicit override > the config's distinct speech base
+	// (MiniMax, HANDOFF-094) > chat base — the musicBaseURL contract.
 	base := p.BaseURL
+	if base == "" {
+		base = sgCfg.BaseURL
+	}
 	if base == "" {
 		base = cfg.BaseURL
 	}
@@ -176,6 +184,8 @@ func dispatchSpeechHTTP(
 		body = buildOpenAISpeechBody(req)
 	case providers.SpeechShapeGemini:
 		body = buildGeminiSpeechBody(req)
+	case providers.SpeechShapeMiniMax:
+		body = buildMiniMaxSpeechBody(req)
 	default: // SpeechShapeInworld
 		body = buildInworldSpeechBody(req)
 	}
@@ -261,6 +271,17 @@ func buildGeminiSpeechBody(req SpeechRequest) map[string]any {
 	}
 }
 
+// buildMiniMaxSpeechBody assembles the MiniMax /v1/t2a_v2 request body
+// (HANDOFF-094): only the fields the reference marks required. stream,
+// output_format (hex) and audio_setting (mp3) take their defaults.
+func buildMiniMaxSpeechBody(req SpeechRequest) map[string]any {
+	return map[string]any{
+		"model":         req.Model,
+		"text":          req.Text,
+		"voice_setting": map[string]any{"voice_id": req.Voice},
+	}
+}
+
 // validateSpeechInputs checks the request on its own, before the provider
 // config is read (BUG-091). The messages are the same in every SDK.
 func validateSpeechInputs(req SpeechRequest) error {
@@ -343,7 +364,8 @@ func findSpeechModel(cfg *providers.SpeechGenDef, modelID string) *providers.Spe
 // parseSpeechResponse decodes the synthesized audio per the wire shape's audio
 // response encoding (ADR-051 OAA-002). "rawBody" (OpenAI) takes the response
 // body verbatim as the audio bytes; "base64Envelope" (Inworld) parses a JSON
-// envelope and base64-decodes the audio field. A 2xx body that does not parse
+// envelope and base64-decodes the audio field; "hexEnvelope" (MiniMax)
+// hex-decodes data.audio and raises on a nonzero base_resp. A 2xx body that does not parse
 // to audio is a decoding error (HANDOFF-036 A5) — never a silent empty clip.
 func parseSpeechResponse(providerName, audioEncoding, fallbackMime string, body []byte) (SpeechResponse, error) {
 	switch audioEncoding {
@@ -355,6 +377,12 @@ func parseSpeechResponse(providerName, audioEncoding, fallbackMime string, body 
 			return SpeechResponse{}, fmt.Errorf("%s speech response: unmarshal: %w", providerName, err)
 		}
 		return parseInteractionStepsSpeechResponse(providerName, raw, fallbackMime)
+	case "hexEnvelope":
+		var raw map[string]any
+		if err := json.Unmarshal(body, &raw); err != nil {
+			return SpeechResponse{}, fmt.Errorf("%s speech response: unmarshal: %w", providerName, err)
+		}
+		return parseHexEnvelopeSpeechResponse(providerName, raw, fallbackMime)
 	default: // base64Envelope
 		var raw map[string]any
 		if err := json.Unmarshal(body, &raw); err != nil {
@@ -415,4 +443,33 @@ func parseInteractionStepsSpeechResponse(providerName string, raw map[string]any
 		mime = m
 	}
 	return SpeechResponse{Audio: AudioData{MimeType: mime, Bytes: decoded}}, nil
+}
+
+// parseHexEnvelopeSpeechResponse decodes a MiniMax t2a_v2 reply (HANDOFF-094).
+// Shape: {"data": {"audio": "<hex>"}, "base_resp": {"status_code": N,
+// "status_msg": "..."}}. MiniMax reports failures in base_resp on an HTTP 200,
+// so a nonzero status_code is an APIError carrying status_msg. A success with
+// missing audio, or invalid hex, is a decoding error (HANDOFF-036 A5).
+func parseHexEnvelopeSpeechResponse(providerName string, raw map[string]any, fallbackMime string) (SpeechResponse, error) {
+	if br, ok := raw["base_resp"].(map[string]any); ok {
+		if code, ok := br["status_code"].(float64); ok && code != 0 {
+			msg, _ := br["status_msg"].(string)
+			return SpeechResponse{}, &APIError{
+				Provider:   providerName,
+				StatusCode: http.StatusOK,
+				Type:       fmt.Sprintf("%d", int64(code)),
+				Message:    msg,
+			}
+		}
+	}
+	data, _ := raw["data"].(map[string]any)
+	h, _ := data["audio"].(string)
+	if h == "" {
+		return SpeechResponse{}, fmt.Errorf("%s speech response: missing or empty data.audio", providerName)
+	}
+	decoded, err := hex.DecodeString(h)
+	if err != nil {
+		return SpeechResponse{}, fmt.Errorf("%s speech response: invalid hex in data.audio: %w", providerName, err)
+	}
+	return SpeechResponse{Audio: AudioData{MimeType: fallbackMime, Bytes: decoded}}, nil
 }
