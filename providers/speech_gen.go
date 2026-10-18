@@ -32,8 +32,8 @@ type SpeechGenDef struct {
 	WireShape     string // SpeechShapeInworld | SpeechShapeOpenAI | SpeechShapeGemini | SpeechShapeMiniMax
 	AudioEncoding string // base64Envelope | rawBody | base64InteractionSteps | hexEnvelope (ADR-051 OAA-002)
 	GenEndpoint   string // override; empty = use provider main endpoint
-	BaseURL       string // speech API base when it differs from the chat base; "" = use chat base
 	Models        []SpeechModelDef
+	BaseURL       string // speech API base when it differs from the chat base; "" = use chat base
 }
 
 // SpeechGenConfig returns the speech-generation config for a provider, or
@@ -45,7 +45,6 @@ func SpeechGenConfig(provider string) *SpeechGenDef {
 			WireShape:     "SpeechGemini",
 			AudioEncoding: "base64InteractionSteps",
 			GenEndpoint:   "/v1beta/interactions",
-			BaseURL:       "",
 			Models: []SpeechModelDef{
 				{
 					ModelID:             "gemini-3.8-flash-lite-tts",
@@ -64,13 +63,13 @@ func SpeechGenConfig(provider string) *SpeechGenDef {
 					SupportsSpeechStyle: true,
 				},
 			},
+			BaseURL: "",
 		}
 	case Inworld:
 		return &SpeechGenDef{
 			WireShape:     "SpeechInworld",
 			AudioEncoding: "base64Envelope",
 			GenEndpoint:   "/tts/v1/voice",
-			BaseURL:       "",
 			Models: []SpeechModelDef{
 				{
 					ModelID:             "inworld-tts-1.5-max",
@@ -97,13 +96,13 @@ func SpeechGenConfig(provider string) *SpeechGenDef {
 					SupportsSpeechStyle: false,
 				},
 			},
+			BaseURL: "",
 		}
 	case Minimax:
 		return &SpeechGenDef{
 			WireShape:     "SpeechMiniMax",
 			AudioEncoding: "hexEnvelope",
 			GenEndpoint:   "/v1/t2a_v2",
-			BaseURL:       "https://api.minimax.io",
 			Models: []SpeechModelDef{
 				{
 					ModelID:             "speech-2.6-hd",
@@ -138,13 +137,13 @@ func SpeechGenConfig(provider string) *SpeechGenDef {
 					SupportsSpeechStyle: false,
 				},
 			},
+			BaseURL: "https://api.minimax.io",
 		}
 	case OpenAI:
 		return &SpeechGenDef{
 			WireShape:     "SpeechOpenAI",
 			AudioEncoding: "rawBody",
 			GenEndpoint:   "/v1/audio/speech",
-			BaseURL:       "",
 			Models: []SpeechModelDef{
 				{
 					ModelID:             "gpt-4o-mini-tts",
@@ -171,13 +170,13 @@ func SpeechGenConfig(provider string) *SpeechGenDef {
 					SupportsSpeechStyle: false,
 				},
 			},
+			BaseURL: "",
 		}
 	case Openrouter:
 		return &SpeechGenDef{
 			WireShape:     "SpeechOpenAI",
 			AudioEncoding: "rawBody",
 			GenEndpoint:   "/v1/audio/speech",
-			BaseURL:       "",
 			Models: []SpeechModelDef{
 				{
 					ModelID:             "elevenlabs/eleven-v3",
@@ -260,6 +259,7 @@ func SpeechGenConfig(provider string) *SpeechGenDef {
 					SupportsSpeechStyle: false,
 				},
 			},
+			BaseURL: "",
 		}
 	default:
 		return nil
