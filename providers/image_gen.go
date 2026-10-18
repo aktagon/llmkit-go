@@ -19,8 +19,9 @@ const (
 	// JSONPredict is the former Vertex Imagen :predict body.
 	//
 	// Deprecated: no provider accepts this since 2026-10-15 (Vertex Imagen shut down, BUG-101); removed at the next major.
-	JSONPredict     = "JSONPredict"
-	JSONGenerations = "JSONGenerations"
+	JSONPredict              = "JSONPredict"
+	JSONGenerations          = "JSONGenerations"
+	JSONGenerationsInputRefs = "JSONGenerationsInputRefs"
 )
 
 // Image output mode discriminators.
@@ -179,6 +180,7 @@ func ImageGenConfig(provider string) *ImageGenDef {
 			UsageReasoningPath: "",
 			Variants: []RequestVariant{
 				{Carries: []string{"TextOnly"}, Shape: "JSONGenerations", Endpoint: "/v1/images"},
+				{Carries: []string{"WithReferenceImages"}, Shape: "JSONGenerationsInputRefs", Endpoint: "/v1/images"},
 			},
 			Models: []ImageModelDef{
 				{
@@ -187,7 +189,7 @@ func ImageGenConfig(provider string) *ImageGenDef {
 					AspectRatios:       []string{},
 					ImageSizes:         []string{},
 					MaxInputImages:     0,
-					SupportsImageInput: false,
+					SupportsImageInput: true,
 				},
 				{
 					ModelID:            "bytedance-seed/seedream-5-0-flash",
@@ -195,7 +197,7 @@ func ImageGenConfig(provider string) *ImageGenDef {
 					AspectRatios:       []string{},
 					ImageSizes:         []string{},
 					MaxInputImages:     0,
-					SupportsImageInput: false,
+					SupportsImageInput: true,
 				},
 				{
 					ModelID:            "google/gemini-2.5-flash-image",
@@ -203,7 +205,7 @@ func ImageGenConfig(provider string) *ImageGenDef {
 					AspectRatios:       []string{},
 					ImageSizes:         []string{},
 					MaxInputImages:     0,
-					SupportsImageInput: false,
+					SupportsImageInput: true,
 				},
 				{
 					ModelID:            "google/gemini-3-pro-image",
@@ -211,7 +213,7 @@ func ImageGenConfig(provider string) *ImageGenDef {
 					AspectRatios:       []string{},
 					ImageSizes:         []string{},
 					MaxInputImages:     0,
-					SupportsImageInput: false,
+					SupportsImageInput: true,
 				},
 				{
 					ModelID:            "google/gemini-3.1-flash-image",
@@ -219,7 +221,7 @@ func ImageGenConfig(provider string) *ImageGenDef {
 					AspectRatios:       []string{},
 					ImageSizes:         []string{},
 					MaxInputImages:     0,
-					SupportsImageInput: false,
+					SupportsImageInput: true,
 				},
 				{
 					ModelID:            "google/gemini-3.1-flash-lite-image",
@@ -227,7 +229,7 @@ func ImageGenConfig(provider string) *ImageGenDef {
 					AspectRatios:       []string{},
 					ImageSizes:         []string{},
 					MaxInputImages:     0,
-					SupportsImageInput: false,
+					SupportsImageInput: true,
 				},
 				{
 					ModelID:            "meta/muse-image",
@@ -243,7 +245,7 @@ func ImageGenConfig(provider string) *ImageGenDef {
 					AspectRatios:       []string{},
 					ImageSizes:         []string{},
 					MaxInputImages:     0,
-					SupportsImageInput: false,
+					SupportsImageInput: true,
 				},
 				{
 					ModelID:            "openai/gpt-5-image-mini",
@@ -251,7 +253,7 @@ func ImageGenConfig(provider string) *ImageGenDef {
 					AspectRatios:       []string{},
 					ImageSizes:         []string{},
 					MaxInputImages:     0,
-					SupportsImageInput: false,
+					SupportsImageInput: true,
 				},
 				{
 					ModelID:            "openai/gpt-5.4-image-2",
@@ -259,7 +261,7 @@ func ImageGenConfig(provider string) *ImageGenDef {
 					AspectRatios:       []string{},
 					ImageSizes:         []string{},
 					MaxInputImages:     0,
-					SupportsImageInput: false,
+					SupportsImageInput: true,
 				},
 				{
 					ModelID:            "openai/gpt-image-2",
@@ -267,7 +269,7 @@ func ImageGenConfig(provider string) *ImageGenDef {
 					AspectRatios:       []string{},
 					ImageSizes:         []string{},
 					MaxInputImages:     0,
-					SupportsImageInput: false,
+					SupportsImageInput: true,
 				},
 				{
 					ModelID:            "openai/gpt-image-2.5-sunburst",
@@ -275,7 +277,7 @@ func ImageGenConfig(provider string) *ImageGenDef {
 					AspectRatios:       []string{},
 					ImageSizes:         []string{},
 					MaxInputImages:     0,
-					SupportsImageInput: false,
+					SupportsImageInput: true,
 				},
 				{
 					ModelID:            "tencent/hy-image-v3.5-preview",
@@ -283,7 +285,7 @@ func ImageGenConfig(provider string) *ImageGenDef {
 					AspectRatios:       []string{},
 					ImageSizes:         []string{},
 					MaxInputImages:     0,
-					SupportsImageInput: false,
+					SupportsImageInput: true,
 				},
 			},
 		}
