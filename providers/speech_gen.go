@@ -126,6 +126,94 @@ func SpeechGenConfig(provider string) *SpeechGenDef {
 				},
 			},
 		}
+	case Openrouter:
+		return &SpeechGenDef{
+			WireShape:     "SpeechOpenAI",
+			AudioEncoding: "rawBody",
+			GenEndpoint:   "/v1/audio/speech",
+			Models: []SpeechModelDef{
+				{
+					ModelID:             "elevenlabs/eleven-v3",
+					Label:               "Eleven v3",
+					OutputMime:          "audio/mpeg",
+					SampleRateHz:        0,
+					MaxSpeakers:         0,
+					SupportsSpeechStyle: false,
+				},
+				{
+					ModelID:             "elevenlabs/eleven-v4",
+					Label:               "Eleven v4",
+					OutputMime:          "audio/mpeg",
+					SampleRateHz:        0,
+					MaxSpeakers:         0,
+					SupportsSpeechStyle: false,
+				},
+				{
+					ModelID:             "elevenlabs/eleven-v4-turbo",
+					Label:               "Eleven v4 Turbo",
+					OutputMime:          "audio/mpeg",
+					SampleRateHz:        0,
+					MaxSpeakers:         0,
+					SupportsSpeechStyle: false,
+				},
+				{
+					ModelID:             "fish-audio/drama-3",
+					Label:               "Fish Audio Drama 3",
+					OutputMime:          "audio/mpeg",
+					SampleRateHz:        0,
+					MaxSpeakers:         0,
+					SupportsSpeechStyle: false,
+				},
+				{
+					ModelID:             "fish-audio/s2.1-pro",
+					Label:               "Fish Audio S2.1 Pro",
+					OutputMime:          "audio/mpeg",
+					SampleRateHz:        0,
+					MaxSpeakers:         0,
+					SupportsSpeechStyle: false,
+				},
+				{
+					ModelID:             "google/gemini-3.1-flash-tts-preview",
+					Label:               "Gemini 3.1 Flash TTS Preview",
+					OutputMime:          "audio/mpeg",
+					SampleRateHz:        0,
+					MaxSpeakers:         0,
+					SupportsSpeechStyle: false,
+				},
+				{
+					ModelID:             "google/gemini-3.8-flash-lite-tts",
+					Label:               "Gemini 3.8 Flash Lite TTS",
+					OutputMime:          "audio/mpeg",
+					SampleRateHz:        0,
+					MaxSpeakers:         0,
+					SupportsSpeechStyle: false,
+				},
+				{
+					ModelID:             "google/gemini-3.8-flash-tts",
+					Label:               "Gemini 3.8 Flash TTS",
+					OutputMime:          "audio/mpeg",
+					SampleRateHz:        0,
+					MaxSpeakers:         0,
+					SupportsSpeechStyle: false,
+				},
+				{
+					ModelID:             "hexgrad/kokoro-82m",
+					Label:               "Kokoro 82M",
+					OutputMime:          "audio/mpeg",
+					SampleRateHz:        0,
+					MaxSpeakers:         0,
+					SupportsSpeechStyle: false,
+				},
+				{
+					ModelID:             "x-ai/grok-voice-tts-1.0",
+					Label:               "Grok Voice TTS 1.0",
+					OutputMime:          "audio/mpeg",
+					SampleRateHz:        0,
+					MaxSpeakers:         0,
+					SupportsSpeechStyle: false,
+				},
+			},
+		}
 	default:
 		return nil
 	}
