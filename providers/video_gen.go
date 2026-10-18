@@ -5,16 +5,17 @@ package providers
 // Video wire-shape discriminators. Each selects the submit-body build,
 // poll mechanism, and result-extraction transform.
 const (
-	VideoShapeGrok      = "VideoGrok"
-	VideoShapeZhipu     = "VideoZhipu"
-	VideoShapeTogether  = "VideoTogether"
-	VideoShapeQwen      = "VideoQwen"
-	VideoShapeMinimax   = "VideoMinimax"
-	VideoShapeVeo       = "VideoVeo"
-	VideoShapeBedrock   = "VideoBedrock"
-	VideoShapeVertexVeo = "VideoVertexVeo"
-	VideoShapeVidu      = "VideoVidu"
-	VideoShapePixVerse  = "VideoPixVerse"
+	VideoShapeGrok       = "VideoGrok"
+	VideoShapeZhipu      = "VideoZhipu"
+	VideoShapeTogether   = "VideoTogether"
+	VideoShapeQwen       = "VideoQwen"
+	VideoShapeMinimax    = "VideoMinimax"
+	VideoShapeVeo        = "VideoVeo"
+	VideoShapeBedrock    = "VideoBedrock"
+	VideoShapeVertexVeo  = "VideoVertexVeo"
+	VideoShapeVidu       = "VideoVidu"
+	VideoShapePixVerse   = "VideoPixVerse"
+	VideoShapeOpenRouter = "VideoOpenRouter"
 )
 
 // Video output-delivery modes. Drive whether the runtime downloads
@@ -195,6 +196,132 @@ func VideoGenConfig(provider string) *VideoGenDef {
 					MaxDurationSeconds:      6,
 					OutputMime:              "video/mp4",
 					Resolutions:             []string{"1080p", "768p"},
+					MaxInputImages:          0,
+				},
+			},
+		}
+	case Openrouter:
+		return &VideoGenDef{
+			WireShape:      "VideoOpenRouter",
+			OutputDelivery: "DeliveryDownload",
+			VideoBaseURL:   "",
+			Variants: []RequestVariant{
+				{Carries: []string{"TextOnly"}, Shape: "", Endpoint: "/v1/videos"},
+			},
+			PollEndpoint:      "/v1/videos/{id}",
+			FileEndpoint:      "",
+			CancelEndpoint:    "",
+			SubmitHandleField: "id",
+			RequiresOutputURI: false,
+			Models: []VideoModelDef{
+				{
+					ModelID:                 "alibaba/wan-3.0",
+					Label:                   "Wan 3.0",
+					SupportsImageToVideo:    false,
+					SupportsLastFrame:       false,
+					SupportsReferenceImages: false,
+					MaxDurationSeconds:      0,
+					OutputMime:              "video/mp4",
+					Resolutions:             []string{},
+					MaxInputImages:          0,
+				},
+				{
+					ModelID:                 "bytedance/seedance-2.0",
+					Label:                   "Seedance 2.0",
+					SupportsImageToVideo:    false,
+					SupportsLastFrame:       false,
+					SupportsReferenceImages: false,
+					MaxDurationSeconds:      0,
+					OutputMime:              "video/mp4",
+					Resolutions:             []string{},
+					MaxInputImages:          0,
+				},
+				{
+					ModelID:                 "bytedance/seedance-2.0-fast",
+					Label:                   "Seedance 2.0 Fast",
+					SupportsImageToVideo:    false,
+					SupportsLastFrame:       false,
+					SupportsReferenceImages: false,
+					MaxDurationSeconds:      0,
+					OutputMime:              "video/mp4",
+					Resolutions:             []string{},
+					MaxInputImages:          0,
+				},
+				{
+					ModelID:                 "bytedance/seedance-2.5",
+					Label:                   "Seedance 2.5",
+					SupportsImageToVideo:    false,
+					SupportsLastFrame:       false,
+					SupportsReferenceImages: false,
+					MaxDurationSeconds:      0,
+					OutputMime:              "video/mp4",
+					Resolutions:             []string{},
+					MaxInputImages:          0,
+				},
+				{
+					ModelID:                 "google/veo-3.1-fast",
+					Label:                   "Veo 3.1 Fast",
+					SupportsImageToVideo:    false,
+					SupportsLastFrame:       false,
+					SupportsReferenceImages: false,
+					MaxDurationSeconds:      0,
+					OutputMime:              "video/mp4",
+					Resolutions:             []string{},
+					MaxInputImages:          0,
+				},
+				{
+					ModelID:                 "google/veo-3.1-lite",
+					Label:                   "Veo 3.1 Lite",
+					SupportsImageToVideo:    false,
+					SupportsLastFrame:       false,
+					SupportsReferenceImages: false,
+					MaxDurationSeconds:      0,
+					OutputMime:              "video/mp4",
+					Resolutions:             []string{},
+					MaxInputImages:          0,
+				},
+				{
+					ModelID:                 "heygen/heygen-video-1",
+					Label:                   "HeyGen Video 1",
+					SupportsImageToVideo:    false,
+					SupportsLastFrame:       false,
+					SupportsReferenceImages: false,
+					MaxDurationSeconds:      0,
+					OutputMime:              "video/mp4",
+					Resolutions:             []string{},
+					MaxInputImages:          0,
+				},
+				{
+					ModelID:                 "kwaivgi/kling-v3.0-std",
+					Label:                   "Kling 3.0 Standard",
+					SupportsImageToVideo:    false,
+					SupportsLastFrame:       false,
+					SupportsReferenceImages: false,
+					MaxDurationSeconds:      0,
+					OutputMime:              "video/mp4",
+					Resolutions:             []string{},
+					MaxInputImages:          0,
+				},
+				{
+					ModelID:                 "minimax/hailuo-3",
+					Label:                   "Hailuo 3",
+					SupportsImageToVideo:    false,
+					SupportsLastFrame:       false,
+					SupportsReferenceImages: false,
+					MaxDurationSeconds:      0,
+					OutputMime:              "video/mp4",
+					Resolutions:             []string{},
+					MaxInputImages:          0,
+				},
+				{
+					ModelID:                 "x-ai/grok-imagine-video-1.5-lite",
+					Label:                   "Grok Imagine Video 1.5 Lite",
+					SupportsImageToVideo:    false,
+					SupportsLastFrame:       false,
+					SupportsReferenceImages: false,
+					MaxDurationSeconds:      0,
+					OutputMime:              "video/mp4",
+					Resolutions:             []string{},
 					MaxInputImages:          0,
 				},
 			},
