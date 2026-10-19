@@ -51,18 +51,20 @@ type VideoRequest struct {
 	ReferenceImages []MediaRef
 
 	// DurationSeconds is the video length in whole seconds; 0 means unset
-	// (the provider default). Only the VideoOpenRouter wire shape sends it,
-	// as the JSON integer `duration`. Set it via (*Video).Duration (HANDOFF-097).
+	// (the provider default). VideoOpenRouter and VideoGrok send it as the
+	// JSON integer `duration`; VideoVeo and VideoVertexVeo send it as the JSON
+	// number parameters.durationSeconds (HANDOFF-097, HANDOFF-100). Set it via
+	// (*Video).Duration.
 	DurationSeconds int
 
 	// AspectRatio is the output aspect ratio, such as "16:9"; "" means unset.
-	// Only the VideoOpenRouter wire shape sends it, as `aspect_ratio`. Set it
-	// via (*Video).AspectRatio (HANDOFF-097).
+	// Sent as `aspect_ratio` or parameters.aspectRatio, on the same wire
+	// shapes as DurationSeconds. Set it via (*Video).AspectRatio.
 	AspectRatio string
 
 	// Resolution is the output resolution, such as "720p"; "" means unset.
-	// Only the VideoOpenRouter wire shape sends it, as `resolution`. Set it
-	// via (*Video).Resolution (HANDOFF-097).
+	// Sent as `resolution` or parameters.resolution, on the same wire shapes
+	// as DurationSeconds. Set it via (*Video).Resolution.
 	Resolution string
 }
 
@@ -281,8 +283,7 @@ func dispatchVideoSubmit(
 		// Veo (Gemini API) and Vertex Veo share the submit body: the model is in
 		// the PATH (:predictLongRunning), not the body, so the body has no model
 		// field. The prompt nests under instances[]; the optional parameters
-		// object ({aspectRatio, resolution} for Gemini; {sampleCount, storageUri}
-		// for Vertex) is omitted on the prompt-only hot path.
+		// object is omitted on the prompt-only hot path.
 		instance := map[string]any{"prompt": joinPromptText(parts)}
 		// First frame (BUG-089): the seed rides at instances[0].image as raw
 		// base64 + mimeType (no data: prefix), per the Vertex Veo reference
@@ -302,6 +303,7 @@ func dispatchVideoSubmit(
 			instance["lastFrame"] = veoImage(req.LastFrame)
 		}
 		body = map[string]any{"instances": []map[string]any{instance}}
+		params := map[string]any{}
 		if len(req.ReferenceImages) > 0 {
 			refs := make([]map[string]any, 0, len(req.ReferenceImages))
 			for i := range req.ReferenceImages {
@@ -311,7 +313,23 @@ func dispatchVideoSubmit(
 				})
 			}
 			instance["referenceImages"] = refs
-			body["parameters"] = map[string]any{"durationSeconds": 8}
+			params["durationSeconds"] = 8
+		}
+		// Video options (HANDOFF-100): parameters.durationSeconds (a JSON
+		// number), aspectRatio and resolution, each only when set. With
+		// reference images validateVideoOptions allows only 8, so a set
+		// duration matches the forced 8.
+		if req.DurationSeconds > 0 {
+			params["durationSeconds"] = req.DurationSeconds
+		}
+		if req.AspectRatio != "" {
+			params["aspectRatio"] = req.AspectRatio
+		}
+		if req.Resolution != "" {
+			params["resolution"] = req.Resolution
+		}
+		if len(params) > 0 {
+			body["parameters"] = params
 		}
 	case providers.VideoShapeBedrock:
 		// Nova Reel carries the model in the BODY (modelId, unlike the Converse
@@ -347,19 +365,7 @@ func dispatchVideoSubmit(
 			}
 			body["frame_images"] = frames
 		}
-		// Video options (HANDOFF-097): body-root fields, each sent only when
-		// set, so the prompt-only body stays {model, prompt}. duration is a
-		// JSON integer; validateVideoOptions has already checked each value
-		// against the model.
-		if req.DurationSeconds > 0 {
-			body["duration"] = req.DurationSeconds
-		}
-		if req.AspectRatio != "" {
-			body["aspect_ratio"] = req.AspectRatio
-		}
-		if req.Resolution != "" {
-			body["resolution"] = req.Resolution
-		}
+		setRootVideoOptions(body, req)
 	case providers.VideoShapeGrok, providers.VideoShapeZhipu, providers.VideoShapeTogether,
 		providers.VideoShapeMinimax, providers.VideoShapeVidu:
 		body = map[string]any{
@@ -377,6 +383,11 @@ func dispatchVideoSubmit(
 		}
 		if seed != "" {
 			body["image"] = map[string]any{"url": seed}
+		}
+		// Only VideoGrok in this arm sends the options (HANDOFF-100); the
+		// other shapes reject a set option in validateVideoOptions.
+		if vgCfg.WireShape == providers.VideoShapeGrok {
+			setRootVideoOptions(body, req)
 		}
 	default:
 		return "", fmt.Errorf("video submit: unsupported wire shape %q", vgCfg.WireShape)
@@ -1187,21 +1198,51 @@ func validateVideoFrames(model *providers.VideoModelDef, imageCount int, req Vid
 	return nil
 }
 
+// setRootVideoOptions sets the body-root duration, aspect_ratio and
+// resolution of the VideoOpenRouter and VideoGrok bodies (HANDOFF-097,
+// HANDOFF-100), each only when set, so the prompt-only body stays
+// {model, prompt}. duration is a JSON integer; validateVideoOptions has
+// already checked each value against the model.
+func setRootVideoOptions(body map[string]any, req VideoRequest) {
+	if req.DurationSeconds > 0 {
+		body["duration"] = req.DurationSeconds
+	}
+	if req.AspectRatio != "" {
+		body["aspect_ratio"] = req.AspectRatio
+	}
+	if req.Resolution != "" {
+		body["resolution"] = req.Resolution
+	}
+}
+
+// videoShapeSendsOptions reports whether a video wire shape has body fields
+// for duration, aspect ratio and resolution (HANDOFF-097, HANDOFF-100).
+func videoShapeSendsOptions(shape string) bool {
+	switch shape {
+	case providers.VideoShapeOpenRouter, providers.VideoShapeGrok,
+		providers.VideoShapeVeo, providers.VideoShapeVertexVeo:
+		return true
+	}
+	return false
+}
+
 // validateVideoOptions rejects a duration, aspect ratio or resolution the
 // provider or the model cannot take, before any HTTP call (HANDOFF-097). The
 // rules run in this order in every SDK, so a request that breaks two gets the
 // same error:
 //
-//  1. A set option on a wire shape other than VideoOpenRouter: that shape has
-//     no body field for it, and sending nothing would drop it silently. The
+//  1. A set option on a wire shape with no body field for it (see
+//     videoShapeSendsOptions): sending nothing would drop it silently. The
 //     first set option is named, in the order duration, aspect_ratio,
 //     resolution.
 //  2. A negative duration.
 //  3. A duration above the model's MaxDurationSeconds (0 = no known limit).
-//  4. A resolution the model does not list (empty list = no fixed set).
-//  5. An aspect ratio the model does not list (empty list = no fixed set).
+//  4. A duration other than 8 with reference images: Veo forces 8 seconds
+//     (ai.google.dev/gemini-api/docs/veo, read 2026-10-19; HANDOFF-100).
+//  5. A resolution the model does not list (empty list = no fixed set).
+//  6. An aspect ratio the model does not list (empty list = no fixed set).
 func validateVideoOptions(providerName string, vgCfg *providers.VideoGenDef, model *providers.VideoModelDef, req VideoRequest) error {
-	if vgCfg.WireShape != providers.VideoShapeOpenRouter {
+	if !videoShapeSendsOptions(vgCfg.WireShape) {
 		for _, opt := range []struct {
 			field string
 			set   bool
@@ -1221,6 +1262,8 @@ func validateVideoOptions(providerName string, vgCfg *providers.VideoGenDef, mod
 		return &ValidationError{Field: "duration", Message: "must be positive"}
 	case req.DurationSeconds > 0 && model.MaxDurationSeconds > 0 && req.DurationSeconds > model.MaxDurationSeconds:
 		return &ValidationError{Field: "duration", Message: fmt.Sprintf("%s takes at most %d seconds, got %d", model.ModelID, model.MaxDurationSeconds, req.DurationSeconds)}
+	case req.DurationSeconds > 0 && len(req.ReferenceImages) > 0 && req.DurationSeconds != 8:
+		return &ValidationError{Field: "duration", Message: fmt.Sprintf("reference images take 8 seconds, got %d", req.DurationSeconds)}
 	case req.Resolution != "" && len(model.Resolutions) > 0 && !contains(model.Resolutions, req.Resolution):
 		return &ValidationError{Field: "resolution", Message: model.ModelID + " does not support resolution " + req.Resolution}
 	case req.AspectRatio != "" && len(model.AspectRatios) > 0 && !contains(model.AspectRatios, req.AspectRatio):
