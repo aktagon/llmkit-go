@@ -270,7 +270,7 @@ func VideoGenConfig(provider string) *VideoGenDef {
 					MaxDurationSeconds:      15,
 					OutputMime:              "video/mp4",
 					Resolutions:             []string{"1080p", "480p", "4K", "720p"},
-					AspectRatios:            []string{"16:9", "1:1", "21:9", "3:4", "4:3", "9:16"},
+					AspectRatios:            []string{"16:9", "1:1", "21:9", "3:4", "4:3", "9:16", "9:21"},
 					MaxInputImages:          0,
 				},
 				{
@@ -282,7 +282,7 @@ func VideoGenConfig(provider string) *VideoGenDef {
 					MaxDurationSeconds:      15,
 					OutputMime:              "video/mp4",
 					Resolutions:             []string{"480p", "720p"},
-					AspectRatios:            []string{"16:9", "1:1", "21:9", "3:4", "4:3", "9:16"},
+					AspectRatios:            []string{"16:9", "1:1", "21:9", "3:4", "4:3", "9:16", "9:21"},
 					MaxInputImages:          0,
 				},
 				{
