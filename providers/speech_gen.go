@@ -12,18 +12,30 @@ const (
 	SpeechShapeXAI     = "SpeechXAI"
 )
 
+// Support is a catalogue fact with three states (decision 009): the zero
+// value SupportUnknown means no source states it, and only SupportNo
+// blocks a request before send.
+type Support int
+
+const (
+	SupportUnknown Support = iota
+	SupportYes
+	SupportNo
+)
+
 // SpeechModelDef describes one speech-generation model. SampleRateHz is
 // an ADR-037 advisory fact (queryable, never gated); 0 when unverified.
-// MaxSpeakers is the speaker count a multi-speaker request declares; 0
-// means the model takes one voice only. SupportsSpeechStyle says whether
-// a style (Style, AddStyledLine) is sent to the model.
+// MaxSpeakers is the speaker count the model takes (1 or 2); 0 means
+// unknown, and an unknown count sends the request. SupportsSpeechStyle
+// says whether the provider accepts a style (Style, AddStyledLine) for
+// the model; only SupportNo rejects one.
 type SpeechModelDef struct {
 	ModelID             string
 	Label               string
 	OutputMime          string
 	SampleRateHz        int
 	MaxSpeakers         int
-	SupportsSpeechStyle bool
+	SupportsSpeechStyle Support
 }
 
 // SpeechGenDef holds one provider's speech-generation configuration.
@@ -35,6 +47,12 @@ type SpeechGenDef struct {
 	GenEndpoint   string // override; empty = use provider main endpoint
 	Models        []SpeechModelDef
 	BaseURL       string // speech API base when it differs from the chat base; "" = use chat base
+	// CarriesSpeechStyle: llmkit's body for this config can carry a style;
+	// false rejects a style for every model of the config.
+	CarriesSpeechStyle bool
+	// MultiSpeaker: the config has a multi-speaker body, so it can carry
+	// speakers; false rejects speakers for every model of the config.
+	MultiSpeaker bool
 }
 
 // SpeechGenConfig returns the speech-generation config for a provider, or
@@ -53,7 +71,7 @@ func SpeechGenConfig(provider string) *SpeechGenDef {
 					OutputMime:          "audio/l16",
 					SampleRateHz:        0,
 					MaxSpeakers:         0,
-					SupportsSpeechStyle: false,
+					SupportsSpeechStyle: SupportUnknown,
 				},
 				{
 					ModelID:             "gemini-3.8-flash-lite-tts",
@@ -61,7 +79,7 @@ func SpeechGenConfig(provider string) *SpeechGenDef {
 					OutputMime:          "audio/wav",
 					SampleRateHz:        24000,
 					MaxSpeakers:         2,
-					SupportsSpeechStyle: true,
+					SupportsSpeechStyle: SupportYes,
 				},
 				{
 					ModelID:             "gemini-3.8-flash-tts",
@@ -69,10 +87,12 @@ func SpeechGenConfig(provider string) *SpeechGenDef {
 					OutputMime:          "audio/wav",
 					SampleRateHz:        24000,
 					MaxSpeakers:         2,
-					SupportsSpeechStyle: true,
+					SupportsSpeechStyle: SupportYes,
 				},
 			},
-			BaseURL: "",
+			BaseURL:            "",
+			CarriesSpeechStyle: true,
+			MultiSpeaker:       true,
 		}
 	case Grok:
 		return &SpeechGenDef{
@@ -86,10 +106,12 @@ func SpeechGenConfig(provider string) *SpeechGenDef {
 					OutputMime:          "audio/mpeg",
 					SampleRateHz:        24000,
 					MaxSpeakers:         0,
-					SupportsSpeechStyle: true,
+					SupportsSpeechStyle: SupportYes,
 				},
 			},
-			BaseURL: "",
+			BaseURL:            "",
+			CarriesSpeechStyle: false,
+			MultiSpeaker:       false,
 		}
 	case Inworld:
 		return &SpeechGenDef{
@@ -103,7 +125,7 @@ func SpeechGenConfig(provider string) *SpeechGenDef {
 					OutputMime:          "audio/wav",
 					SampleRateHz:        0,
 					MaxSpeakers:         0,
-					SupportsSpeechStyle: false,
+					SupportsSpeechStyle: SupportNo,
 				},
 				{
 					ModelID:             "inworld-tts-1.5-mini",
@@ -111,7 +133,7 @@ func SpeechGenConfig(provider string) *SpeechGenDef {
 					OutputMime:          "audio/wav",
 					SampleRateHz:        0,
 					MaxSpeakers:         0,
-					SupportsSpeechStyle: false,
+					SupportsSpeechStyle: SupportNo,
 				},
 				{
 					ModelID:             "inworld-tts-2",
@@ -119,10 +141,12 @@ func SpeechGenConfig(provider string) *SpeechGenDef {
 					OutputMime:          "audio/wav",
 					SampleRateHz:        0,
 					MaxSpeakers:         0,
-					SupportsSpeechStyle: true,
+					SupportsSpeechStyle: SupportYes,
 				},
 			},
-			BaseURL: "",
+			BaseURL:            "",
+			CarriesSpeechStyle: false,
+			MultiSpeaker:       false,
 		}
 	case Minimax:
 		return &SpeechGenDef{
@@ -136,7 +160,7 @@ func SpeechGenConfig(provider string) *SpeechGenDef {
 					OutputMime:          "audio/mpeg",
 					SampleRateHz:        0,
 					MaxSpeakers:         0,
-					SupportsSpeechStyle: true,
+					SupportsSpeechStyle: SupportYes,
 				},
 				{
 					ModelID:             "speech-2.6-turbo",
@@ -144,7 +168,7 @@ func SpeechGenConfig(provider string) *SpeechGenDef {
 					OutputMime:          "audio/mpeg",
 					SampleRateHz:        0,
 					MaxSpeakers:         0,
-					SupportsSpeechStyle: true,
+					SupportsSpeechStyle: SupportYes,
 				},
 				{
 					ModelID:             "speech-2.8-hd",
@@ -152,7 +176,7 @@ func SpeechGenConfig(provider string) *SpeechGenDef {
 					OutputMime:          "audio/mpeg",
 					SampleRateHz:        0,
 					MaxSpeakers:         0,
-					SupportsSpeechStyle: true,
+					SupportsSpeechStyle: SupportYes,
 				},
 				{
 					ModelID:             "speech-2.8-turbo",
@@ -160,10 +184,12 @@ func SpeechGenConfig(provider string) *SpeechGenDef {
 					OutputMime:          "audio/mpeg",
 					SampleRateHz:        0,
 					MaxSpeakers:         0,
-					SupportsSpeechStyle: true,
+					SupportsSpeechStyle: SupportYes,
 				},
 			},
-			BaseURL: "https://api.minimax.io",
+			BaseURL:            "https://api.minimax.io",
+			CarriesSpeechStyle: false,
+			MultiSpeaker:       false,
 		}
 	case OpenAI:
 		return &SpeechGenDef{
@@ -177,7 +203,7 @@ func SpeechGenConfig(provider string) *SpeechGenDef {
 					OutputMime:          "audio/mpeg",
 					SampleRateHz:        0,
 					MaxSpeakers:         0,
-					SupportsSpeechStyle: true,
+					SupportsSpeechStyle: SupportYes,
 				},
 				{
 					ModelID:             "tts-1",
@@ -185,7 +211,7 @@ func SpeechGenConfig(provider string) *SpeechGenDef {
 					OutputMime:          "audio/mpeg",
 					SampleRateHz:        0,
 					MaxSpeakers:         0,
-					SupportsSpeechStyle: false,
+					SupportsSpeechStyle: SupportNo,
 				},
 				{
 					ModelID:             "tts-1-hd",
@@ -193,10 +219,12 @@ func SpeechGenConfig(provider string) *SpeechGenDef {
 					OutputMime:          "audio/mpeg",
 					SampleRateHz:        0,
 					MaxSpeakers:         0,
-					SupportsSpeechStyle: false,
+					SupportsSpeechStyle: SupportNo,
 				},
 			},
-			BaseURL: "",
+			BaseURL:            "",
+			CarriesSpeechStyle: true,
+			MultiSpeaker:       false,
 		}
 	case Openrouter:
 		return &SpeechGenDef{
@@ -210,7 +238,7 @@ func SpeechGenConfig(provider string) *SpeechGenDef {
 					OutputMime:          "audio/mpeg",
 					SampleRateHz:        0,
 					MaxSpeakers:         1,
-					SupportsSpeechStyle: false,
+					SupportsSpeechStyle: SupportNo,
 				},
 				{
 					ModelID:             "elevenlabs/eleven-v4",
@@ -218,7 +246,7 @@ func SpeechGenConfig(provider string) *SpeechGenDef {
 					OutputMime:          "audio/mpeg",
 					SampleRateHz:        0,
 					MaxSpeakers:         1,
-					SupportsSpeechStyle: false,
+					SupportsSpeechStyle: SupportNo,
 				},
 				{
 					ModelID:             "elevenlabs/eleven-v4-turbo",
@@ -226,7 +254,7 @@ func SpeechGenConfig(provider string) *SpeechGenDef {
 					OutputMime:          "audio/mpeg",
 					SampleRateHz:        0,
 					MaxSpeakers:         1,
-					SupportsSpeechStyle: false,
+					SupportsSpeechStyle: SupportNo,
 				},
 				{
 					ModelID:             "fish-audio/drama-3",
@@ -234,7 +262,7 @@ func SpeechGenConfig(provider string) *SpeechGenDef {
 					OutputMime:          "audio/mpeg",
 					SampleRateHz:        0,
 					MaxSpeakers:         0,
-					SupportsSpeechStyle: true,
+					SupportsSpeechStyle: SupportYes,
 				},
 				{
 					ModelID:             "fish-audio/s2.1-pro",
@@ -242,7 +270,7 @@ func SpeechGenConfig(provider string) *SpeechGenDef {
 					OutputMime:          "audio/mpeg",
 					SampleRateHz:        0,
 					MaxSpeakers:         0,
-					SupportsSpeechStyle: true,
+					SupportsSpeechStyle: SupportYes,
 				},
 				{
 					ModelID:             "google/gemini-3.1-flash-tts-preview",
@@ -250,7 +278,7 @@ func SpeechGenConfig(provider string) *SpeechGenDef {
 					OutputMime:          "audio/mpeg",
 					SampleRateHz:        0,
 					MaxSpeakers:         0,
-					SupportsSpeechStyle: true,
+					SupportsSpeechStyle: SupportYes,
 				},
 				{
 					ModelID:             "google/gemini-3.8-flash-lite-tts",
@@ -258,7 +286,7 @@ func SpeechGenConfig(provider string) *SpeechGenDef {
 					OutputMime:          "audio/mpeg",
 					SampleRateHz:        0,
 					MaxSpeakers:         0,
-					SupportsSpeechStyle: true,
+					SupportsSpeechStyle: SupportYes,
 				},
 				{
 					ModelID:             "google/gemini-3.8-flash-tts",
@@ -266,7 +294,7 @@ func SpeechGenConfig(provider string) *SpeechGenDef {
 					OutputMime:          "audio/mpeg",
 					SampleRateHz:        0,
 					MaxSpeakers:         0,
-					SupportsSpeechStyle: true,
+					SupportsSpeechStyle: SupportYes,
 				},
 				{
 					ModelID:             "hexgrad/kokoro-82m",
@@ -274,7 +302,7 @@ func SpeechGenConfig(provider string) *SpeechGenDef {
 					OutputMime:          "audio/mpeg",
 					SampleRateHz:        0,
 					MaxSpeakers:         1,
-					SupportsSpeechStyle: false,
+					SupportsSpeechStyle: SupportNo,
 				},
 				{
 					ModelID:             "x-ai/grok-voice-tts-1.0",
@@ -282,10 +310,12 @@ func SpeechGenConfig(provider string) *SpeechGenDef {
 					OutputMime:          "audio/mpeg",
 					SampleRateHz:        0,
 					MaxSpeakers:         1,
-					SupportsSpeechStyle: false,
+					SupportsSpeechStyle: SupportNo,
 				},
 			},
-			BaseURL: "",
+			BaseURL:            "",
+			CarriesSpeechStyle: false,
+			MultiSpeaker:       false,
 		}
 	default:
 		return nil

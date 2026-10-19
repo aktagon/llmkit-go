@@ -101,7 +101,7 @@ func generateSpeech(ctx context.Context, p Provider, req SpeechRequest, opts ...
 	if model == nil {
 		return SpeechResponse{}, &ValidationError{Field: "model", Message: req.Model + " is not a known speech-generation model for " + p.Name}
 	}
-	if err := validateSpeechModel(req, model); err != nil {
+	if err := validateSpeechModel(req, sgCfg, model); err != nil {
 		return SpeechResponse{}, err
 	}
 
@@ -330,18 +330,20 @@ func validateSpeechInputs(req SpeechRequest) error {
 	return nil
 }
 
-// validateSpeechModel checks the request against the model's speaker and
-// style facts (BUG-091).
-func validateSpeechModel(req SpeechRequest, model *providers.SpeechModelDef) error {
+// validateSpeechModel checks the request against what the config's body can
+// carry and the model's stated speaker and style facts (BUG-091). An unknown
+// model fact sends the request; only a stated false or a stated speaker count
+// that does not match blocks it (decision 009, HANDOFF-099).
+func validateSpeechModel(req SpeechRequest, cfg *providers.SpeechGenDef, model *providers.SpeechModelDef) error {
 	if len(req.Speakers) > 0 {
-		if model.MaxSpeakers == 0 {
+		if !cfg.MultiSpeaker || model.MaxSpeakers == 1 {
 			return &ValidationError{Field: "speakers", Message: model.ModelID + " does not support multiple speakers"}
 		}
-		if len(req.Speakers) != model.MaxSpeakers {
+		if model.MaxSpeakers != 0 && len(req.Speakers) != model.MaxSpeakers {
 			return &ValidationError{Field: "speakers", Message: fmt.Sprintf("exactly %d speakers are required, got %d", model.MaxSpeakers, len(req.Speakers))}
 		}
 	}
-	if !model.SupportsSpeechStyle && speechHasStyle(req) {
+	if speechHasStyle(req) && (!cfg.CarriesSpeechStyle || model.SupportsSpeechStyle == providers.SupportNo) {
 		return &ValidationError{Field: "style", Message: model.ModelID + " does not support a speech style"}
 	}
 	return nil
