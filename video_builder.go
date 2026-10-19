@@ -21,6 +21,9 @@ func (b *Video) Submit(ctx context.Context, finalText string) (VideoHandle, erro
 		OutputURI:       b.outputURI,
 		LastFrame:       b.lastFrame,
 		ReferenceImages: b.referenceImages,
+		DurationSeconds: b.duration,
+		AspectRatio:     b.aspectRatio,
+		Resolution:      b.resolution,
 	}
 
 	var opts []VideoOption
