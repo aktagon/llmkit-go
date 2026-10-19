@@ -49,6 +49,21 @@ type VideoRequest struct {
 	// maxVideoReferenceImages, never with a first or last frame. Set them on
 	// the builder via (*Video).AddReferenceImage (BUG-089).
 	ReferenceImages []MediaRef
+
+	// DurationSeconds is the video length in whole seconds; 0 means unset
+	// (the provider default). Only the VideoOpenRouter wire shape sends it,
+	// as the JSON integer `duration`. Set it via (*Video).Duration (HANDOFF-097).
+	DurationSeconds int
+
+	// AspectRatio is the output aspect ratio, such as "16:9"; "" means unset.
+	// Only the VideoOpenRouter wire shape sends it, as `aspect_ratio`. Set it
+	// via (*Video).AspectRatio (HANDOFF-097).
+	AspectRatio string
+
+	// Resolution is the output resolution, such as "720p"; "" means unset.
+	// Only the VideoOpenRouter wire shape sends it, as `resolution`. Set it
+	// via (*Video).Resolution (HANDOFF-097).
+	Resolution string
 }
 
 // maxVideoReferenceImages is the most asset reference images a Veo request
@@ -166,6 +181,9 @@ func submitVideo(ctx context.Context, p Provider, req VideoRequest, opts ...Vide
 		}
 	}
 	if err := validateVideoFrames(model, imageCount, req); err != nil {
+		return VideoHandle{}, err
+	}
+	if err := validateVideoOptions(p.Name, vgCfg, model, req); err != nil {
 		return VideoHandle{}, err
 	}
 	// ADR-096: the carried inputs select the submit request; a config with
@@ -328,6 +346,19 @@ func dispatchVideoSubmit(
 				frames = append(frames, openRouterFrame(req.LastFrame, "last_frame"))
 			}
 			body["frame_images"] = frames
+		}
+		// Video options (HANDOFF-097): body-root fields, each sent only when
+		// set, so the prompt-only body stays {model, prompt}. duration is a
+		// JSON integer; validateVideoOptions has already checked each value
+		// against the model.
+		if req.DurationSeconds > 0 {
+			body["duration"] = req.DurationSeconds
+		}
+		if req.AspectRatio != "" {
+			body["aspect_ratio"] = req.AspectRatio
+		}
+		if req.Resolution != "" {
+			body["resolution"] = req.Resolution
 		}
 	default:
 		body = map[string]any{
@@ -1149,6 +1180,48 @@ func validateVideoFrames(model *providers.VideoModelDef, imageCount int, req Vid
 		return &ValidationError{Field: "reference_images", Message: "cannot be combined with a first or last frame"}
 	case req.LastFrame != nil && imageCount == 0:
 		return &ValidationError{Field: "last_frame", Message: "requires a first frame"}
+	}
+	return nil
+}
+
+// validateVideoOptions rejects a duration, aspect ratio or resolution the
+// provider or the model cannot take, before any HTTP call (HANDOFF-097). The
+// rules run in this order in every SDK, so a request that breaks two gets the
+// same error:
+//
+//  1. A set option on a wire shape other than VideoOpenRouter: that shape has
+//     no body field for it, and sending nothing would drop it silently. The
+//     first set option is named, in the order duration, aspect_ratio,
+//     resolution.
+//  2. A negative duration.
+//  3. A duration above the model's MaxDurationSeconds (0 = no known limit).
+//  4. A resolution the model does not list (empty list = no fixed set).
+//  5. An aspect ratio the model does not list (empty list = no fixed set).
+func validateVideoOptions(providerName string, vgCfg *providers.VideoGenDef, model *providers.VideoModelDef, req VideoRequest) error {
+	if vgCfg.WireShape != providers.VideoShapeOpenRouter {
+		for _, opt := range []struct {
+			field string
+			set   bool
+		}{
+			{"duration", req.DurationSeconds != 0},
+			{"aspect_ratio", req.AspectRatio != ""},
+			{"resolution", req.Resolution != ""},
+		} {
+			if opt.set {
+				return &ValidationError{Field: opt.field, Message: fmt.Sprintf("%s video does not send %s", providerName, opt.field)}
+			}
+		}
+		return nil
+	}
+	switch {
+	case req.DurationSeconds < 0:
+		return &ValidationError{Field: "duration", Message: "must be positive"}
+	case req.DurationSeconds > 0 && model.MaxDurationSeconds > 0 && req.DurationSeconds > model.MaxDurationSeconds:
+		return &ValidationError{Field: "duration", Message: fmt.Sprintf("%s takes at most %d seconds, got %d", model.ModelID, model.MaxDurationSeconds, req.DurationSeconds)}
+	case req.Resolution != "" && len(model.Resolutions) > 0 && !contains(model.Resolutions, req.Resolution):
+		return &ValidationError{Field: "resolution", Message: model.ModelID + " does not support resolution " + req.Resolution}
+	case req.AspectRatio != "" && len(model.AspectRatios) > 0 && !contains(model.AspectRatios, req.AspectRatio):
+		return &ValidationError{Field: "aspect_ratio", Message: model.ModelID + " does not support aspect ratio " + req.AspectRatio}
 	}
 	return nil
 }
