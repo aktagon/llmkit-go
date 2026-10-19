@@ -9,6 +9,7 @@ const (
 	SpeechShapeOpenAI  = "SpeechOpenAI"
 	SpeechShapeGemini  = "SpeechGemini"
 	SpeechShapeMiniMax = "SpeechMiniMax"
+	SpeechShapeXAI     = "SpeechXAI"
 )
 
 // SpeechModelDef describes one speech-generation model. SampleRateHz is
@@ -29,7 +30,7 @@ type SpeechModelDef struct {
 // GenEndpoint is an override; empty means reuse the provider's main
 // endpoint template.
 type SpeechGenDef struct {
-	WireShape     string // SpeechShapeInworld | SpeechShapeOpenAI | SpeechShapeGemini | SpeechShapeMiniMax
+	WireShape     string // SpeechShapeInworld | SpeechShapeOpenAI | SpeechShapeGemini | SpeechShapeMiniMax | SpeechShapeXAI
 	AudioEncoding string // base64Envelope | rawBody | base64InteractionSteps | hexEnvelope (ADR-051 OAA-002)
 	GenEndpoint   string // override; empty = use provider main endpoint
 	Models        []SpeechModelDef
@@ -69,6 +70,23 @@ func SpeechGenConfig(provider string) *SpeechGenDef {
 					SampleRateHz:        24000,
 					MaxSpeakers:         2,
 					SupportsSpeechStyle: true,
+				},
+			},
+			BaseURL: "",
+		}
+	case Grok:
+		return &SpeechGenDef{
+			WireShape:     "SpeechXAI",
+			AudioEncoding: "rawBody",
+			GenEndpoint:   "/v1/tts",
+			Models: []SpeechModelDef{
+				{
+					ModelID:             "grok-tts",
+					Label:               "Grok TTS",
+					OutputMime:          "audio/mpeg",
+					SampleRateHz:        0,
+					MaxSpeakers:         0,
+					SupportsSpeechStyle: false,
 				},
 			},
 			BaseURL: "",
