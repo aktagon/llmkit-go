@@ -264,85 +264,8 @@ func generateImage(ctx context.Context, p Provider, req ImageRequest, opts ...Im
 		return ImageResponse{}, err
 	}
 
-	// Per-request-shape knob validation. Quality, OutputFormat, Background
-	// are OpenAI-only on the wire; Count (n) is OpenAI + xAI + Recraft;
-	// Mask rides only the OpenAI multipart edits body. Catch
-	// mismatches here so the runtime returns a clean ValidationError
-	// instead of shipping the field and waiting for the provider to
-	// reject (or silently ignore) it. Mirrors llmkit.go sampling-knob
-	// validation.
-	if o.mask != nil && variant.Shape != providers.MultipartForm {
-		if variant.Shape == providers.JSONGenerationsOpenAI {
-			return ImageResponse{}, &ValidationError{Field: "mask", Message: "requires at least one image part (edits branch only)"}
-		}
-		return ImageResponse{}, &ValidationError{Field: "mask", Message: "not supported by " + p.Name}
-	}
-	switch variant.Shape {
-	case providers.InlineParts: // Google
-		if o.quality != "" {
-			return ImageResponse{}, &ValidationError{Field: "quality", Message: "not supported by " + p.Name}
-		}
-		if o.outputFormat != "" {
-			return ImageResponse{}, &ValidationError{Field: "output_format", Message: "not supported by " + p.Name}
-		}
-		if o.background != "" {
-			return ImageResponse{}, &ValidationError{Field: "background", Message: "not supported by " + p.Name}
-		}
-		if o.count != nil {
-			return ImageResponse{}, &ValidationError{Field: "count", Message: "not supported by " + p.Name}
-		}
-		if o.safetyFilter != "" {
-			return ImageResponse{}, &ValidationError{Field: "safety_filter", Message: "not supported by " + p.Name + "; use SafetySettings for text-gen"}
-		}
-		// safetySettings valid for InlineParts (Google); wired in buildImageBody
-	case providers.JSONInlineRefs: // xAI Grok
-		if o.quality != "" {
-			return ImageResponse{}, &ValidationError{Field: "quality", Message: "not supported by " + p.Name}
-		}
-		if o.outputFormat != "" {
-			return ImageResponse{}, &ValidationError{Field: "output_format", Message: "not supported by " + p.Name}
-		}
-		if o.background != "" {
-			return ImageResponse{}, &ValidationError{Field: "background", Message: "not supported by " + p.Name}
-		}
-		if o.safetyFilter != "" {
-			return ImageResponse{}, &ValidationError{Field: "safety_filter", Message: "not supported by " + p.Name}
-		}
-		if len(o.safetySettings) > 0 {
-			return ImageResponse{}, &ValidationError{Field: "safety_settings", Message: "not supported by " + p.Name}
-		}
-	case providers.JSONGenerationsOpenAI, providers.MultipartForm: // OpenAI
-		if o.safetyFilter != "" {
-			return ImageResponse{}, &ValidationError{Field: "safety_filter", Message: "not supported by " + p.Name}
-		}
-		if len(o.safetySettings) > 0 {
-			return ImageResponse{}, &ValidationError{Field: "safety_settings", Message: "not supported by " + p.Name}
-		}
-	case providers.JSONGenerations, providers.JSONGenerationsInputRefs: // Recraft, OpenRouter
-		// Recraft's flat generations body carries only size (-> `size`) and
-		// count (-> `n`); aspect_ratio is not a Recraft wire field (it sizes
-		// by an explicit WxH `size`), and the gpt-image / safety knobs are
-		// OpenAI / Google only. JSONGenerationsInputRefs is the same body
-		// plus input_references, so the same knobs apply. Style and other
-		// provider-specific knobs ride ExtraFields.
-		if o.aspectRatio != "" {
-			return ImageResponse{}, &ValidationError{Field: "aspect_ratio", Message: "not supported by " + p.Name + "; use ImageSize (Recraft sizes by WxH)"}
-		}
-		if o.quality != "" {
-			return ImageResponse{}, &ValidationError{Field: "quality", Message: "not supported by " + p.Name}
-		}
-		if o.outputFormat != "" {
-			return ImageResponse{}, &ValidationError{Field: "output_format", Message: "not supported by " + p.Name}
-		}
-		if o.background != "" {
-			return ImageResponse{}, &ValidationError{Field: "background", Message: "not supported by " + p.Name}
-		}
-		if o.safetyFilter != "" {
-			return ImageResponse{}, &ValidationError{Field: "safety_filter", Message: "not supported by " + p.Name}
-		}
-		if len(o.safetySettings) > 0 {
-			return ImageResponse{}, &ValidationError{Field: "safety_settings", Message: "not supported by " + p.Name}
-		}
+	if err := validateImageShapeOptions(p.Name, variant.Shape, o); err != nil {
+		return ImageResponse{}, err
 	}
 
 	baseEvent := providers.Event{
@@ -380,6 +303,92 @@ func generateImage(ctx context.Context, p Provider, req ImageRequest, opts ...Im
 	postEv.Duration = time.Since(start)
 	firePost(ctx, o.middleware, postEv)
 	return resp, parseErr
+}
+
+// validateImageShapeOptions is the per-request-shape knob validation. Quality, OutputFormat, Background
+// are OpenAI-only on the wire; Count (n) is OpenAI + xAI + Recraft;
+// Mask rides only the OpenAI multipart edits body. Catch
+// mismatches here so the runtime returns a clean ValidationError
+// instead of shipping the field and waiting for the provider to
+// reject (or silently ignore) it. Mirrors llmkit.go sampling-knob
+// validation.
+func validateImageShapeOptions(providerName, shape string, o *imageOptions) error {
+	if o.mask != nil && shape != providers.MultipartForm {
+		if shape == providers.JSONGenerationsOpenAI {
+			return &ValidationError{Field: "mask", Message: "requires at least one image part (edits branch only)"}
+		}
+		return &ValidationError{Field: "mask", Message: "not supported by " + providerName}
+	}
+	switch shape {
+	case providers.InlineParts: // Google
+		if o.quality != "" {
+			return &ValidationError{Field: "quality", Message: "not supported by " + providerName}
+		}
+		if o.outputFormat != "" {
+			return &ValidationError{Field: "output_format", Message: "not supported by " + providerName}
+		}
+		if o.background != "" {
+			return &ValidationError{Field: "background", Message: "not supported by " + providerName}
+		}
+		if o.count != nil {
+			return &ValidationError{Field: "count", Message: "not supported by " + providerName}
+		}
+		if o.safetyFilter != "" {
+			return &ValidationError{Field: "safety_filter", Message: "not supported by " + providerName + "; use SafetySettings for text-gen"}
+		}
+		// safetySettings valid for InlineParts (Google); wired in buildImageBody
+	case providers.JSONInlineRefs: // xAI Grok
+		if o.quality != "" {
+			return &ValidationError{Field: "quality", Message: "not supported by " + providerName}
+		}
+		if o.outputFormat != "" {
+			return &ValidationError{Field: "output_format", Message: "not supported by " + providerName}
+		}
+		if o.background != "" {
+			return &ValidationError{Field: "background", Message: "not supported by " + providerName}
+		}
+		if o.safetyFilter != "" {
+			return &ValidationError{Field: "safety_filter", Message: "not supported by " + providerName}
+		}
+		if len(o.safetySettings) > 0 {
+			return &ValidationError{Field: "safety_settings", Message: "not supported by " + providerName}
+		}
+	case providers.JSONGenerationsOpenAI, providers.MultipartForm: // OpenAI
+		if o.safetyFilter != "" {
+			return &ValidationError{Field: "safety_filter", Message: "not supported by " + providerName}
+		}
+		if len(o.safetySettings) > 0 {
+			return &ValidationError{Field: "safety_settings", Message: "not supported by " + providerName}
+		}
+	case providers.JSONGenerations, providers.JSONGenerationsInputRefs: // Recraft, OpenRouter
+		// Recraft's flat generations body carries only size (-> `size`) and
+		// count (-> `n`); aspect_ratio is not a Recraft wire field (it sizes
+		// by an explicit WxH `size`), and the gpt-image / safety knobs are
+		// OpenAI / Google only. JSONGenerationsInputRefs is the same body
+		// plus input_references, so the same knobs apply. Style and other
+		// provider-specific knobs ride ExtraFields.
+		if o.aspectRatio != "" {
+			return &ValidationError{Field: "aspect_ratio", Message: "not supported by " + providerName + "; use ImageSize (Recraft sizes by WxH)"}
+		}
+		if o.quality != "" {
+			return &ValidationError{Field: "quality", Message: "not supported by " + providerName}
+		}
+		if o.outputFormat != "" {
+			return &ValidationError{Field: "output_format", Message: "not supported by " + providerName}
+		}
+		if o.background != "" {
+			return &ValidationError{Field: "background", Message: "not supported by " + providerName}
+		}
+		if o.safetyFilter != "" {
+			return &ValidationError{Field: "safety_filter", Message: "not supported by " + providerName}
+		}
+		if len(o.safetySettings) > 0 {
+			return &ValidationError{Field: "safety_settings", Message: "not supported by " + providerName}
+		}
+	default:
+		return fmt.Errorf("image request shape %q has no body builder", shape)
+	}
+	return nil
 }
 
 // validateImageArity rejects image parts the model does not take.
@@ -839,6 +848,9 @@ func parseImageResponse(imgCfg *providers.ImageGenDef, provider string, body []b
 		// OpenAI/xAI/Recraft data[].b64_json shape. SVG bytes (Recraft vector
 		// models) are sniffed to image/svg+xml inside parseImageResponseDataArray.
 		return parseImageResponseDataArray(raw, imgCfg.UsageInputPath, imgCfg.UsageOutputPath, imgCfg.UsageReasoningPath), nil
+	case "GoogleParts":
+	default:
+		return ImageResponse{}, fmt.Errorf("image: unsupported response shape %q", imgCfg.ResponseShape)
 	}
 
 	// GoogleParts: candidates[].content.parts inline data.

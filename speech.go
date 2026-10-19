@@ -182,15 +182,17 @@ func dispatchSpeechHTTP(
 	var body map[string]any
 	switch sgCfg.WireShape {
 	case providers.SpeechShapeOpenAI:
-		body = buildOpenAISpeechBody(req)
+		body = buildOpenAISpeechBody(req, sgCfg.RequestedOutputFormat)
 	case providers.SpeechShapeGemini:
 		body = buildGeminiSpeechBody(req)
 	case providers.SpeechShapeMiniMax:
 		body = buildMiniMaxSpeechBody(req)
 	case providers.SpeechShapeXAI:
-		body = buildXAISpeechBody(req)
-	default: // SpeechShapeInworld
-		body = buildInworldSpeechBody(req)
+		body = buildXAISpeechBody(req, sgCfg.RequestedOutputFormat)
+	case providers.SpeechShapeInworld:
+		body = buildInworldSpeechBody(req, sgCfg.RequestedOutputFormat)
+	default:
+		return nil, fmt.Errorf("speech: unsupported wire shape %q", sgCfg.WireShape)
 	}
 	jsonBody, err := json.Marshal(body)
 	if err != nil {
@@ -200,16 +202,16 @@ func dispatchSpeechHTTP(
 }
 
 // buildInworldSpeechBody assembles the Inworld /tts/v1/voice request body.
-// Slice 1 sends a fixed audioConfig (LINEAR16/22050 -> WAV output) and the
-// BALANCED delivery mode; format/sample-rate selection is a later slice
+// audioEncoding is the config's requested output format (LINEAR16 -> WAV
+// output); the sample rate (22050) and the BALANCED delivery mode are fixed
 // (ADR-049 OQ-5).
-func buildInworldSpeechBody(req SpeechRequest) map[string]any {
+func buildInworldSpeechBody(req SpeechRequest, audioEncoding string) map[string]any {
 	return map[string]any{
 		"text":    req.Text,
 		"voiceId": req.Voice,
 		"modelId": req.Model,
 		"audioConfig": map[string]any{
-			"audioEncoding":   "LINEAR16",
+			"audioEncoding":   audioEncoding,
 			"sampleRateHertz": 22050,
 		},
 		"deliveryMode": "BALANCED",
@@ -217,16 +219,15 @@ func buildInworldSpeechBody(req SpeechRequest) map[string]any {
 }
 
 // buildOpenAISpeechBody assembles the OpenAI /v1/audio/speech request body.
-// Slice 1 fixes response_format=mp3 (KISS; the model's outputMime is audio/mpeg
-// to match), so the response body is mp3 audio bytes. Format selection is a
-// later slice (ADR-051).
+// response_format is the config's requested output format (mp3; the model's
+// outputMime is audio/mpeg to match), so the response body is mp3 audio bytes.
 // Style is sent as instructions (BUG-091), which gpt-4o-mini-tts accepts.
-func buildOpenAISpeechBody(req SpeechRequest) map[string]any {
+func buildOpenAISpeechBody(req SpeechRequest, responseFormat string) map[string]any {
 	body := map[string]any{
 		"model":           req.Model,
 		"input":           req.Text,
 		"voice":           req.Voice,
-		"response_format": "mp3",
+		"response_format": responseFormat,
 	}
 	if req.Style != "" {
 		body["instructions"] = req.Style
@@ -289,12 +290,12 @@ func buildMiniMaxSpeechBody(req SpeechRequest) map[string]any {
 // The endpoint has no model field. language is always "auto" (llmkit has no
 // language option), and with_timestamps is never sent: it switches the reply
 // from raw audio bytes to JSON.
-func buildXAISpeechBody(req SpeechRequest) map[string]any {
+func buildXAISpeechBody(req SpeechRequest, codec string) map[string]any {
 	return map[string]any{
 		"text":          req.Text,
 		"voice_id":      req.Voice,
 		"language":      "auto",
-		"output_format": map[string]any{"codec": "mp3"},
+		"output_format": map[string]any{"codec": codec},
 	}
 }
 
@@ -399,12 +400,14 @@ func parseSpeechResponse(providerName, audioEncoding, fallbackMime string, body 
 			return SpeechResponse{}, fmt.Errorf("%s speech response: unmarshal: %w", providerName, err)
 		}
 		return parseHexEnvelopeSpeechResponse(providerName, raw, fallbackMime)
-	default: // base64Envelope
+	case "base64Envelope":
 		var raw map[string]any
 		if err := json.Unmarshal(body, &raw); err != nil {
 			return SpeechResponse{}, fmt.Errorf("%s speech response: unmarshal: %w", providerName, err)
 		}
 		return parseInworldSpeechResponse(providerName, raw, fallbackMime)
+	default:
+		return SpeechResponse{}, fmt.Errorf("speech: unsupported audio encoding %q", audioEncoding)
 	}
 }
 

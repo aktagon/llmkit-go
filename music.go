@@ -211,9 +211,12 @@ func dispatchMusicHTTP(
 		body := buildMinimaxMusicBody(parts, model)
 		return postMusicJSON(ctx, client, base+mgCfg.GenEndpoint, body, headers)
 
-	default: // MusicShapeGenerateContent (Gemini)
+	case providers.MusicShapeGenerateContent:
 		body := buildGeminiMusicBody(parts)
 		return postMusicJSON(ctx, client, buildMusicURL(p, cfg, mgCfg, model), body, headers)
+
+	default:
+		return nil, fmt.Errorf("music: unsupported wire shape %q", mgCfg.WireShape)
 	}
 }
 
@@ -380,8 +383,10 @@ func parseMusicResponse(wireShape, fallbackMime string, body []byte) (MusicRespo
 		return parseVertexMusicResponse(raw, fallbackMime), nil
 	case providers.MusicShapeMinimax:
 		return parseMinimaxMusicResponse(raw, fallbackMime), nil
-	default:
+	case providers.MusicShapeGenerateContent:
 		return parseGeminiMusicResponse(raw, fallbackMime), nil
+	default:
+		return MusicResponse{}, fmt.Errorf("music: unsupported wire shape %q", wireShape)
 	}
 }
 

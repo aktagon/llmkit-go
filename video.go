@@ -360,7 +360,8 @@ func dispatchVideoSubmit(
 		if req.Resolution != "" {
 			body["resolution"] = req.Resolution
 		}
-	default:
+	case providers.VideoShapeGrok, providers.VideoShapeZhipu, providers.VideoShapeTogether,
+		providers.VideoShapeMinimax, providers.VideoShapeVidu:
 		body = map[string]any{
 			"model":  model,
 			"prompt": joinPromptText(parts),
@@ -377,6 +378,8 @@ func dispatchVideoSubmit(
 		if seed != "" {
 			body["image"] = map[string]any{"url": seed}
 		}
+	default:
+		return "", fmt.Errorf("video submit: unsupported wire shape %q", vgCfg.WireShape)
 	}
 	jsonBody, err := json.Marshal(body)
 	if err != nil {
