@@ -145,7 +145,8 @@ func generateSpeech(ctx context.Context, p Provider, req SpeechRequest, opts ...
 // SpeechOpenAI is a flat-JSON POST whose response body is the raw audio bytes;
 // SpeechGemini is an Interactions API POST whose audio sits in steps[];
 // SpeechMiniMax is a flat-JSON POST whose response carries hex audio at
-// data.audio.
+// data.audio; SpeechXAI is a flat-JSON POST whose response body is the raw
+// audio bytes.
 // Query-param-key providers (Google) carry the key in the URL, as on every
 // other Google call; doPost redacts the URL from transport errors (VULN-001).
 func dispatchSpeechHTTP(
@@ -186,6 +187,8 @@ func dispatchSpeechHTTP(
 		body = buildGeminiSpeechBody(req)
 	case providers.SpeechShapeMiniMax:
 		body = buildMiniMaxSpeechBody(req)
+	case providers.SpeechShapeXAI:
+		body = buildXAISpeechBody(req)
 	default: // SpeechShapeInworld
 		body = buildInworldSpeechBody(req)
 	}
@@ -282,6 +285,19 @@ func buildMiniMaxSpeechBody(req SpeechRequest) map[string]any {
 	}
 }
 
+// buildXAISpeechBody assembles the xAI /v1/tts request body (HANDOFF-095).
+// The endpoint has no model field. language is always "auto" (llmkit has no
+// language option), and with_timestamps is never sent: it switches the reply
+// from raw audio bytes to JSON.
+func buildXAISpeechBody(req SpeechRequest) map[string]any {
+	return map[string]any{
+		"text":          req.Text,
+		"voice_id":      req.Voice,
+		"language":      "auto",
+		"output_format": map[string]any{"codec": "mp3"},
+	}
+}
+
 // validateSpeechInputs checks the request on its own, before the provider
 // config is read (BUG-091). The messages are the same in every SDK.
 func validateSpeechInputs(req SpeechRequest) error {
@@ -362,7 +378,7 @@ func findSpeechModel(cfg *providers.SpeechGenDef, modelID string) *providers.Spe
 }
 
 // parseSpeechResponse decodes the synthesized audio per the wire shape's audio
-// response encoding (ADR-051 OAA-002). "rawBody" (OpenAI) takes the response
+// response encoding (ADR-051 OAA-002). "rawBody" (OpenAI, xAI) takes the response
 // body verbatim as the audio bytes; "base64Envelope" (Inworld) parses a JSON
 // envelope and base64-decodes the audio field; "hexEnvelope" (MiniMax)
 // hex-decodes data.audio and raises on a nonzero base_resp. A 2xx body that does not parse
