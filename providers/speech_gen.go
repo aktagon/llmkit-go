@@ -42,11 +42,12 @@ type SpeechModelDef struct {
 // GenEndpoint is an override; empty means reuse the provider's main
 // endpoint template.
 type SpeechGenDef struct {
-	WireShape     string // SpeechShapeInworld | SpeechShapeOpenAI | SpeechShapeGemini | SpeechShapeMiniMax | SpeechShapeXAI
-	AudioEncoding string // base64Envelope | rawBody | base64InteractionSteps | hexEnvelope (ADR-051 OAA-002)
-	GenEndpoint   string // override; empty = use provider main endpoint
-	Models        []SpeechModelDef
-	BaseURL       string // speech API base when it differs from the chat base; "" = use chat base
+	WireShape             string // SpeechShapeInworld | SpeechShapeOpenAI | SpeechShapeGemini | SpeechShapeMiniMax | SpeechShapeXAI
+	AudioEncoding         string // base64Envelope | rawBody | base64InteractionSteps | hexEnvelope (ADR-051 OAA-002)
+	RequestedOutputFormat string // format token the body sends (mp3, LINEAR16); "" = the body sends no format (HANDOFF-098)
+	GenEndpoint           string // override; empty = use provider main endpoint
+	Models                []SpeechModelDef
+	BaseURL               string // speech API base when it differs from the chat base; "" = use chat base
 	// CarriesSpeechStyle: llmkit's body for this config can carry a style;
 	// false rejects a style for every model of the config.
 	CarriesSpeechStyle bool
@@ -61,9 +62,10 @@ func SpeechGenConfig(provider string) *SpeechGenDef {
 	switch ProviderName(provider) {
 	case Google:
 		return &SpeechGenDef{
-			WireShape:     "SpeechGemini",
-			AudioEncoding: "base64InteractionSteps",
-			GenEndpoint:   "/v1beta/interactions",
+			WireShape:             "SpeechGemini",
+			AudioEncoding:         "base64InteractionSteps",
+			RequestedOutputFormat: "",
+			GenEndpoint:           "/v1beta/interactions",
 			Models: []SpeechModelDef{
 				{
 					ModelID:             "gemini-3.1-flash-tts-preview",
@@ -96,9 +98,10 @@ func SpeechGenConfig(provider string) *SpeechGenDef {
 		}
 	case Grok:
 		return &SpeechGenDef{
-			WireShape:     "SpeechXAI",
-			AudioEncoding: "rawBody",
-			GenEndpoint:   "/v1/tts",
+			WireShape:             "SpeechXAI",
+			AudioEncoding:         "rawBody",
+			RequestedOutputFormat: "mp3",
+			GenEndpoint:           "/v1/tts",
 			Models: []SpeechModelDef{
 				{
 					ModelID:             "grok-tts",
@@ -115,9 +118,10 @@ func SpeechGenConfig(provider string) *SpeechGenDef {
 		}
 	case Inworld:
 		return &SpeechGenDef{
-			WireShape:     "SpeechInworld",
-			AudioEncoding: "base64Envelope",
-			GenEndpoint:   "/tts/v1/voice",
+			WireShape:             "SpeechInworld",
+			AudioEncoding:         "base64Envelope",
+			RequestedOutputFormat: "LINEAR16",
+			GenEndpoint:           "/tts/v1/voice",
 			Models: []SpeechModelDef{
 				{
 					ModelID:             "inworld-tts-1.5-max",
@@ -150,9 +154,10 @@ func SpeechGenConfig(provider string) *SpeechGenDef {
 		}
 	case Minimax:
 		return &SpeechGenDef{
-			WireShape:     "SpeechMiniMax",
-			AudioEncoding: "hexEnvelope",
-			GenEndpoint:   "/v1/t2a_v2",
+			WireShape:             "SpeechMiniMax",
+			AudioEncoding:         "hexEnvelope",
+			RequestedOutputFormat: "",
+			GenEndpoint:           "/v1/t2a_v2",
 			Models: []SpeechModelDef{
 				{
 					ModelID:             "speech-2.6-hd",
@@ -193,9 +198,10 @@ func SpeechGenConfig(provider string) *SpeechGenDef {
 		}
 	case OpenAI:
 		return &SpeechGenDef{
-			WireShape:     "SpeechOpenAI",
-			AudioEncoding: "rawBody",
-			GenEndpoint:   "/v1/audio/speech",
+			WireShape:             "SpeechOpenAI",
+			AudioEncoding:         "rawBody",
+			RequestedOutputFormat: "mp3",
+			GenEndpoint:           "/v1/audio/speech",
 			Models: []SpeechModelDef{
 				{
 					ModelID:             "gpt-4o-mini-tts",
@@ -228,9 +234,10 @@ func SpeechGenConfig(provider string) *SpeechGenDef {
 		}
 	case Openrouter:
 		return &SpeechGenDef{
-			WireShape:     "SpeechOpenAI",
-			AudioEncoding: "rawBody",
-			GenEndpoint:   "/v1/audio/speech",
+			WireShape:             "SpeechOpenAI",
+			AudioEncoding:         "rawBody",
+			RequestedOutputFormat: "mp3",
+			GenEndpoint:           "/v1/audio/speech",
 			Models: []SpeechModelDef{
 				{
 					ModelID:             "elevenlabs/eleven-v3",
