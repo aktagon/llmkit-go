@@ -1,5 +1,5 @@
-// Example: text-to-image generation against Google's Nano Banana 2 (Gemini
-// 3.1 Flash Image), with a follow-up edit pass that uses the first output as
+// Example: text-to-image generation against Google's Nano Banana 2.1
+// (gemini-nano-banana-2.1), with a follow-up edit pass that uses the first output as
 // a reference image. Demonstrates both the terse `Prompt:` sugar form and
 // the canonical `Parts: []Part{...}` form for editing. Writes PNGs to the
 // working directory.
@@ -17,7 +17,7 @@ import (
 	"github.com/aktagon/llmkit-go/v3/providers"
 )
 
-const flashModel = "gemini-3.1-flash-image-preview"
+const flashModel = "gemini-nano-banana-2.1"
 
 func main() {
 	key := os.Getenv("GOOGLE_API_KEY")

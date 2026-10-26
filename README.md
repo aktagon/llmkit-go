@@ -234,7 +234,7 @@ editing or composition. Use the typed-builder chain on `c.Image`:
 
 ```go
 c := llmkit.New(providers.Google, key)
-resp, err := c.Image.Model("gemini-3.1-flash-image-preview").
+resp, err := c.Image.Model("gemini-nano-banana-2.1").
     AspectRatio("16:9").ImageSize("2K").
     Generate(ctx, "A nano banana dish in a fancy restaurant")
 os.WriteFile("out.png", resp.Images[0].Bytes, 0o644)
@@ -244,7 +244,7 @@ For editing or compositional generation, accumulate text and image
 parts on the chain — the on-wire ordering matches the call order:
 
 ```go
-resp, err := c.Image.Model("gemini-3.1-flash-image-preview").
+resp, err := c.Image.Model("gemini-nano-banana-2.1").
     Text("Person:").Image("image/png", personBytes).
     Text("Outfit:").Image("image/png", outfitBytes).
     Generate(ctx, "Generate the person wearing the outfit.")
@@ -260,7 +260,7 @@ trusts the API boundary instead of carrying a stale list.
 
 | Provider | Model                          | Aspect ratios                                                                   | Sizes                               |
 | -------- | ------------------------------ | ------------------------------------------------------------------------------- | ----------------------------------- |
-| Google   | Nano Banana 2 (Flash)          | 1:1, 2:3, 3:2, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9, 21:9, **1:4, 4:1, 1:8, 8:1**     | 512, 1K, 2K, 4K                     |
+| Google   | Nano Banana 2.1                | 1:1, 2:3, 3:2, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9, 21:9, **1:4, 4:1, 1:8, 8:1**     | 1K, 2K, 4K                          |
 | Google   | Nano Banana Pro                | 1:1, 2:3, 3:2, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9, 21:9                             | 1K, 2K, 4K                          |
 | OpenAI   | gpt-image-2 / 1.5 / 1 / 1-mini | n/a (size only)                                                                 | any (e.g. `1024x1024`, `1536x1024`) |
 | xAI      | grok-imagine-image-quality     | 1:1, 2:3, 3:2, 3:4, 4:3, 9:16, 16:9, 1:2, 2:1, 19.5:9, 9:19.5, 20:9, 9:20, auto | 1k, 2k                              |
