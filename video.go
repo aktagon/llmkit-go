@@ -52,8 +52,8 @@ type VideoRequest struct {
 
 	// DurationSeconds is the video length in whole seconds; 0 means unset
 	// (the provider default). VideoOpenRouter and VideoGrok send it as the
-	// JSON integer `duration`; VideoVeo and VideoVertexVeo send it as the JSON
-	// number parameters.durationSeconds (HANDOFF-097, HANDOFF-100). Set it via
+	// JSON integer `duration`; VideoVertexVeo sends it as the JSON number
+	// parameters.durationSeconds (HANDOFF-097, HANDOFF-100). Set it via
 	// (*Video).Duration.
 	DurationSeconds int
 
@@ -68,8 +68,8 @@ type VideoRequest struct {
 	Resolution string
 }
 
-// maxVideoReferenceImages is the most asset reference images a Veo request
-// takes (Gemini API and Vertex Veo pages, read 2026-10-15).
+// maxVideoReferenceImages is the most asset reference images a Vertex Veo
+// request takes (Vertex Veo page, read 2026-10-15).
 const maxVideoReferenceImages = 3
 
 // VideoData, VideoResponse, and VideoHandle are declared in go/structs.go
@@ -279,15 +279,14 @@ func dispatchVideoSubmit(
 		}
 		headers = cloneStringMap(headers)
 		headers["Ai-trace-id"] = newVideoTraceID()
-	case providers.VideoShapeVeo, providers.VideoShapeVertexVeo:
-		// Veo (Gemini API) and Vertex Veo share the submit body: the model is in
-		// the PATH (:predictLongRunning), not the body, so the body has no model
-		// field. The prompt nests under instances[]; the optional parameters
+	case providers.VideoShapeVertexVeo:
+		// Vertex Veo carries the model in the PATH (:predictLongRunning), not
+		// the body, so the body has no model field. The prompt nests under instances[]; the optional parameters
 		// object is omitted on the prompt-only hot path.
 		instance := map[string]any{"prompt": joinPromptText(parts)}
 		// First frame (BUG-089): the seed rides at instances[0].image as raw
 		// base64 + mimeType (no data: prefix), per the Vertex Veo reference
-		// (read 2026-10-15). The Gemini API shape is not yet live-verified.
+		// (read 2026-10-15).
 		seed, err := videoSeedImage(parts)
 		if err != nil {
 			return "", err
@@ -297,8 +296,7 @@ func dispatchVideoSubmit(
 		}
 		// Last frame and asset reference images (BUG-089): same
 		// {bytesBase64Encoded, mimeType} wrapper. Reference images force an
-		// 8-second video, sent as the NUMBER 8 on both APIs (live 2026-10-15:
-		// the Gemini API rejects the string "8" its docs show).
+		// 8-second video, sent as the NUMBER 8.
 		if req.LastFrame != nil {
 			instance["lastFrame"] = veoImage(req.LastFrame)
 		}
@@ -541,8 +539,8 @@ func (h VideoHandle) Wait(ctx context.Context, opts ...VideoOption) (VideoRespon
 					return VideoResponse{}, err
 				}
 			}
-			// Delivery dispatch (VID-005). download-delivery providers (Veo)
-			// returned a temporary fetch URI in VideoData.URL; the SDK GETs it
+			// Delivery dispatch (VID-005). download-delivery providers
+			// (OpenRouter) returned a temporary fetch URI in VideoData.URL; the SDK GETs it
 			// and fills VideoData.Bytes (clearing URL, per the source-XOR
 			// contract). url- and output-uri-delivery providers leave the URL.
 			if vgCfg.OutputDelivery == providers.VideoDeliveryDownload {
@@ -597,8 +595,7 @@ func videoBaseURL(p Provider, cfg providerSpec, vgCfg *providers.VideoGenDef) st
 // videoPollURL builds the poll URL: the {id} placeholder in the config poll
 //
 // to the resolved video base. The handle is interpolated verbatim as a path
-// segment — Veo's operation name (models/.../operations/...) carries slashes
-// that are part of the LRO poll path, so it is intentionally not escaped.
+// segment; it is intentionally not escaped.
 func videoPollURL(pollEndpoint, base, id string) string {
 	return base + strings.Replace(pollEndpoint, "{id}", id, 1)
 }
@@ -704,7 +701,7 @@ func parseVideoPoll(vgCfg *providers.VideoGenDef, body []byte) (VideoResponse, b
 		case "completed":
 			// A completed poll without unsigned_urls[0] must be an error, not an
 			// empty success: download delivery would otherwise return no video
-			// (mirrors the Veo done-without-uri guard).
+			// (mirrors the Vertex Veo done-without-bytes guard).
 			result := videoResultFromOpenRouter(vgCfg, raw)
 			if len(result.Videos) == 0 || result.Videos[0].URL == "" {
 				return VideoResponse{}, false, fmt.Errorf("video generation: completed but carried no unsigned_urls")
@@ -742,33 +739,11 @@ func parseVideoPoll(vgCfg *providers.VideoGenDef, body []byte) (VideoResponse, b
 		default: // Queueing, Preparing, Processing (or any non-terminal status)
 			return VideoResponse{}, false, nil
 		}
-	case providers.VideoShapeVeo:
-		// Operation-based LRO: poll until done=true (the long-running-operation
-		// done flag, not a status string). A done op carrying an error object is
-		// a terminal failure; otherwise the response holds the finished video.
-		done, _ := raw["done"].(bool)
-		if !done {
-			return VideoResponse{}, false, nil
-		}
-		if errObj, ok := raw["error"].(map[string]any); ok {
-			msg, _ := errObj["message"].(string)
-			if msg == "" {
-				msg = "operation failed"
-			}
-			return VideoResponse{}, false, fmt.Errorf("video generation failed: %s", msg)
-		}
-		// A done op with neither error nor a usable uri must surface as an error,
-		// not a silent zero-byte success: download delivery would otherwise GET
-		// nothing and return a VideoData with empty Bytes and empty URL.
-		result := videoResultFromVeo(vgCfg, raw)
-		if len(result.Videos) == 0 || result.Videos[0].URL == "" {
-			return VideoResponse{}, false, fmt.Errorf("video generation: operation done but carried no video uri")
-		}
-		return result, true, nil
 	case providers.VideoShapeVertexVeo:
-		// Vertex Veo operation poll (fetchPredictOperation): same done/error LRO
-		// shape as Gemini Veo, but the finished video arrives as inline base64 in
-		// the poll body (response.videos[0].bytesBase64Encoded), not a fetch URI.
+		// Vertex Veo operation poll (fetchPredictOperation), an LRO: poll until
+		// done=true; a done op carrying an error object is a
+		// terminal failure. The finished video arrives as inline base64 in the
+		// poll body (response.videos[0].bytesBase64Encoded), not a fetch URI.
 		done, _ := raw["done"].(bool)
 		if !done {
 			return VideoResponse{}, false, nil
@@ -784,8 +759,7 @@ func parseVideoPoll(vgCfg *providers.VideoGenDef, body []byte) (VideoResponse, b
 		if err != nil {
 			return VideoResponse{}, false, err
 		}
-		// Mirror the Veo done+no-uri guard: a done op carrying no decodable bytes
-		// must surface as an error, not a silent zero-byte success.
+		// A done op carrying no decodable bytes must surface as an error, not a silent zero-byte success.
 		if len(result.Videos) == 0 || len(result.Videos[0].Bytes) == 0 {
 			return VideoResponse{}, false, fmt.Errorf("video generation: operation done but carried no video bytes")
 		}
@@ -798,8 +772,8 @@ func parseVideoPoll(vgCfg *providers.VideoGenDef, body []byte) (VideoResponse, b
 		switch status {
 		case "Completed":
 			// A Completed invocation that echoes no output s3 uri must surface as
-			// an error, not a silent empty success (mirrors the Veo done+no-uri
-			// guard): the caller would otherwise get a "successful" VideoResponse
+			// an error, not a silent empty success (mirrors the Vertex Veo
+			// done-without-bytes guard): the caller would otherwise get a "successful" VideoResponse
 			// whose URL is empty and never find the mp4.
 			result := videoResultFromBedrock(vgCfg, raw)
 			if len(result.Videos) == 0 || result.Videos[0].URL == "" {
@@ -1032,33 +1006,9 @@ func videoResultFromMinimaxFile(vgCfg *providers.VideoGenDef, raw map[string]any
 	return VideoResponse{Videos: []VideoData{{MimeType: mime, URL: url}}}
 }
 
-// videoResultFromVeo extracts the finished video reference from a Veo LRO poll
-// response. Veo uses download delivery: the response carries a temporary
-// Files-API download URI at response.generateVideoResponse.generatedSamples[0]
-// .video.uri. parseVideoPoll places it in VideoData.URL; the Wait download
-// step (OutputDelivery=DeliveryDownload) then fetches the bytes into
-// VideoData.Bytes and clears URL.
-func videoResultFromVeo(vgCfg *providers.VideoGenDef, raw map[string]any) VideoResponse {
-	mime := videoFallbackMime(vgCfg)
-	response, _ := raw["response"].(map[string]any)
-	gvr, _ := response["generateVideoResponse"].(map[string]any)
-	samples, _ := gvr["generatedSamples"].([]any)
-	if len(samples) == 0 {
-		return VideoResponse{}
-	}
-	first, _ := samples[0].(map[string]any)
-	if first == nil {
-		return VideoResponse{}
-	}
-	video, _ := first["video"].(map[string]any)
-	uri, _ := video["uri"].(string)
-	return VideoResponse{Videos: []VideoData{{MimeType: mime, URL: uri}}}
-}
-
 // videoResultFromVertexVeo extracts the finished video from a Vertex Veo
-// fetchPredictOperation poll response. Unlike Gemini Veo (which returns a fetch
-// URI), Vertex Veo returns the bytes inline as base64 at
-// response.videos[0].bytesBase64Encoded with the mime at .mimeType. This is
+// fetchPredictOperation poll response. Vertex Veo returns the bytes inline as
+// base64 at response.videos[0].bytesBase64Encoded with the mime at .mimeType. This is
 // download delivery with NO fetch hop: the bytes are decoded straight into
 // VideoData.Bytes here and VideoData.URL stays empty, so the Wait download step
 // (downloadVideoBytes) finds no URL and no-ops — the source-XOR contract holds
@@ -1104,7 +1054,7 @@ func videoResultFromBedrock(vgCfg *providers.VideoGenDef, raw map[string]any) Vi
 }
 
 // downloadVideoBytes fetches the finished video for download-delivery providers
-// (vgCfg.OutputDelivery == DeliveryDownload, e.g. Veo). The poll result placed
+// (vgCfg.OutputDelivery == DeliveryDownload, e.g. OpenRouter). The poll result placed
 // the temporary fetch URI in VideoData.URL; this GETs each one (carrying the
 // provider's query-param auth when applicable) and moves the payload into
 // VideoData.Bytes, clearing URL so the source-XOR contract holds (VID-004):
@@ -1144,8 +1094,8 @@ func appendVideoAuth(url string, p Provider, cfg providerSpec) string {
 
 // videoSeedImage returns the single image-to-video seed frame, or nil on the
 // text-to-video hot path. Errors on more than one image part: every wired
-// image-to-video shape (Grok, BUG-010; Veo first frame, BUG-089) conditions on
-// a single seed frame, so rejecting is honest where silently using the first
+// image-to-video shape (Grok, BUG-010; Vertex Veo first frame, BUG-089)
+// conditions on a single seed frame, so rejecting is honest where silently using the first
 // would reintroduce the silent-drop bug.
 func videoSeedImage(parts []Part) (*MediaRef, error) {
 	var seed *MediaRef
@@ -1189,8 +1139,8 @@ func validateVideoFrames(model *providers.VideoModelDef, imageCount int, req Vid
 	case refs > maxVideoReferenceImages:
 		return &ValidationError{Field: "reference_images", Message: fmt.Sprintf("at most %d reference images, got %d", maxVideoReferenceImages, refs)}
 	case refs > 0 && (imageCount > 0 || req.LastFrame != nil):
-		// Live 2026-10-15: Veo answers 400 "Unsupported video generation
-		// request"; Vertex documents the inputs as exclusive.
+		// Vertex documents the inputs as exclusive (live 2026-10-15, the
+		// Gemini API Veo answered 400 "Unsupported video generation request").
 		return &ValidationError{Field: "reference_images", Message: "cannot be combined with a first or last frame"}
 	case req.LastFrame != nil && imageCount == 0:
 		return &ValidationError{Field: "last_frame", Message: "requires a first frame"}
@@ -1220,7 +1170,7 @@ func setRootVideoOptions(body map[string]any, req VideoRequest) {
 func videoShapeSendsOptions(shape string) bool {
 	switch shape {
 	case providers.VideoShapeOpenRouter, providers.VideoShapeGrok,
-		providers.VideoShapeVeo, providers.VideoShapeVertexVeo:
+		providers.VideoShapeVertexVeo:
 		return true
 	}
 	return false
