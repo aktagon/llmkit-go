@@ -68,14 +68,6 @@ func SpeechGenConfig(provider string) *SpeechGenDef {
 			GenEndpoint:           "/v1beta/interactions",
 			Models: []SpeechModelDef{
 				{
-					ModelID:             "gemini-3.1-flash-tts-preview",
-					Label:               "Gemini 3.1 Flash TTS Preview",
-					OutputMime:          "audio/l16",
-					SampleRateHz:        0,
-					MaxSpeakers:         1,
-					SupportsSpeechStyle: SupportNo,
-				},
-				{
 					ModelID:             "gemini-3.8-flash-lite-tts",
 					Label:               "Gemini 3.8 Flash-Lite TTS",
 					OutputMime:          "audio/wav",
