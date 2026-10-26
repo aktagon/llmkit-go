@@ -10,7 +10,6 @@ const (
 	VideoShapeTogether   = "VideoTogether"
 	VideoShapeQwen       = "VideoQwen"
 	VideoShapeMinimax    = "VideoMinimax"
-	VideoShapeVeo        = "VideoVeo"
 	VideoShapeBedrock    = "VideoBedrock"
 	VideoShapeVertexVeo  = "VideoVertexVeo"
 	VideoShapeVidu       = "VideoVidu"
@@ -94,61 +93,6 @@ func VideoGenConfig(provider string) *VideoGenDef {
 					Resolutions:             []string{"720p"},
 					AspectRatios:            []string{},
 					MaxInputImages:          0,
-				},
-			},
-		}
-	case Google:
-		return &VideoGenDef{
-			WireShape:      "VideoVeo",
-			OutputDelivery: "DeliveryDownload",
-			VideoBaseURL:   "",
-			Variants: []RequestVariant{
-				{Carries: []string{"TextOnly"}, Shape: "", Endpoint: "/v1beta/models/{model}:predictLongRunning"},
-				{Carries: []string{"WithReferenceImages"}, Shape: "", Endpoint: "/v1beta/models/{model}:predictLongRunning"},
-				{Carries: []string{"WithSeedFrame"}, Shape: "", Endpoint: "/v1beta/models/{model}:predictLongRunning"},
-				{Carries: []string{"WithSeedFrame", "WithLastFrame"}, Shape: "", Endpoint: "/v1beta/models/{model}:predictLongRunning"},
-			},
-			PollEndpoint:      "/v1beta/{id}",
-			FileEndpoint:      "",
-			CancelEndpoint:    "",
-			SubmitHandleField: "name",
-			RequiresOutputURI: false,
-			Models: []VideoModelDef{
-				{
-					ModelID:                 "veo-3.1-fast-generate-preview",
-					Label:                   "Veo 3.1 Fast",
-					SupportsImageToVideo:    true,
-					SupportsLastFrame:       true,
-					SupportsReferenceImages: true,
-					MaxDurationSeconds:      8,
-					OutputMime:              "video/mp4",
-					Resolutions:             []string{"1080p", "4k", "720p"},
-					AspectRatios:            []string{"16:9", "9:16"},
-					MaxInputImages:          1,
-				},
-				{
-					ModelID:                 "veo-3.1-generate-preview",
-					Label:                   "Veo 3.1",
-					SupportsImageToVideo:    true,
-					SupportsLastFrame:       true,
-					SupportsReferenceImages: true,
-					MaxDurationSeconds:      8,
-					OutputMime:              "video/mp4",
-					Resolutions:             []string{"1080p", "720p"},
-					AspectRatios:            []string{"16:9", "9:16"},
-					MaxInputImages:          1,
-				},
-				{
-					ModelID:                 "veo-3.1-lite-generate-preview",
-					Label:                   "Veo 3.1 Lite",
-					SupportsImageToVideo:    true,
-					SupportsLastFrame:       true,
-					SupportsReferenceImages: false,
-					MaxDurationSeconds:      8,
-					OutputMime:              "video/mp4",
-					Resolutions:             []string{"1080p", "720p"},
-					AspectRatios:            []string{"16:9", "9:16"},
-					MaxInputImages:          1,
 				},
 			},
 		}
