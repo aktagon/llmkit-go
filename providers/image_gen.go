@@ -94,10 +94,10 @@ func ImageGenConfig(provider string) *ImageGenDef {
 					SupportsImageInput: true,
 				},
 				{
-					ModelID:            "gemini-3.1-flash-image-preview",
-					Label:              "Nano Banana 2",
+					ModelID:            "gemini-nano-banana-2.1",
+					Label:              "Nano Banana 2.1",
 					AspectRatios:       []string{"16:9", "1:1", "1:4", "1:8", "21:9", "2:3", "3:2", "3:4", "4:1", "4:3", "4:5", "5:4", "8:1", "9:16"},
-					ImageSizes:         []string{"1K", "2K", "4K", "512"},
+					ImageSizes:         []string{"1K", "2K", "4K"},
 					MaxInputImages:     0,
 					SupportsImageInput: true,
 				},
