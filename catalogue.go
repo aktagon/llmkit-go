@@ -72,6 +72,7 @@ type catalogueConfig struct {
 	Endpoint    string
 	Pagination  string
 	CursorParam string
+	ListQuery   string
 	ParserKind  string
 	SpecURL     string
 	SpecFormat  string
@@ -92,7 +93,7 @@ var catalogueByProvider = map[string]catalogueConfig{
 	"moonshot":   {Endpoint: "/v1/models", Pagination: "PaginationNone", CursorParam: "", ParserKind: "ParseOpenAICohortModels"},
 	"ollama":     {Endpoint: "/v1/models", Pagination: "PaginationNone", CursorParam: "", ParserKind: "ParseOpenAICohortModels", SpecURL: "https://raw.githubusercontent.com/ollama/ollama/main/docs/openapi.yaml", SpecFormat: "OpenAPI3"},
 	"openai":     {Endpoint: "/v1/models", Pagination: "PaginationNone", CursorParam: "", ParserKind: "ParseOpenAICohortModels", SpecURL: "https://github.com/openai/openai-openapi/blob/master/openapi.yaml", SpecFormat: "OpenAPI3"},
-	"openrouter": {Endpoint: "/v1/models", Pagination: "PaginationNone", CursorParam: "", ParserKind: "ParseOpenAICohortModels", SpecURL: "https://openrouter.ai/openapi.json", SpecFormat: "OpenAPI3"},
+	"openrouter": {Endpoint: "/v1/models", Pagination: "PaginationNone", CursorParam: "", ParserKind: "ParseOpenAICohortModels", ListQuery: "output_modalities=all", SpecURL: "https://openrouter.ai/openapi.json", SpecFormat: "OpenAPI3"},
 	"qwen":       {Endpoint: "/v1/models", Pagination: "PaginationNone", CursorParam: "", ParserKind: "ParseOpenAICohortModels"},
 	"together":   {Endpoint: "/v1/models", Pagination: "PaginationNone", CursorParam: "", ParserKind: "ParseOpenAICohortModels", SpecURL: "https://raw.githubusercontent.com/togethercomputer/openapi/main/openapi.yaml", SpecFormat: "OpenAPI3"},
 	"vllm":       {Endpoint: "/v1/models", Pagination: "PaginationNone", CursorParam: "", ParserKind: "ParseOpenAICohortModels"},
