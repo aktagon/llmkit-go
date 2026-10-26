@@ -221,8 +221,7 @@ func paginate(ctx context.Context, httpClient *http.Client, p Provider, pcfg pro
 	var all []providers.ParsedModelRecord
 	headers := buildCatalogueHeaders(p, pcfg)
 	for {
-		reqURL := buildCatalogueURL(p, pcfg, cfg.Endpoint)
-		reqURL = appendCursor(reqURL, cfg.CursorParam, cursor)
+		reqURL := listPageURL(p, pcfg, cfg, cursor)
 		body, status, herr := doGetRaw(ctx, httpClient, reqURL, headers)
 		if mapped := mapCatalogueHTTPErr(status, body, herr); mapped != nil {
 			return nil, mapped
@@ -237,6 +236,21 @@ func paginate(ctx context.Context, httpClient *http.Client, p Provider, pcfg pro
 		}
 		cursor = page.NextCursor
 	}
+}
+
+// listPageURL is the URL of one list page: the endpoint, the provider's fixed
+// list query (BUG-107: OpenRouter lists text-output models only without
+// output_modalities=all), then the cursor. Get-by-id never sends the list query.
+func listPageURL(p Provider, pcfg providerSpec, cfg catalogueConfig, cursor string) string {
+	reqURL := buildCatalogueURL(p, pcfg, cfg.Endpoint)
+	if cfg.ListQuery != "" {
+		sep := "?"
+		if strings.Contains(reqURL, "?") {
+			sep = "&"
+		}
+		reqURL += sep + cfg.ListQuery
+	}
+	return appendCursor(reqURL, cfg.CursorParam, cursor)
 }
 
 // appendCursor splices the pagination cursor into the URL using the
