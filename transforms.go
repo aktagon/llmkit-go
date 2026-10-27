@@ -140,6 +140,18 @@ type msgResult struct {
 	result ToolResult
 }
 
+// msgPrompt is the final user turn of a Text, stream or batch request: the
+// prompt text plus the files and images attached to it (BUG-108). It is a
+// variant of its own because media rides only on this turn, and msgText
+// carries only {role, text}. requestMsgs appends it after the history, so
+// every transform reads one ordered list and never chooses between history
+// and prompt.
+type msgPrompt struct {
+	text   string
+	files  []File
+	images []InputImage
+}
+
 // msgTurn is an assistant turn the provider itself serialized, replayed
 // verbatim instead of rebuilt (ADR-085). It carries the fallback it replaces
 // so resolveTurns can drop back to reconstruction when the payload was
@@ -155,6 +167,22 @@ func (msgText) isMsg()   {}
 func (msgCalls) isMsg()  {}
 func (msgResult) isMsg() {}
 func (msgTurn) isMsg()   {}
+func (msgPrompt) isMsg() {}
+
+// requestMsgs is the one place a public Request becomes the message list the
+// transforms read: the validated history, then the prompt as the last user
+// turn. The Agent builds its list from trusted history instead
+// (agentHistoryToMsgs) and has no prompt to append.
+func requestMsgs(req Request) ([]msg, error) {
+	msgs, err := toInternal(req.Messages)
+	if err != nil {
+		return nil, err
+	}
+	if req.User != "" {
+		msgs = append(msgs, msgPrompt{text: req.User, files: req.Files, images: req.Images})
+	}
+	return msgs, nil
+}
 
 // toInternal converts the public, untrusted []Message into the internal sum.
 // This is the single carrier-validation boundary (PIPE-008): a message carrying
@@ -242,6 +270,17 @@ func flatProjectedEntries(m msg, cfg providerSpec, callT toolCallTransformFunc, 
 			"role":    mapRole(m.role, cfg.RoleMappings),
 			"content": m.text,
 		}}
+	case msgPrompt:
+		if len(m.files) == 0 && len(m.images) == 0 {
+			return []map[string]any{{
+				"role":    mapRole("user", cfg.RoleMappings),
+				"content": m.text,
+			}}
+		}
+		return []map[string]any{{
+			"role":    mapRole("user", cfg.RoleMappings),
+			"content": buildFlatContentParts(m, cfg),
+		}}
 	default:
 		panic(fmt.Sprintf("unhandled msg variant %T", m))
 	}
@@ -300,34 +339,18 @@ func buildFlatMessageArray(msgs []msg, req Request, cfg providerSpec) []any {
 		})
 	}
 
-	hasMedia := len(req.Files) > 0 || len(req.Images) > 0
-
-	if len(msgs) > 0 {
-		callT := selectToolCallTransform(cfg)
-		resultT := selectToolResultTransform(cfg)
-		for _, m := range msgs {
-			if turn, ok := m.(msgTurn); ok {
-				if next, ok := appendFlatReplayedTurn(out, turn, cfg); ok {
-					out = next
-					continue
-				}
-				m = turn.fallback
+	callT := selectToolCallTransform(cfg)
+	resultT := selectToolResultTransform(cfg)
+	for _, m := range msgs {
+		if turn, ok := m.(msgTurn); ok {
+			if next, ok := appendFlatReplayedTurn(out, turn, cfg); ok {
+				out = next
+				continue
 			}
-			for _, e := range flatProjectedEntries(m, cfg, callT, resultT) {
-				out = append(out, e)
-			}
+			m = turn.fallback
 		}
-	} else if req.User != "" {
-		if hasMedia {
-			out = append(out, map[string]any{
-				"role":    mapRole("user", cfg.RoleMappings),
-				"content": buildFlatContentParts(req, cfg),
-			})
-		} else {
-			out = append(out, map[string]any{
-				"role":    mapRole("user", cfg.RoleMappings),
-				"content": req.User,
-			})
+		for _, e := range flatProjectedEntries(m, cfg, callT, resultT) {
+			out = append(out, e)
 		}
 	}
 
@@ -335,12 +358,12 @@ func buildFlatMessageArray(msgs []msg, req Request, cfg providerSpec) []any {
 }
 
 // buildFlatContentParts builds a content array for OpenAI/Anthropic with files and images.
-func buildFlatContentParts(req Request, cfg providerSpec) []map[string]any {
+func buildFlatContentParts(req msgPrompt, cfg providerSpec) []map[string]any {
 	parts := []map[string]any{}
 
 	isAnthropic := cfg.ChatWireShape == providers.ChatAnthropic
 
-	for _, f := range req.Files {
+	for _, f := range req.files {
 		if isAnthropic {
 			parts = append(parts, map[string]any{
 				"type":   "document",
@@ -354,7 +377,7 @@ func buildFlatContentParts(req Request, cfg providerSpec) []map[string]any {
 		}
 	}
 
-	for _, img := range req.Images {
+	for _, img := range req.images {
 		if isAnthropic {
 			if strings.HasPrefix(img.URL, "data:") {
 				// base64 data URI
@@ -388,7 +411,7 @@ func buildFlatContentParts(req Request, cfg providerSpec) []map[string]any {
 		}
 	}
 
-	parts = append(parts, map[string]any{"type": "text", "text": req.User})
+	parts = append(parts, map[string]any{"type": "text", "text": req.text})
 	return parts
 }
 
@@ -455,26 +478,25 @@ func transformGoogleParts(body map[string]any, msgs []msg, req Request, cfg prov
 					"role":  mapRole(m.role, cfg.RoleMappings),
 					"parts": []map[string]any{{"text": m.text}},
 				})
+			case msgPrompt:
+				contents = append(contents, map[string]any{
+					"role":  mapRole("user", cfg.RoleMappings),
+					"parts": buildGoogleContentParts(m),
+				})
 			default:
 				panic(fmt.Sprintf("unhandled msg variant %T", m))
 			}
 		}
-	} else if req.User != "" {
-		parts := buildGoogleContentParts(req)
-		contents = append(contents, map[string]any{
-			"role":  mapRole("user", cfg.RoleMappings),
-			"parts": parts,
-		})
 	}
 
 	body["contents"] = contents
 }
 
 // buildGoogleContentParts builds a parts array for Google with files and images.
-func buildGoogleContentParts(req Request) []map[string]any {
+func buildGoogleContentParts(req msgPrompt) []map[string]any {
 	parts := []map[string]any{}
 
-	for _, f := range req.Files {
+	for _, f := range req.files {
 		parts = append(parts, map[string]any{
 			"file_data": map[string]any{
 				"file_uri":  f.URI,
@@ -483,7 +505,7 @@ func buildGoogleContentParts(req Request) []map[string]any {
 		})
 	}
 
-	for _, img := range req.Images {
+	for _, img := range req.images {
 		if strings.HasPrefix(img.URL, "data:") {
 			mimeType, data := parseDataURI(img.URL)
 			parts = append(parts, map[string]any{
@@ -507,7 +529,7 @@ func buildGoogleContentParts(req Request) []map[string]any {
 		}
 	}
 
-	parts = append(parts, map[string]any{"text": req.User})
+	parts = append(parts, map[string]any{"text": req.text})
 	return parts
 }
 
@@ -885,22 +907,20 @@ func transformBedrockConverse(body map[string]any, msgs []msg, req Request, cfg 
 					"role":    mapRole(m.role, cfg.RoleMappings),
 					"content": []map[string]any{{"text": m.text}},
 				})
+			case msgPrompt:
+				content := []map[string]any{{"text": m.text}}
+				if len(m.images) > 0 {
+					content = buildBedrockContentParts(m)
+				}
+				out = append(out, map[string]any{
+					"role":    mapRole("user", cfg.RoleMappings),
+					"content": content,
+				})
 			default:
 				panic(fmt.Sprintf("unhandled msg variant %T", m))
 			}
 			prevResult = isResult
 		}
-	} else if req.User != "" {
-		var content []map[string]any
-		if len(req.Images) > 0 {
-			content = buildBedrockContentParts(req)
-		} else {
-			content = []map[string]any{{"text": req.User}}
-		}
-		out = append(out, map[string]any{
-			"role":    mapRole("user", cfg.RoleMappings),
-			"content": content,
-		})
 	}
 	body["messages"] = out
 }
@@ -908,9 +928,9 @@ func transformBedrockConverse(body map[string]any, msgs []msg, req Request, cfg 
 // buildBedrockContentParts builds a Converse content array with image blocks
 // (ADR-060). Each image emits {image:{format,source:{bytes}}}; the prompt text
 // follows as a trailing {text} block, preserving caller order among images.
-func buildBedrockContentParts(req Request) []map[string]any {
+func buildBedrockContentParts(req msgPrompt) []map[string]any {
 	parts := []map[string]any{}
-	for _, img := range req.Images {
+	for _, img := range req.images {
 		mimeType, data := parseDataURI(img.URL)
 		if mimeType == "" {
 			mimeType = img.MimeType
@@ -922,7 +942,7 @@ func buildBedrockContentParts(req Request) []map[string]any {
 			},
 		})
 	}
-	parts = append(parts, map[string]any{"text": req.User})
+	parts = append(parts, map[string]any{"text": req.text})
 	return parts
 }
 
