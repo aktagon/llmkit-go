@@ -57,7 +57,7 @@ func promptStream(ctx context.Context, p Provider, req Request, callback StreamC
 		return Response{}, err
 	}
 
-	msgs, err := toInternal(req.Messages)
+	msgs, err := requestMsgs(req)
 	if err != nil {
 		return Response{}, err
 	}
@@ -515,17 +515,12 @@ func resolveOptionKey(provider, model string, param providers.OptionKey, support
 
 // buildRequest constructs the provider-specific request body and headers.
 //
-// msgs is the internal message sum (ADR-026 PIPE-007) — the Text/batch/stream
-// paths convert their public Message list via toInternal at the single
-// carrier-validation boundary (PIPE-008); the Agent builds it directly from its
-// trusted history (agentHistoryToMsgs), with no lossy public-Message hop.
-//
-// Deliberate scope limit (vs the TS slice): only multi-turn history flows
-// through the sum. The single-turn req.User path — which also carries media
-// (req.Files/req.Images) — is handled directly in each message transform's
-// else-branch, because msgText carries only {role, text}. Unifying it (a
-// media-carrying variant so single-turn input also flows through toInternal)
-// is tracked as a follow-up; see CLAUDE.md.
+// msgs is the internal message sum (ADR-026 PIPE-007) and the only conversation
+// input the message transforms read. The Text/batch/stream paths build it with
+// requestMsgs: the history, validated at the carrier boundary (PIPE-008), then
+// the prompt and its media as a final msgPrompt (BUG-108). The Agent builds it
+// directly from its trusted history (agentHistoryToMsgs), with no lossy
+// public-Message hop.
 //
 // tools is the Agent's tool set; the Text/batch paths pass nil, so the
 // tool-def step is a no-op there and their wire body stays byte-identical

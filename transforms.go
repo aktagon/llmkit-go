@@ -128,9 +128,37 @@ type msgResult struct {
 	result ToolResult
 }
 
+// msgPrompt is the final user turn of a Text, stream or batch request: the
+// prompt text plus the files and images attached to it (BUG-108). It is a
+// variant of its own because media rides only on this turn, and msgText
+// carries only {role, text}. requestMsgs appends it after the history, so
+// every transform reads one ordered list and never chooses between history
+// and prompt.
+type msgPrompt struct {
+	text   string
+	files  []File
+	images []InputImage
+}
+
 func (msgText) isMsg()   {}
 func (msgCalls) isMsg()  {}
 func (msgResult) isMsg() {}
+func (msgPrompt) isMsg() {}
+
+// requestMsgs is the one place a public Request becomes the message list the
+// transforms read: the validated history, then the prompt as the last user
+// turn. The Agent builds its list from trusted history instead
+// (agentHistoryToMsgs) and has no prompt to append.
+func requestMsgs(req Request) ([]msg, error) {
+	msgs, err := toInternal(req.Messages)
+	if err != nil {
+		return nil, err
+	}
+	if req.User != "" {
+		msgs = append(msgs, msgPrompt{text: req.User, files: req.Files, images: req.Images})
+	}
+	return msgs, nil
+}
 
 // toInternal converts the public, untrusted []Message into the internal sum.
 // This is the single carrier-validation boundary (PIPE-008): a message carrying
@@ -200,37 +228,33 @@ func buildFlatMessageArray(msgs []msg, req Request, cfg providerSpec) []map[stri
 		})
 	}
 
-	hasMedia := len(req.Files) > 0 || len(req.Images) > 0
-
-	if len(msgs) > 0 {
-		callT := selectToolCallTransform(cfg)
-		resultT := selectToolResultTransform(cfg)
-		for _, m := range msgs {
-			switch m := m.(type) {
-			case msgResult:
-				out = append(out, resultT(m.result, cfg.RoleMappings))
-			case msgCalls:
-				out = append(out, callT(m.calls, cfg.RoleMappings))
-			case msgText:
+	callT := selectToolCallTransform(cfg)
+	resultT := selectToolResultTransform(cfg)
+	for _, m := range msgs {
+		switch m := m.(type) {
+		case msgResult:
+			out = append(out, resultT(m.result, cfg.RoleMappings))
+		case msgCalls:
+			out = append(out, callT(m.calls, cfg.RoleMappings))
+		case msgText:
+			out = append(out, map[string]any{
+				"role":    mapRole(m.role, cfg.RoleMappings),
+				"content": m.text,
+			})
+		case msgPrompt:
+			if len(m.files) == 0 && len(m.images) == 0 {
 				out = append(out, map[string]any{
-					"role":    mapRole(m.role, cfg.RoleMappings),
+					"role":    mapRole("user", cfg.RoleMappings),
 					"content": m.text,
 				})
-			default:
-				panic(fmt.Sprintf("unhandled msg variant %T", m))
+			} else {
+				out = append(out, map[string]any{
+					"role":    mapRole("user", cfg.RoleMappings),
+					"content": buildFlatContentParts(m, cfg),
+				})
 			}
-		}
-	} else if req.User != "" {
-		if hasMedia {
-			out = append(out, map[string]any{
-				"role":    mapRole("user", cfg.RoleMappings),
-				"content": buildFlatContentParts(req, cfg),
-			})
-		} else {
-			out = append(out, map[string]any{
-				"role":    mapRole("user", cfg.RoleMappings),
-				"content": req.User,
-			})
+		default:
+			panic(fmt.Sprintf("unhandled msg variant %T", m))
 		}
 	}
 
@@ -238,12 +262,12 @@ func buildFlatMessageArray(msgs []msg, req Request, cfg providerSpec) []map[stri
 }
 
 // buildFlatContentParts builds a content array for OpenAI/Anthropic with files and images.
-func buildFlatContentParts(req Request, cfg providerSpec) []map[string]any {
+func buildFlatContentParts(req msgPrompt, cfg providerSpec) []map[string]any {
 	parts := []map[string]any{}
 
 	isAnthropic := cfg.ChatWireShape == providers.ChatAnthropic
 
-	for _, f := range req.Files {
+	for _, f := range req.files {
 		if isAnthropic {
 			parts = append(parts, map[string]any{
 				"type":   "document",
@@ -257,7 +281,7 @@ func buildFlatContentParts(req Request, cfg providerSpec) []map[string]any {
 		}
 	}
 
-	for _, img := range req.Images {
+	for _, img := range req.images {
 		if isAnthropic {
 			if strings.HasPrefix(img.URL, "data:") {
 				// base64 data URI
@@ -291,66 +315,63 @@ func buildFlatContentParts(req Request, cfg providerSpec) []map[string]any {
 		}
 	}
 
-	parts = append(parts, map[string]any{"type": "text", "text": req.User})
+	parts = append(parts, map[string]any{"type": "text", "text": req.text})
 	return parts
 }
 
 func transformGoogleParts(body map[string]any, msgs []msg, req Request, cfg providerSpec) {
 	contents := []map[string]any{}
 
-	if len(msgs) > 0 {
-		callT := selectToolCallTransform(cfg)
-		resultT := selectToolResultTransform(cfg)
-		// Google's wire identifies a tool result by the function NAME, but the
-		// universal ToolResult carries only ToolUseID. Recover id->name from the
-		// call turns, which always precede their result in a valid history, and
-		// resolve the result's name from it (overwriting the local copy's
-		// ToolUseID, which transformGoogleToolResultMsg emits as the wire name).
-		// The map is nil until the first tool call, so plain-text conversations
-		// allocate nothing; the agent path is unaffected (its extractor sets
-		// id==name), and an unmatched id passes through unchanged.
-		var idToName map[string]string
-		for _, m := range msgs {
-			switch m := m.(type) {
-			case msgResult:
-				r := m.result
-				if name := idToName[r.ToolUseID]; name != "" {
-					r.ToolUseID = name
-				}
-				contents = append(contents, resultT(r, cfg.RoleMappings))
-			case msgCalls:
-				if idToName == nil {
-					idToName = make(map[string]string)
-				}
-				for _, c := range m.calls {
-					idToName[c.ID] = c.Name
-				}
-				contents = append(contents, callT(m.calls, cfg.RoleMappings))
-			case msgText:
-				contents = append(contents, map[string]any{
-					"role":  mapRole(m.role, cfg.RoleMappings),
-					"parts": []map[string]any{{"text": m.text}},
-				})
-			default:
-				panic(fmt.Sprintf("unhandled msg variant %T", m))
+	callT := selectToolCallTransform(cfg)
+	resultT := selectToolResultTransform(cfg)
+	// Google's wire identifies a tool result by the function NAME, but the
+	// universal ToolResult carries only ToolUseID. Recover id->name from the
+	// call turns, which always precede their result in a valid history, and
+	// resolve the result's name from it (overwriting the local copy's
+	// ToolUseID, which transformGoogleToolResultMsg emits as the wire name).
+	// The map is nil until the first tool call, so plain-text conversations
+	// allocate nothing; the agent path is unaffected (its extractor sets
+	// id==name), and an unmatched id passes through unchanged.
+	var idToName map[string]string
+	for _, m := range msgs {
+		switch m := m.(type) {
+		case msgResult:
+			r := m.result
+			if name := idToName[r.ToolUseID]; name != "" {
+				r.ToolUseID = name
 			}
+			contents = append(contents, resultT(r, cfg.RoleMappings))
+		case msgCalls:
+			if idToName == nil {
+				idToName = make(map[string]string)
+			}
+			for _, c := range m.calls {
+				idToName[c.ID] = c.Name
+			}
+			contents = append(contents, callT(m.calls, cfg.RoleMappings))
+		case msgText:
+			contents = append(contents, map[string]any{
+				"role":  mapRole(m.role, cfg.RoleMappings),
+				"parts": []map[string]any{{"text": m.text}},
+			})
+		case msgPrompt:
+			contents = append(contents, map[string]any{
+				"role":  mapRole("user", cfg.RoleMappings),
+				"parts": buildGoogleContentParts(m),
+			})
+		default:
+			panic(fmt.Sprintf("unhandled msg variant %T", m))
 		}
-	} else if req.User != "" {
-		parts := buildGoogleContentParts(req)
-		contents = append(contents, map[string]any{
-			"role":  mapRole("user", cfg.RoleMappings),
-			"parts": parts,
-		})
 	}
 
 	body["contents"] = contents
 }
 
 // buildGoogleContentParts builds a parts array for Google with files and images.
-func buildGoogleContentParts(req Request) []map[string]any {
+func buildGoogleContentParts(req msgPrompt) []map[string]any {
 	parts := []map[string]any{}
 
-	for _, f := range req.Files {
+	for _, f := range req.files {
 		parts = append(parts, map[string]any{
 			"file_data": map[string]any{
 				"file_uri":  f.URI,
@@ -359,7 +380,7 @@ func buildGoogleContentParts(req Request) []map[string]any {
 		})
 	}
 
-	for _, img := range req.Images {
+	for _, img := range req.images {
 		if strings.HasPrefix(img.URL, "data:") {
 			mimeType, data := parseDataURI(img.URL)
 			parts = append(parts, map[string]any{
@@ -383,7 +404,7 @@ func buildGoogleContentParts(req Request) []map[string]any {
 		}
 	}
 
-	parts = append(parts, map[string]any{"text": req.User})
+	parts = append(parts, map[string]any{"text": req.text})
 	return parts
 }
 
@@ -624,35 +645,31 @@ func transformBedrockConverse(body map[string]any, msgs []msg, req Request, cfg 
 	}
 
 	out := []map[string]any{}
-	if len(msgs) > 0 {
-		callT := selectToolCallTransform(cfg)
-		resultT := selectToolResultTransform(cfg)
-		for _, m := range msgs {
-			switch m := m.(type) {
-			case msgResult:
-				out = append(out, resultT(m.result, cfg.RoleMappings))
-			case msgCalls:
-				out = append(out, callT(m.calls, cfg.RoleMappings))
-			case msgText:
-				out = append(out, map[string]any{
-					"role":    mapRole(m.role, cfg.RoleMappings),
-					"content": []map[string]any{{"text": m.text}},
-				})
-			default:
-				panic(fmt.Sprintf("unhandled msg variant %T", m))
+	callT := selectToolCallTransform(cfg)
+	resultT := selectToolResultTransform(cfg)
+	for _, m := range msgs {
+		switch m := m.(type) {
+		case msgResult:
+			out = append(out, resultT(m.result, cfg.RoleMappings))
+		case msgCalls:
+			out = append(out, callT(m.calls, cfg.RoleMappings))
+		case msgText:
+			out = append(out, map[string]any{
+				"role":    mapRole(m.role, cfg.RoleMappings),
+				"content": []map[string]any{{"text": m.text}},
+			})
+		case msgPrompt:
+			content := []map[string]any{{"text": m.text}}
+			if len(m.images) > 0 {
+				content = buildBedrockContentParts(m)
 			}
+			out = append(out, map[string]any{
+				"role":    mapRole("user", cfg.RoleMappings),
+				"content": content,
+			})
+		default:
+			panic(fmt.Sprintf("unhandled msg variant %T", m))
 		}
-	} else if req.User != "" {
-		var content []map[string]any
-		if len(req.Images) > 0 {
-			content = buildBedrockContentParts(req)
-		} else {
-			content = []map[string]any{{"text": req.User}}
-		}
-		out = append(out, map[string]any{
-			"role":    mapRole("user", cfg.RoleMappings),
-			"content": content,
-		})
 	}
 	body["messages"] = out
 }
@@ -660,9 +677,9 @@ func transformBedrockConverse(body map[string]any, msgs []msg, req Request, cfg 
 // buildBedrockContentParts builds a Converse content array with image blocks
 // (ADR-060). Each image emits {image:{format,source:{bytes}}}; the prompt text
 // follows as a trailing {text} block, preserving caller order among images.
-func buildBedrockContentParts(req Request) []map[string]any {
+func buildBedrockContentParts(req msgPrompt) []map[string]any {
 	parts := []map[string]any{}
-	for _, img := range req.Images {
+	for _, img := range req.images {
 		mimeType, data := parseDataURI(img.URL)
 		if mimeType == "" {
 			mimeType = img.MimeType
@@ -674,7 +691,7 @@ func buildBedrockContentParts(req Request) []map[string]any {
 			},
 		})
 	}
-	parts = append(parts, map[string]any{"text": req.User})
+	parts = append(parts, map[string]any{"text": req.text})
 	return parts
 }
 

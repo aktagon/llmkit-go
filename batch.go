@@ -249,7 +249,7 @@ func buildBatchBody(ctx context.Context, reqs []Request, o *options, p Provider,
 	betaHeaders := map[string]string{}
 	var items []map[string]any
 	for i, req := range reqs {
-		msgs, err := toInternal(req.Messages)
+		msgs, err := requestMsgs(req)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -288,7 +288,7 @@ func buildBatchBody(ctx context.Context, reqs []Request, o *options, p Provider,
 func buildBatchJSONL(ctx context.Context, reqs []Request, o *options, p Provider, cfg providerSpec, bc *providers.BatchDef) ([]byte, error) {
 	var buf strings.Builder
 	for i, req := range reqs {
-		msgs, err := toInternal(req.Messages)
+		msgs, err := requestMsgs(req)
 		if err != nil {
 			return nil, err
 		}

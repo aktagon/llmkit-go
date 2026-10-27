@@ -29,7 +29,7 @@ func (b *Text) Prompt(ctx context.Context, finalText string) (Response, error) {
 		return Response{}, err
 	}
 
-	msgs, err := toInternal(req.Messages)
+	msgs, err := requestMsgs(req)
 	if err != nil {
 		return Response{}, err
 	}
