@@ -422,70 +422,68 @@ func transformGoogleParts(body map[string]any, msgs []msg, req Request, cfg prov
 	// a rebuilt contents entry has nowhere to put.
 	contents := []any{}
 
-	if len(msgs) > 0 {
-		callT := selectToolCallTransform(cfg)
-		resultT := selectToolResultTransform(cfg)
-		// Google's wire identifies a tool result by the function NAME, but the
-		// universal ToolResult carries only ToolUseID. Recover id->name from the
-		// call turns, which always precede their result in a valid history, and
-		// resolve the result's name from it (overwriting the local copy's
-		// ToolUseID, which transformGoogleToolResultMsg emits as the wire name).
-		// The map is nil until the first tool call, so plain-text conversations
-		// allocate nothing; the agent path is unaffected (its extractor sets
-		// id==name), and an unmatched id passes through unchanged.
-		var idToName map[string]string
-		for _, m := range msgs {
-			// A replayed Google turn is candidates[0].content verbatim — the
-			// same {role, parts} object the contents array takes, so it drops
-			// straight in. It still has to feed idToName below, because a LATER
-			// tool result is matched by name against calls made on this turn;
-			// that lookup reads the canonical projection, which the fallback
-			// still carries even when the wire bytes are what get sent.
-			if turn, ok := m.(msgTurn); ok && turn.shape == providers.ChatGoogle {
-				if calls, ok := turn.fallback.(msgCalls); ok {
-					if idToName == nil {
-						idToName = make(map[string]string)
-					}
-					for _, c := range calls.calls {
-						idToName[c.ID] = c.Name
-					}
-				}
-				contents = append(contents, json.RawMessage(turn.wire))
-				continue
-			}
-			if turn, ok := m.(msgTurn); ok {
-				m = turn.fallback
-			}
-			switch m := m.(type) {
-			case msgResult:
-				r := m.result
-				if name := idToName[r.ToolUseID]; name != "" {
-					r.ToolUseID = name
-				}
-				contents = append(contents, resultT(r, cfg.RoleMappings))
-			case msgCalls:
+	callT := selectToolCallTransform(cfg)
+	resultT := selectToolResultTransform(cfg)
+	// Google's wire identifies a tool result by the function NAME, but the
+	// universal ToolResult carries only ToolUseID. Recover id->name from the
+	// call turns, which always precede their result in a valid history, and
+	// resolve the result's name from it (overwriting the local copy's
+	// ToolUseID, which transformGoogleToolResultMsg emits as the wire name).
+	// The map is nil until the first tool call, so plain-text conversations
+	// allocate nothing; the agent path is unaffected (its extractor sets
+	// id==name), and an unmatched id passes through unchanged.
+	var idToName map[string]string
+	for _, m := range msgs {
+		// A replayed Google turn is candidates[0].content verbatim — the
+		// same {role, parts} object the contents array takes, so it drops
+		// straight in. It still has to feed idToName below, because a LATER
+		// tool result is matched by name against calls made on this turn;
+		// that lookup reads the canonical projection, which the fallback
+		// still carries even when the wire bytes are what get sent.
+		if turn, ok := m.(msgTurn); ok && turn.shape == providers.ChatGoogle {
+			if calls, ok := turn.fallback.(msgCalls); ok {
 				if idToName == nil {
 					idToName = make(map[string]string)
 				}
-				for _, c := range m.calls {
+				for _, c := range calls.calls {
 					idToName[c.ID] = c.Name
 				}
-				for _, e := range callT(m.calls, cfg.RoleMappings) {
-					contents = append(contents, e)
-				}
-			case msgText:
-				contents = append(contents, map[string]any{
-					"role":  mapRole(m.role, cfg.RoleMappings),
-					"parts": []map[string]any{{"text": m.text}},
-				})
-			case msgPrompt:
-				contents = append(contents, map[string]any{
-					"role":  mapRole("user", cfg.RoleMappings),
-					"parts": buildGoogleContentParts(m),
-				})
-			default:
-				panic(fmt.Sprintf("unhandled msg variant %T", m))
 			}
+			contents = append(contents, json.RawMessage(turn.wire))
+			continue
+		}
+		if turn, ok := m.(msgTurn); ok {
+			m = turn.fallback
+		}
+		switch m := m.(type) {
+		case msgResult:
+			r := m.result
+			if name := idToName[r.ToolUseID]; name != "" {
+				r.ToolUseID = name
+			}
+			contents = append(contents, resultT(r, cfg.RoleMappings))
+		case msgCalls:
+			if idToName == nil {
+				idToName = make(map[string]string)
+			}
+			for _, c := range m.calls {
+				idToName[c.ID] = c.Name
+			}
+			for _, e := range callT(m.calls, cfg.RoleMappings) {
+				contents = append(contents, e)
+			}
+		case msgText:
+			contents = append(contents, map[string]any{
+				"role":  mapRole(m.role, cfg.RoleMappings),
+				"parts": []map[string]any{{"text": m.text}},
+			})
+		case msgPrompt:
+			contents = append(contents, map[string]any{
+				"role":  mapRole("user", cfg.RoleMappings),
+				"parts": buildGoogleContentParts(m),
+			})
+		default:
+			panic(fmt.Sprintf("unhandled msg variant %T", m))
 		}
 	}
 
@@ -870,57 +868,55 @@ func transformBedrockConverse(body map[string]any, msgs []msg, req Request, cfg 
 	}
 
 	out := []map[string]any{}
-	if len(msgs) > 0 {
-		callT := selectToolCallTransform(cfg)
-		resultT := selectToolResultTransform(cfg)
-		prevResult := false
-		for _, m := range msgs {
-			// Bedrock never replays: ChatBedrock declares
-			// assistantTurnUnanchored rather than a position (ADR-085
-			// OQ-5), so there is no container to splice into. Reconstruct
-			// from the projection instead of falling through to the panic
-			// below — resolveTurns should already have unwrapped this, and
-			// a panic reaching a caller is the wrong way to report that it
-			// did not. When OQ-5 anchors Converse, this arm becomes a real
-			// splice.
-			if turn, ok := m.(msgTurn); ok {
-				m = turn.fallback
-			}
-			_, isResult := m.(msgResult)
-			switch m := m.(type) {
-			case msgResult:
-				// Converse wants every toolResult answering one assistant
-				// turn inside ONE user message; one message per result is a
-				// 400 (live, 2026-10-15). A result that follows a result
-				// joins the message the first one opened.
-				entry := resultT(m.result, cfg.RoleMappings)
-				if prevResult {
-					last := out[len(out)-1]
-					last["content"] = append(last["content"].([]map[string]any), entry["content"].([]map[string]any)...)
-				} else {
-					out = append(out, entry)
-				}
-			case msgCalls:
-				out = append(out, callT(m.calls, cfg.RoleMappings)...)
-			case msgText:
-				out = append(out, map[string]any{
-					"role":    mapRole(m.role, cfg.RoleMappings),
-					"content": []map[string]any{{"text": m.text}},
-				})
-			case msgPrompt:
-				content := []map[string]any{{"text": m.text}}
-				if len(m.images) > 0 {
-					content = buildBedrockContentParts(m)
-				}
-				out = append(out, map[string]any{
-					"role":    mapRole("user", cfg.RoleMappings),
-					"content": content,
-				})
-			default:
-				panic(fmt.Sprintf("unhandled msg variant %T", m))
-			}
-			prevResult = isResult
+	callT := selectToolCallTransform(cfg)
+	resultT := selectToolResultTransform(cfg)
+	prevResult := false
+	for _, m := range msgs {
+		// Bedrock never replays: ChatBedrock declares
+		// assistantTurnUnanchored rather than a position (ADR-085
+		// OQ-5), so there is no container to splice into. Reconstruct
+		// from the projection instead of falling through to the panic
+		// below — resolveTurns should already have unwrapped this, and
+		// a panic reaching a caller is the wrong way to report that it
+		// did not. When OQ-5 anchors Converse, this arm becomes a real
+		// splice.
+		if turn, ok := m.(msgTurn); ok {
+			m = turn.fallback
 		}
+		_, isResult := m.(msgResult)
+		switch m := m.(type) {
+		case msgResult:
+			// Converse wants every toolResult answering one assistant
+			// turn inside ONE user message; one message per result is a
+			// 400 (live, 2026-10-15). A result that follows a result
+			// joins the message the first one opened.
+			entry := resultT(m.result, cfg.RoleMappings)
+			if prevResult {
+				last := out[len(out)-1]
+				last["content"] = append(last["content"].([]map[string]any), entry["content"].([]map[string]any)...)
+			} else {
+				out = append(out, entry)
+			}
+		case msgCalls:
+			out = append(out, callT(m.calls, cfg.RoleMappings)...)
+		case msgText:
+			out = append(out, map[string]any{
+				"role":    mapRole(m.role, cfg.RoleMappings),
+				"content": []map[string]any{{"text": m.text}},
+			})
+		case msgPrompt:
+			content := []map[string]any{{"text": m.text}}
+			if len(m.images) > 0 {
+				content = buildBedrockContentParts(m)
+			}
+			out = append(out, map[string]any{
+				"role":    mapRole("user", cfg.RoleMappings),
+				"content": content,
+			})
+		default:
+			panic(fmt.Sprintf("unhandled msg variant %T", m))
+		}
+		prevResult = isResult
 	}
 	body["messages"] = out
 }
