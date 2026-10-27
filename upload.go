@@ -76,10 +76,7 @@ func (b *Upload) Run(ctx context.Context) (File, error) {
 		name = b.filename
 	}
 
-	var opts []Option
-	if len(b.middleware) > 0 {
-		opts = append(opts, WithMiddleware(b.middleware...))
-	}
-
-	return uploadFile(ctx, provider, data, name, b.mimeType, opts...)
+	o := defaultOptions()
+	o.middleware = b.middleware
+	return uploadFile(ctx, provider, data, name, b.mimeType, o)
 }
