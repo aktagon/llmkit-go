@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `EncodeRequest(provider, chatWireShape, req)` encodes a chat `Request` for a
+  provider without a key or a network call. It returns `WireRequest{Path,
+  Headers, Body}`: the endpoint path with the model filled in, the content
+  headers (such as `anthropic-beta`), and the body. Your send path adds the
+  base URL, the key and your own headers.
+
 - `providers.BatchSlotMissing` and `providers.BatchSlotError`: the finish
   reasons of a batch slot with no result, and of a failed slot the provider
   gave no reason for. Compare against them instead of typing the strings.
@@ -20,6 +26,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   status and token usage. It used to fail validation.
 
 ### Changed
+
+- **BREAKING — `Request` is the one form of a chat call.** `Request.User` is
+  removed: put the final prompt in `Messages` as the last `user` message.
+  `Files` and `Images` attach to that message. `Request` gains `Model` (it
+  wins over the builder's and the client's model), `Tools`, and the options
+  `MaxTokens`, `Temperature`, `TopP`, `TopK`, `Stop`, `Seed`,
+  `FrequencyPenalty`, `PresencePenalty`, `ReasoningEffort`, `ThinkingBudget`
+  and `SafetySettings`.
+
+- **BREAKING — the chat `With*` options are removed.** Use the builder
+  methods instead: `WithTemperature` becomes `.Temperature(v)`, and the same
+  holds for `WithTopP`, `WithTopK`, `WithMaxTokens`, `WithStopSequences`
+  (`.StopSequences`), `WithSeed`, `WithFrequencyPenalty`,
+  `WithPresencePenalty`, `WithThinkingBudget`, `WithReasoningEffort`,
+  `WithSafetySettings`, `WithCaching` (`.Caching()`), `WithMiddleware`
+  (`.AddMiddleware`) and `WithMaxToolIterations`. `WithHTTPClient`
+  and `WithPollTimeout` remain, for `BatchHandle.Wait` and `Poll`. `CacheTTL`
+  is unchanged.
 
 - **BREAKING — image and video configs list request variants.**
   `ImageGenDef.InputMode`, `ImageGenDef.GenEndpoint`,

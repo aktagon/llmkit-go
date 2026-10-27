@@ -140,12 +140,10 @@ type msgResult struct {
 	result ToolResult
 }
 
-// msgPrompt is the final user turn of a Text, stream or batch request: the
-// prompt text plus the files and images attached to it (BUG-108). It is a
-// variant of its own because media rides only on this turn, and msgText
-// carries only {role, text}. requestMsgs appends it after the history, so
-// every transform reads one ordered list and never chooses between history
-// and prompt.
+// msgPrompt is the final user turn when the request carries files or images
+// (BUG-108). It is a variant of its own because media ride only on this turn,
+// and msgText carries only {role, text}. requestMsgs puts it in the final
+// turn's place, so every transform reads one ordered list.
 type msgPrompt struct {
 	text   string
 	files  []File
@@ -169,18 +167,30 @@ func (msgResult) isMsg() {}
 func (msgTurn) isMsg()   {}
 func (msgPrompt) isMsg() {}
 
-// requestMsgs is the one place a public Request becomes the message list the
-// transforms read: the validated history, then the prompt as the last user
-// turn. The Agent builds its list from trusted history instead
-// (agentHistoryToMsgs) and has no prompt to append.
+// requestMsgs is the one place a Request becomes the message list the
+// transforms read: every turn, with Request.Files and Request.Images on the
+// final turn (ADR-098). That turn must be a plain user turn, the only one
+// that can carry media.
 func requestMsgs(req Request) ([]msg, error) {
 	msgs, err := toInternal(req.Messages)
 	if err != nil {
 		return nil, err
 	}
-	if req.User != "" {
-		msgs = append(msgs, msgPrompt{text: req.User, files: req.Files, images: req.Images})
+	if len(req.Files) == 0 && len(req.Images) == 0 {
+		return msgs, nil
 	}
+	var last msgText
+	ok := false
+	if len(msgs) > 0 {
+		last, ok = msgs[len(msgs)-1].(msgText)
+	}
+	if !ok || last.role != "user" {
+		return nil, &ValidationError{
+			Field:   "messages",
+			Message: "files and images attach to the final turn, which must be a user turn with text content",
+		}
+	}
+	msgs[len(msgs)-1] = msgPrompt{text: last.text, files: req.Files, images: req.Images}
 	return msgs, nil
 }
 
@@ -188,8 +198,8 @@ func requestMsgs(req Request) ([]msg, error) {
 // This is the single carrier-validation boundary (PIPE-008): a message carrying
 // more than one of {content, tool calls, tool result} is rejected here, not
 // silently mis-serialized downstream. The Text/batch/stream paths feed
-// user-supplied Message lists through here; the Agent builds the sum directly
-// from its trusted history (agentHistoryToMsgs) and so skips this check.
+// user-supplied Message lists through here, and so does the Agent, whose own
+// turns satisfy the check by construction.
 func toInternal(messages []Message) ([]msg, error) {
 	out := make([]msg, 0, len(messages))
 	for i, m := range messages {
