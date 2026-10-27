@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.3] — 2026-10-27
+
 ### Fixed
 - `Text.History(...).Prompt(ctx, text)` now sends `text` as the last user
   turn, after the history. Before, the request ended at the history and the
