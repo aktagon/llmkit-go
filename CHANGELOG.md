@@ -7,38 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.0] — 2026-10-27
+
 ### Added
+
+- `providers.BatchSlotMissing` and `providers.BatchSlotError`: the finish
+  reasons of a batch slot with no result, and of a failed slot the provider
+  gave no reason for. Compare against them instead of typing the strings.
 
 - **Streaming with the Responses protocol.** A stream with `Protocol("responses")`
   now posts to `/v1/responses` and reads its events: text deltas, the finish
   status and token usage. It used to fail validation.
-
-### Removed
-
-- **Vertex image generation removed.** Google shut down the Imagen endpoints.
-  Image generation on Vertex now fails with a validation error before any
-  request is sent. Vertex music and video are unchanged, and the Vertex default
-  model is now `lyria-002`. The SafetyFilter options (`SafetyFilter`,
-  `WithImageSafetyFilter` and the `ImageSafetyFilter*` constants) are deprecated
-  and no longer accepted by any provider; they will be removed in the next major
-  version.
-- **Google video generation removed.** Google shut down the Gemini API Veo
-  preview models. Video generation on the `google` provider now fails before
-  any request is sent. Veo stays available on Vertex.
-
-### Fixed
-
-- **Anthropic streams report the finish reason.** It was read from the
-  `message_stop` event, which never carries it, so it was always null. It is
-  now read from `message_delta`.
-- **Anthropic streams report input tokens.** The input count on the
-  `message_delta` event was ignored, so a streamed response's input usage
-  was null.
-- **Parallel tool results on AWS Bedrock.** After a reply with several tool
-  calls, the agent sent one user message per result, and Bedrock rejected the
-  request with 400. The results now go in one user message, in call order.
-
-## [3.0.0] — 2026-10-14
 
 ### Changed
 
@@ -94,11 +73,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   total. Telemetry now exports a usage attribute when the value is *reported*,
   zero included, instead of when it is greater than zero.
 
-### Added
+### Removed
 
-- `providers.BatchSlotMissing` and `providers.BatchSlotError`: the finish
-  reasons of a batch slot with no result, and of a failed slot the provider
-  gave no reason for. Compare against them instead of typing the strings.
+- **Vertex image generation removed.** Google shut down the Imagen endpoints.
+  Image generation on Vertex now fails with a validation error before any
+  request is sent. Vertex music and video are unchanged, and the Vertex default
+  model is now `lyria-002`. The SafetyFilter options (`SafetyFilter`,
+  `WithImageSafetyFilter` and the `ImageSafetyFilter*` constants) are deprecated
+  and no longer accepted by any provider; they will be removed in a later major
+  version.
+- **Google video generation removed.** Google shut down the Gemini API Veo
+  preview models. Video generation on the `google` provider now fails before
+  any request is sent. Veo stays available on Vertex.
 
 ### Fixed
 
@@ -121,6 +107,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   message as the finish message. A request with no result reads finish reason
   `missing`. Results for request ids this SDK did not assign follow in file
   order.
+
+- **Anthropic streams report the finish reason.** It was read from the
+  `message_stop` event, which never carries it, so it was always null. It is
+  now read from `message_delta`.
+- **Anthropic streams report input tokens.** The input count on the
+  `message_delta` event was ignored, so a streamed response's input usage
+  was null.
+- **Parallel tool results on AWS Bedrock.** After a reply with several tool
+  calls, the agent sent one user message per result, and Bedrock rejected the
+  request with 400. The results now go in one user message, in call order.
 
 ## [2.0.1] — 2026-07-19
 
