@@ -20,8 +20,7 @@ import (
 // submitBatch / waitBatch are internal implementations.
 // Public surface: (*Text).Batch (ADR-064) / BatchHandle.Wait / BatchHandle.Poll
 // in batch_builder.go.
-func submitBatch(ctx context.Context, p Provider, reqs []Request, opts ...Option) (BatchHandle, error) {
-	o := resolveOptions(opts)
+func submitBatch(ctx context.Context, p Provider, reqs []Request, o *options) (BatchHandle, error) {
 	o.httpClient = withRequestTimeout(o.httpClient, p.Timeout)
 
 	if err := validateProvider(p); err != nil {
@@ -253,11 +252,14 @@ func buildBatchBody(ctx context.Context, reqs []Request, o *options, p Provider,
 	betaHeaders := map[string]string{}
 	var items []map[string]any
 	for i, req := range reqs {
-		msgs, err := requestMsgs(req)
+		req, err := batchRequest(p, cfg, req)
 		if err != nil {
 			return nil, nil, err
 		}
-		reqBody, reqHeaders := buildRequest(p, req, msgs, o, cfg, nil)
+		reqBody, reqHeaders, err := encodeRequest(p.Name, cfg, req)
+		if err != nil {
+			return nil, nil, err
+		}
 		if v := reqHeaders["anthropic-beta"]; v != "" {
 			betaHeaders["anthropic-beta"] = appendBeta(betaHeaders["anthropic-beta"], v)
 		}
@@ -287,16 +289,29 @@ func buildBatchBody(ctx context.Context, reqs []Request, o *options, p Provider,
 	return body, betaHeaders, nil
 }
 
+// batchRequest resolves one batch item's model (RQC-004).
+func batchRequest(p Provider, cfg providerSpec, req Request) (Request, error) {
+	model, err := requestModel(p, cfg, req)
+	if err != nil {
+		return req, err
+	}
+	req.Model = model
+	return req, nil
+}
+
 // buildBatchJSONL serializes requests as JSONL for file-reference batch input.
 // Each line is: {"custom_id":"req-N","method":"POST","url":endpoint,"body":{...}}
 func buildBatchJSONL(ctx context.Context, reqs []Request, o *options, p Provider, cfg providerSpec, bc *providers.BatchDef) ([]byte, error) {
 	var buf strings.Builder
 	for i, req := range reqs {
-		msgs, err := requestMsgs(req)
+		req, err := batchRequest(p, cfg, req)
 		if err != nil {
 			return nil, err
 		}
-		reqBody, _ := buildRequest(p, req, msgs, o, cfg, nil)
+		reqBody, _, err := encodeRequest(p.Name, cfg, req)
+		if err != nil {
+			return nil, err
+		}
 		if o.caching {
 			if err := applyCaching(ctx, reqBody, p, o, cfg); err != nil {
 				return nil, err

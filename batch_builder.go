@@ -24,9 +24,8 @@ func (b *Text) Batch(ctx context.Context, prompts ...string) (BatchHandle, error
 	if err := rejectNonDefaultProtocol(b.protocol, "batch"); err != nil {
 		return BatchHandle{}, err
 	}
-	reqs, opts := b.batchInputs(prompts)
 	provider := b.client.provider.toProvider(b.model)
-	legacy, err := submitBatch(ctx, provider, reqs, opts...)
+	legacy, err := submitBatch(ctx, provider, b.batchInputs(prompts), b.sendOptions())
 	if err != nil {
 		return BatchHandle{}, err
 	}
@@ -35,17 +34,14 @@ func (b *Text) Batch(ctx context.Context, prompts ...string) (BatchHandle, error
 
 // batchInputs builds the per-prompt Request slice that (*Text).Batch consumes.
 // Each prompt inherits the chain's accumulated config (system, parts, schema,
-// etc.) and is appended as the User message of its own request, matching the
-// legacy multi-request batch shape. Reuses (*Text).buildRequest so batch
+// etc.) and is its request's final user turn. Reuses (*Text).request so batch
 // request bytes are single-sourced with Prompt/Stream.
-func (b *Text) batchInputs(prompts []string) ([]Request, []Option) {
+func (b *Text) batchInputs(prompts []string) []Request {
 	reqs := make([]Request, 0, len(prompts))
 	for _, p := range prompts {
-		req, _ := b.buildRequest(p)
-		reqs = append(reqs, req)
+		reqs = append(reqs, b.request(p))
 	}
-	_, opts := b.buildRequest("")
-	return reqs, opts
+	return reqs
 }
 
 // Wait polls the provider's batch lifecycle until completion and

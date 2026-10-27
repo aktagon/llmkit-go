@@ -138,66 +138,35 @@ func encodeToolInput(input map[string]any) json.RawMessage {
 }
 
 // initAgent constructs the underlying *Agent from the chained
-// config. Mirrors the legacy newLegacyAgent + SetSystem + AddTool sequence.
+// config: the Request each turn sends, and the send options.
 // Lazy because the agent is only needed once Prompt is called; chain
 // methods that fork a clone leave state nil so initAgent runs again
 // on the fork.
 func (b *Agent) initAgent() {
-	var opts []Option
-	if b.maxTokens != nil {
-		opts = append(opts, WithMaxTokens(*b.maxTokens))
-	}
-	if b.temperature != nil {
-		opts = append(opts, WithTemperature(*b.temperature))
-	}
-	if b.topP != nil {
-		opts = append(opts, WithTopP(*b.topP))
-	}
-	if b.topK != nil {
-		opts = append(opts, WithTopK(*b.topK))
-	}
-	if b.frequencyPenalty != nil {
-		opts = append(opts, WithFrequencyPenalty(*b.frequencyPenalty))
-	}
-	if b.presencePenalty != nil {
-		opts = append(opts, WithPresencePenalty(*b.presencePenalty))
-	}
-	if b.seed != nil {
-		opts = append(opts, WithSeed(*b.seed))
-	}
-	if len(b.stopSequences) > 0 {
-		opts = append(opts, WithStopSequences(b.stopSequences...))
-	}
-	if b.thinkingBudget != nil {
-		opts = append(opts, WithThinkingBudget(*b.thinkingBudget))
-	}
-	if b.reasoningEffort != "" {
-		opts = append(opts, WithReasoningEffort(b.reasoningEffort))
-	}
+	o := defaultOptions()
 	if b.maxToolIterations != nil {
-		opts = append(opts, WithMaxToolIterations(*b.maxToolIterations))
+		o.maxToolIterations = *b.maxToolIterations
 	}
-	if b.caching {
-		opts = append(opts, WithCaching())
-	}
-	if len(b.middleware) > 0 {
-		opts = append(opts, WithMiddleware(b.middleware...))
-	}
-	if len(b.safetySettings) > 0 {
-		opts = append(opts, WithSafetySettings(b.safetySettings...))
-	}
-	if b.raw {
-		opts = append(opts, withRaw())
-	}
+	o.caching = b.caching
+	o.middleware = b.middleware
+	o.raw = b.raw
 
-	provider := b.client.provider.toProvider(b.model)
-	a := newLegacyAgent(provider, opts...)
-	if b.system != "" {
-		a.setSystem(b.system)
+	req := Request{
+		System:           b.system,
+		Tools:            b.tools,
+		MaxTokens:        b.maxTokens,
+		Temperature:      b.temperature,
+		TopP:             b.topP,
+		TopK:             b.topK,
+		Stop:             b.stopSequences,
+		Seed:             b.seed,
+		FrequencyPenalty: b.frequencyPenalty,
+		PresencePenalty:  b.presencePenalty,
+		ReasoningEffort:  b.reasoningEffort,
+		ThinkingBudget:   b.thinkingBudget,
+		SafetySettings:   b.safetySettings,
 	}
-	for _, t := range b.tools {
-		a.addTool(t)
-	}
+	a := newLegacyAgent(b.client.provider.toProvider(b.model), req, o)
 	// ADR-020 HIST-007: seed the legacy agent's internal history from the
 	// chain's typed Message list. Mechanical field copy with role
 	// normalization ("tool" → "tool_result" matching the internal

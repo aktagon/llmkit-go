@@ -41,14 +41,44 @@ const (
 	CapCatalogue       Capability = "catalogue"
 )
 
-// Request is the canonical request format (OpenAI-compatible shape).
+// Request is the one form of a chat call (ADR-098): every turn, the tools, and
+// every option that shapes the request body. Text, Agent and batch build one
+// and encode it with EncodeRequest; nothing else builds a chat body (RQC-001).
+// Settings that do not shape the request (transport, caching, middleware, the
+// Agent's loop limit, Raw) stay outside it (RQC-002). Nil and empty fields are
+// absent.
 type Request struct {
-	System   string       // system prompt
-	User     string       // user message (for single-turn)
-	Messages []Message    // conversation history (for multi-turn)
-	Schema   string       // JSON schema for structured output (optional)
-	Files    []File       // file attachments (optional)
-	Images   []InputImage // image inputs (optional)
+	// Model, when set, wins over the builder's and the client's model
+	// (RQC-004). Empty keeps the usual resolution.
+	Model    string
+	System   string
+	Messages []Message // every turn, including the final prompt
+	Tools    []Tool
+	Schema   string       // JSON schema for structured output
+	Files    []File       // attached to the final user turn
+	Images   []InputImage // attached to the final user turn
+
+	MaxTokens        *int
+	Temperature      *float64
+	TopP             *float64
+	TopK             *int
+	Stop             []string
+	Seed             *int64
+	FrequencyPenalty *float64
+	PresencePenalty  *float64
+	ReasoningEffort  string
+	ThinkingBudget   *int
+	SafetySettings   []SafetySetting
+}
+
+// WireRequest is a chat request as the provider receives it, minus the key
+// (RQC-006). Path is the endpoint with the model filled in where the wire
+// shape puts it; the base URL is the client's. Headers are content headers
+// only, such as anthropic-beta: the send path adds auth and caller headers.
+type WireRequest struct {
+	Path    string
+	Headers map[string]string
+	Body    []byte
 }
 
 // Usage holds token consumption metrics.
@@ -118,26 +148,16 @@ const (
 	ImageSafetyFilterBlockOnlyHigh = "block_only_high"
 )
 
-// Option configures a Prompt or Agent call.
+// Option configures the transport and poll policy of a BatchHandle Wait or
+// Poll call. Request-shaping settings live on Request (ADR-098).
 type Option func(*options)
 
 type options struct {
 	httpClient        *http.Client
-	temperature       *float64
-	topP              *float64
-	topK              *int
-	maxTokens         *int
-	stopSequences     []string
-	seed              *int64
-	frequencyPenalty  *float64
-	presencePenalty   *float64
-	thinkingBudget    *int
-	reasoningEffort   string
 	maxToolIterations int
 	caching           bool
 	cacheTTL          time.Duration
 	middleware        []providers.MiddlewareFn
-	safetySettings    []SafetySetting
 	raw               bool
 	pollTimeout       time.Duration
 }
@@ -172,86 +192,10 @@ func WithPollTimeout(d time.Duration) Option {
 	return func(o *options) { o.pollTimeout = d }
 }
 
-// WithTemperature sets the sampling temperature (0.0-2.0).
-func WithTemperature(v float64) Option {
-	return func(o *options) { o.temperature = &v }
-}
-
-// WithTopP sets nucleus sampling probability (0.0-1.0).
-func WithTopP(v float64) Option {
-	return func(o *options) { o.topP = &v }
-}
-
-// WithTopK sets top-K token limiting.
-func WithTopK(n int) Option {
-	return func(o *options) { o.topK = &n }
-}
-
-// WithMaxTokens sets the maximum output length.
-func WithMaxTokens(n int) Option {
-	return func(o *options) { o.maxTokens = &n }
-}
-
-// WithStopSequences sets generation halt strings.
-func WithStopSequences(seqs ...string) Option {
-	return func(o *options) { o.stopSequences = seqs }
-}
-
-// WithSeed sets the seed for deterministic generation.
-func WithSeed(n int64) Option {
-	return func(o *options) { o.seed = &n }
-}
-
-// WithFrequencyPenalty sets the repetition penalty (-2.0 to 2.0).
-func WithFrequencyPenalty(v float64) Option {
-	return func(o *options) { o.frequencyPenalty = &v }
-}
-
-// WithPresencePenalty sets the diversity encouragement (-2.0 to 2.0).
-func WithPresencePenalty(v float64) Option {
-	return func(o *options) { o.presencePenalty = &v }
-}
-
-// WithThinkingBudget sets the extended thinking token budget.
-func WithThinkingBudget(n int) Option {
-	return func(o *options) { o.thinkingBudget = &n }
-}
-
-// WithReasoningEffort sets reasoning intensity ("low", "medium", "high").
-func WithReasoningEffort(v string) Option {
-	return func(o *options) { o.reasoningEffort = v }
-}
-
-// WithCaching enables prompt caching for providers that support it.
-// Behavior depends on the provider's caching mode (automatic, explicit, or resource).
-func WithCaching() Option {
-	return func(o *options) { o.caching = true }
-}
-
 // CacheTTL sets the cache time-to-live. Used by resource caching (Google).
 // Ignored by providers with automatic or explicit caching.
 func CacheTTL(d time.Duration) Option {
 	return func(o *options) { o.cacheTTL = d }
-}
-
-// WithMaxToolIterations sets the maximum tool call loop iterations for Agent.
-func WithMaxToolIterations(n int) Option {
-	return func(o *options) { o.maxToolIterations = n }
-}
-
-// WithMiddleware registers pre/post hooks that fire around LLM requests,
-// tool calls, cache creation, uploads, and batch submits.
-// Pre-phase middleware can veto an operation by returning a non-nil error.
-// Post-phase return values are ignored (observation only).
-// Middlewares fire in registration order.
-func WithMiddleware(fns ...providers.MiddlewareFn) Option {
-	return func(o *options) { o.middleware = append(o.middleware, fns...) }
-}
-
-// WithSafetySettings sets per-category content safety filters.
-// Gemini AI Studio only — ValidationError on providers without a safetySettingsWirePath.
-func WithSafetySettings(settings ...SafetySetting) Option {
-	return func(o *options) { o.safetySettings = settings }
 }
 
 // withRaw opts the call into populating Response.Raw with the parsed
