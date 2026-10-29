@@ -120,6 +120,7 @@ func (b *Text) Prompt(ctx context.Context, finalText string) (Response, error) {
 //   - Model   -> req.Model; empty leaves the provider's default (RQC-004)
 //   - System  -> req.System
 //   - History, then the final user turn -> req.Messages
+//   - the tools a Request(req) call set -> req.Tools
 //   - each request-shaping chain option -> its Request field
 func (b *Text) request(finalText string) Request {
 	messages := b.history
@@ -130,6 +131,7 @@ func (b *Text) request(finalText string) Request {
 		Model:            b.model,
 		System:           b.system,
 		Messages:         messages,
+		Tools:            b.tools,
 		Schema:           b.schema,
 		MaxTokens:        b.maxTokens,
 		Temperature:      b.temperature,
@@ -143,6 +145,32 @@ func (b *Text) request(finalText string) Request {
 		ThinkingBudget:   b.thinkingBudget,
 		SafetySettings:   b.safetySettings,
 	}
+}
+
+// setRequest is the body of the generated Text.Request chain method (ADR-098
+// RQC-005), the inverse of request: every request-shaping field takes req's
+// value. req.Messages become the history, and the text, image and file parts
+// are dropped, because req.Messages already holds every turn. The send
+// settings (sendOptions) and the protocol are not request fields, so they stay.
+func (b *Text) setRequest(req Request) {
+	b.model = req.Model
+	b.system = req.System
+	b.history = append([]Message(nil), req.Messages...)
+	b.parts = nil
+	b.files = nil
+	b.tools = append([]ToolDefinition(nil), req.Tools...)
+	b.schema = req.Schema
+	b.maxTokens = req.MaxTokens
+	b.temperature = req.Temperature
+	b.topP = req.TopP
+	b.topK = req.TopK
+	b.stopSequences = append([]string(nil), req.Stop...)
+	b.seed = req.Seed
+	b.frequencyPenalty = req.FrequencyPenalty
+	b.presencePenalty = req.PresencePenalty
+	b.reasoningEffort = req.ReasoningEffort
+	b.thinkingBudget = req.ThinkingBudget
+	b.safetySettings = append([]SafetySetting(nil), req.SafetySettings...)
 }
 
 // finalTurn builds the parts of the final user turn so that every request

@@ -41,6 +41,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `Text.Request(req)` sets the whole `Request` on the text builder: its model, system
+  prompt, messages, tools, schema and options. It replaces what the chain set
+  before it, the text, image and file parts included; a chain method after it
+  changes its own field. A request from `DecodeRequest` is sent unchanged by
+  `.Prompt(ctx, "")`. Caching, its TTL, middleware, `Raw` and
+  `Protocol` are kept.
 - `DecodeRequest(provider, chatWireShape, wire)` decodes an OpenAI Chat
   Completions request into a `Request`, the inverse of `EncodeRequest`. It
   reads the model, a leading system turn, user and assistant turns with text
