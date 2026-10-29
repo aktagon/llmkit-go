@@ -171,6 +171,7 @@ type Text struct {
 	protocol         string
 	raw              bool
 	reasoningEffort  *string
+	tools            []ToolDefinition
 	safetySettings   []SafetySetting
 	schema           string
 	seed             *int64
@@ -239,6 +240,14 @@ func (b *Text) ReasoningEffort(level string) *Text {
 	out.reasoningEffort = &v
 	return &out
 }
+
+// Request replaces this call's request with req: its model, system prompt,
+// messages, tools, schema and options. It drops what the chain set
+// before it, the text, image and file parts included; a chain method
+// after it changes its own field. The prompt text, when not empty, is
+// a final user turn after req's messages. The send settings (caching
+// and its TTL, middleware, raw) and the protocol are kept.
+func (b *Text) Request(req Request) *Text { out := *b; out.setRequest(req); return &out }
 func (b *Text) SafetySettings(s []SafetySetting) *Text {
 	out := *b
 	out.safetySettings = s

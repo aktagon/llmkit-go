@@ -67,6 +67,7 @@ func APIOptions() []APIOptionDef {
 		{GoFunc: "WithQuality", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithRaw", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithReasoningEffort", SubOptions: []APISubOptionDef{}},
+		{GoFunc: "WithRequest", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithResolution", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithSafetyFilter", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithSafetySettings", SubOptions: []APISubOptionDef{}},
