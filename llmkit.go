@@ -50,12 +50,6 @@ func promptStream(ctx context.Context, p Provider, req Request, protocol string,
 	if err := validateProvider(p); err != nil {
 		return Response{}, err
 	}
-	if err := validateRequest(req); err != nil {
-		return Response{}, err
-	}
-	if err := validateOptions(p.Name, req); err != nil {
-		return Response{}, err
-	}
 
 	cfg, ok := providerSpecs()[p.Name]
 	if !ok {
@@ -69,16 +63,17 @@ func promptStream(ctx context.Context, p Provider, req Request, protocol string,
 		return Response{}, err
 	}
 
+	req, err = prepareRequest(p, cfg, req)
+	if err != nil {
+		return Response{}, err
+	}
+	model := req.Model
+
 	streamCfg, finishReasonPath := streamSettings(p.Name, cfg)
 	if streamCfg == nil {
 		return Response{}, &ValidationError{Field: "provider", Message: "streaming not supported: " + p.Name}
 	}
 
-	model, err := requestModel(p, cfg, req)
-	if err != nil {
-		return Response{}, err
-	}
-	req.Model = model
 	baseEvent := providers.Event{
 		Op:       providers.OpLLMRequest,
 		Provider: p.Name,
@@ -101,7 +96,7 @@ func promptStream(ctx context.Context, p Provider, req Request, protocol string,
 
 	// Apply caching mutations if enabled
 	if o.caching {
-		if err := applyCaching(ctx, body, p, o, cfg); err != nil {
+		if err := applyCaching(ctx, body, p, model, o, cfg); err != nil {
 			postEv := baseEvent
 			postEv.Err = err
 			postEv.Duration = time.Since(start)
@@ -335,7 +330,7 @@ func validateProvider(p Provider) error {
 func validateRequest(req Request) error {
 	if len(req.Messages) == 0 {
 		return &ValidationError{
-			Field:   "user",
+			Field:   "messages",
 			Message: "set Text(), Parts, History, or Image() before calling Prompt",
 		}
 	}
@@ -377,7 +372,7 @@ func validateOptions(provider string, req Request) error {
 			return &ValidationError{Field: "thinking_budget", Message: "not supported by " + provider}
 		}
 	}
-	if req.ReasoningEffort != "" {
+	if req.ReasoningEffort != nil {
 		if _, ok := supported[providers.OptionReasoningEffort]; !ok {
 			return &ValidationError{Field: "reasoning_effort", Message: "not supported by " + provider}
 		}
@@ -385,12 +380,12 @@ func validateOptions(provider string, req Request) error {
 
 	//
 	overrides := providers.OptionOverrides(provider)
-	if req.ReasoningEffort != "" && overrides != nil {
+	if req.ReasoningEffort != nil && overrides != nil {
 		if ov, ok := overrides[providers.OptionReasoningEffort]; ok && ov.AllowedValues != "" {
-			if !containsValue(ov.AllowedValues, req.ReasoningEffort) {
+			if !containsValue(ov.AllowedValues, *req.ReasoningEffort) {
 				return &ValidationError{
 					Field:   "reasoning_effort",
-					Message: fmt.Sprintf("invalid value %q, must be one of: %s", req.ReasoningEffort, ov.AllowedValues),
+					Message: fmt.Sprintf("invalid value %q, must be one of: %s", *req.ReasoningEffort, ov.AllowedValues),
 				}
 			}
 		}
@@ -567,15 +562,8 @@ func EncodeRequest(provider, chatWireShape string, req Request) (WireRequest, er
 			}
 		}
 	}
-	model, err := resolveModel(Provider{Name: provider, Model: req.Model}, cfg)
+	req, err := prepareRequest(Provider{Name: provider}, cfg, req)
 	if err != nil {
-		return WireRequest{}, err
-	}
-	req.Model = model
-	if err := validateRequest(req); err != nil {
-		return WireRequest{}, err
-	}
-	if err := validateOptions(provider, req); err != nil {
 		return WireRequest{}, err
 	}
 	body, headers, err := encodeRequest(provider, cfg, req)
@@ -586,16 +574,30 @@ func EncodeRequest(provider, chatWireShape string, req Request) (WireRequest, er
 	if err != nil {
 		return WireRequest{}, fmt.Errorf("marshal request: %w", err)
 	}
-	return WireRequest{Path: requestPath(cfg, model), Headers: headers, Body: data}, nil
+	return WireRequest{Path: requestPath(cfg, req.Model), Headers: headers, Body: data}, nil
 }
 
-// requestModel resolves the model of a call: Request.Model wins over the
-// builder's and the client's model, which p carries (RQC-004).
-func requestModel(p Provider, cfg providerSpec, req Request) (string, error) {
-	if req.Model != "" {
-		return req.Model, nil
+// prepareRequest is the one setup step of a chat call (RQC-017): Text,
+// stream, the Agent, batch and EncodeRequest all run it before they encode.
+// It checks that the request has a turn and that the provider takes each
+// option, then resolves the model: Request.Model, which carries the
+// builder's model, wins over p.Model and the provider's default (RQC-004).
+// The returned Request carries the resolved model.
+func prepareRequest(p Provider, cfg providerSpec, req Request) (Request, error) {
+	if err := validateRequest(req); err != nil {
+		return req, err
 	}
-	return resolveModel(p, cfg)
+	if err := validateOptions(p.Name, req); err != nil {
+		return req, err
+	}
+	if req.Model == "" {
+		model, err := resolveModel(p, cfg)
+		if err != nil {
+			return req, err
+		}
+		req.Model = model
+	}
+	return req, nil
 }
 
 // encodeRequest is the one chat body builder (RQC-001): EncodeRequest, Text,
@@ -797,8 +799,8 @@ func addOptions(root, target map[string]any, req Request, provider, model, chatW
 	if req.ThinkingBudget != nil {
 		apply(providers.OptionThinkingBudget, *req.ThinkingBudget)
 	}
-	if req.ReasoningEffort != "" {
-		apply(providers.OptionReasoningEffort, req.ReasoningEffort)
+	if req.ReasoningEffort != nil {
+		apply(providers.OptionReasoningEffort, *req.ReasoningEffort)
 	}
 }
 

@@ -19,6 +19,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `parts[1]: image generation does not accept tool_call parts`. A part that
   sets more than one field is rejected on every capability; image generation
   used to ignore a set `Lyrics` or audio field beside `Text`.
+- **BREAKING — `Request.ReasoningEffort` is `*string`.** `nil` sends no
+  reasoning effort. `Text.ReasoningEffort(level)` and
+  `Agent.ReasoningEffort(level)` keep their signatures.
+- **BREAKING — a request with no turn fails on field `messages`.** The
+  `*ValidationError` used to name the field `user`.
+- The Agent and batch reject an option the provider does not take, before any
+  HTTP call, with the same `*ValidationError` as `Text.Prompt`. They used to
+  send it. A batch prompt with no text and no parts is rejected the same way.
+- The builder's model is the `Request`'s model. The `batch_submit` middleware
+  event reports it, and a Google cache is created for it.
 
 ## [3.0.0] — 2026-10-27
 

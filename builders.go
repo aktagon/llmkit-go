@@ -169,7 +169,7 @@ type Text struct {
 	presencePenalty  *float64
 	protocol         string
 	raw              bool
-	reasoningEffort  string
+	reasoningEffort  *string
 	safetySettings   []SafetySetting
 	schema           string
 	seed             *int64
@@ -229,7 +229,8 @@ func (b *Text) Protocol(name string) *Text { out := *b; out.protocol = name; ret
 func (b *Text) Raw() *Text                 { out := *b; out.raw = true; return &out }
 func (b *Text) ReasoningEffort(level string) *Text {
 	out := *b
-	out.reasoningEffort = level
+	v := level
+	out.reasoningEffort = &v
 	return &out
 }
 func (b *Text) SafetySettings(s []SafetySetting) *Text {
@@ -504,7 +505,7 @@ type Agent struct {
 	model             string
 	presencePenalty   *float64
 	raw               bool
-	reasoningEffort   string
+	reasoningEffort   *string
 	safetySettings    []SafetySetting
 	seed              *int64
 	stopSequences     []string
@@ -576,7 +577,8 @@ func (b *Agent) PresencePenalty(v float64) *Agent {
 func (b *Agent) Raw() *Agent { out := *b; out.raw = true; out.state = nil; return &out }
 func (b *Agent) ReasoningEffort(level string) *Agent {
 	out := *b
-	out.reasoningEffort = level
+	v := level
+	out.reasoningEffort = &v
 	out.state = nil
 	return &out
 }

@@ -24,7 +24,7 @@ func (b *Text) Batch(ctx context.Context, prompts ...string) (BatchHandle, error
 	if err := rejectNonDefaultProtocol(b.protocol, "batch"); err != nil {
 		return BatchHandle{}, err
 	}
-	provider := b.client.provider.toProvider(b.model)
+	provider := b.client.provider.toProvider("")
 	legacy, err := submitBatch(ctx, provider, b.batchInputs(prompts), b.sendOptions())
 	if err != nil {
 		return BatchHandle{}, err

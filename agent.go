@@ -59,11 +59,6 @@ func (a *legacyAgent) runToolLoop(ctx context.Context) (Response, error) {
 	tcConfig := providers.ToolCallConfig(a.provider.Name)
 	tcExtractor := selectToolCallExtractor(cfg)
 
-	model, err := requestModel(a.provider, cfg, a.req)
-	if err != nil {
-		return Response{}, err
-	}
-
 	// Seeded from the first turn, not from a zero value: absorbing addition's
 	// identity is a REPORTED zero, and an all-unreported seed would absorb every
 	// turn to nothing (ADR-081 AVAIL-005).
@@ -71,14 +66,19 @@ func (a *legacyAgent) runToolLoop(ctx context.Context) (Response, error) {
 	usageSeeded := false
 
 	for i := 0; i < a.opts.maxToolIterations; i++ {
-		// Build the request through the shared encoder (ADR-026 PIPE-001,
-		// ADR-098 RQC-001): the agent constructs no body of its own. Its
-		// history becomes the Request's Messages, so the tool-aware message
-		// transforms and the option/caching/structured-output steps all run
-		// identically to the Text/batch path.
+		// Build the request through the shared setup and encoder (ADR-026
+		// PIPE-001, ADR-098 RQC-001, RQC-017): the agent constructs no body of
+		// its own. Its history becomes the Request's Messages, so validation,
+		// model resolution, the tool-aware message transforms and the
+		// option/caching/structured-output steps all run identically to the
+		// Text/batch path.
 		req := a.req
-		req.Model = model
 		req.Messages = a.history
+		req, err := prepareRequest(a.provider, cfg, req)
+		if err != nil {
+			return Response{Usage: totalUsage}, err
+		}
+		model := req.Model
 		body, content, err := encodeRequest(a.provider.Name, cfg, req)
 		if err != nil {
 			return Response{Usage: totalUsage}, err
@@ -89,7 +89,7 @@ func (a *legacyAgent) runToolLoop(ctx context.Context) (Response, error) {
 		// every send path by construction, not just Text. Before this, a
 		// .caching() agent silently paid full input price every turn (BUG-004).
 		if a.opts.caching {
-			if err := applyCaching(ctx, body, a.provider, a.opts, cfg); err != nil {
+			if err := applyCaching(ctx, body, a.provider, model, a.opts, cfg); err != nil {
 				return Response{Usage: totalUsage}, err
 			}
 		}
