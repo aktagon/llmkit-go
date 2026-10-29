@@ -152,27 +152,17 @@ func submitVideo(ctx context.Context, p Provider, req VideoRequest, opts ...Vide
 		return VideoHandle{}, &ValidationError{Field: "model", Message: req.Model + " is not a known video-generation model for " + p.Name}
 	}
 
+	if err := checkPartKinds("video_generation", parts); err != nil {
+		return VideoHandle{}, err
+	}
 	for i, part := range parts {
-		switch {
-		case part.Lyrics != "":
+		// Image-to-video seed frame (BUG-010): accepted only by models whose
+		// VideoModelDef sets SupportsImageToVideo; text-to-video-only models
+		// reject it pre-flight rather than silently dropping it at wire time.
+		if part.Image != nil && !model.SupportsImageToVideo {
 			return VideoHandle{}, &ValidationError{
 				Field:   fmt.Sprintf("parts[%d]", i),
-				Message: "video generation does not accept lyrics parts",
-			}
-		case part.Image != nil:
-			// Image-to-video seed frame (BUG-010): accepted only by models whose
-			// VideoModelDef sets SupportsImageToVideo; text-to-video-only models
-			// reject it pre-flight rather than silently dropping it at wire time.
-			if !model.SupportsImageToVideo {
-				return VideoHandle{}, &ValidationError{
-					Field:   fmt.Sprintf("parts[%d]", i),
-					Message: req.Model + " is a text-to-video-only model and does not accept image parts",
-				}
-			}
-		case part.Text == "":
-			return VideoHandle{}, &ValidationError{
-				Field:   fmt.Sprintf("parts[%d]", i),
-				Message: "must have Text set",
+				Message: req.Model + " is a text-to-video-only model and does not accept image parts",
 			}
 		}
 	}

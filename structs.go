@@ -314,3 +314,71 @@ type VideoResponse struct {
 	// Raw is the parsed provider poll response body, populated only when the caller opted in via the builder's .raw() chain method (ADR-014). Type-erased — consumers cast to a provider-shape type for fields the universal VideoResponse does not carry.
 	Raw json.RawMessage
 }
+
+// Part is the universal multimodal input atom: exactly one of text, an image, an uploaded file, a tool call, a tool result, lyrics, an audio URL or audio bytes. Every capability takes the same Part (ADR-100 MSG-010); each one rejects a kind it does not accept with a ValidationError that names the kind (MSG-011).
+type Part struct {
+	// Text is a text payload.
+	Text string
+
+	// Image is an inline image: its mime type and raw bytes.
+	Image *MediaRef
+
+	// File is a reference to a file uploaded to the provider.
+	File *File
+
+	// ToolCall is one tool invocation the model issued on an assistant turn (ADR-100 MSG-008).
+	ToolCall *ToolCall
+
+	// ToolResult is the result of one tool call, on a tool turn (ADR-100 MSG-008).
+	ToolResult *ToolResult
+
+	// Lyrics is song lyrics, for music generation (ADR-033).
+	Lyrics string
+
+	// AudioURL is a public audio URL, for transcription (ADR-048). The provider fetches it.
+	AudioURL string
+
+	// Audio is local audio bytes, for transcription (ADR-048). The runtime uploads them first when the provider needs a URL.
+	Audio *MediaRef
+}
+
+// partKinds names every variant p sets, in variant order. A valid
+// Part sets exactly one (ADR-100 MSG-006).
+func (p Part) partKinds() []string {
+	var kinds []string
+	if p.Text != "" {
+		kinds = append(kinds, "text")
+	}
+	if p.Image != nil {
+		kinds = append(kinds, "image")
+	}
+	if p.File != nil {
+		kinds = append(kinds, "file")
+	}
+	if p.ToolCall != nil {
+		kinds = append(kinds, "tool_call")
+	}
+	if p.ToolResult != nil {
+		kinds = append(kinds, "tool_result")
+	}
+	if p.Lyrics != "" {
+		kinds = append(kinds, "lyrics")
+	}
+	if p.AudioURL != "" {
+		kinds = append(kinds, "audio_url")
+	}
+	if p.Audio != nil {
+		kinds = append(kinds, "audio")
+	}
+	return kinds
+}
+
+// acceptedPartKinds lists the Part variants each capability accepts,
+// keyed by the capability label (acceptsPartKind, ADR-100 MSG-011).
+var acceptedPartKinds = map[string][]string{
+	"chat":             {"text", "image", "file", "tool_call", "tool_result"},
+	"image_generation": {"text", "image"},
+	"music_generation": {"text", "lyrics"},
+	"transcription":    {"audio_url", "audio"},
+	"video_generation": {"text", "image"},
+}

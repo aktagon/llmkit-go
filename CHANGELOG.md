@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `Part` gains the fields `File`, `ToolCall` and `ToolResult`. Image, music,
+  video and transcription reject a part kind they do not accept, before any
+  HTTP call, with a `*ValidationError` that names the kind, for example
+  `parts[1]: image generation does not accept tool_call parts`. A part that
+  sets more than one field is rejected on every capability; image generation
+  used to ignore a set `Lyrics` or audio field beside `Text`.
+
 ## [3.0.0] — 2026-10-27
 
 ### Added
