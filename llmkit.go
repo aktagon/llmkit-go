@@ -70,7 +70,7 @@ func promptStream(ctx context.Context, p Provider, req Request, protocol string,
 	}
 	model := req.Model
 
-	streamCfg, finishReasonPath := streamSettings(p.Name, cfg)
+	streamCfg, locs := streamSettings(p.Name, cfg)
 	if streamCfg == nil {
 		return Response{}, &ValidationError{Field: "provider", Message: "streaming not supported: " + p.Name}
 	}
@@ -136,7 +136,7 @@ func promptStream(ctx context.Context, p Provider, req Request, protocol string,
 		callback(chunk)
 	}
 
-	usage, finishReason, err := doStreamPost(ctx, o.httpClient, url, jsonBody, headers, streamCfg, finishReasonPath, wrappedCallback)
+	usage, fields, err := doStreamPost(ctx, o.httpClient, url, jsonBody, headers, streamCfg, locs, wrappedCallback)
 	postEv := baseEvent
 	postEv.Usage = usage
 	postEv.Err = err
@@ -149,19 +149,29 @@ func promptStream(ctx context.Context, p Provider, req Request, protocol string,
 	return Response{
 		Text:         fullText.String(),
 		Usage:        usage,
-		FinishReason: finishReason,
+		FinishReason: fields.FinishReason,
+		ID:           fields.ID,
+		Model:        fields.Model,
 	}, nil
 }
 
-// streamSettings selects the stream facts and the stream finish locator for
-// the call's effective wire shape. A shape that declares its own (OpenAI
+// streamSettings selects the stream facts and the stream locators for the
+// call's effective wire shape. A shape that declares its own (OpenAI
 // Responses: event-typed SSE) outranks the provider's, which describe the
 // provider's default protocol (HANDOFF-087).
-func streamSettings(provider string, cfg providerSpec) (*providers.StreamDef, string) {
+func streamSettings(provider string, cfg providerSpec) (*providers.StreamDef, streamLocators) {
 	if sd := providers.WireShapeStreamConfig(cfg.ChatWireShape); sd != nil {
-		return sd, providers.WireShapeStreamFinishReasonPath(cfg.ChatWireShape)
+		return sd, streamLocators{
+			FinishReason: providers.WireShapeStreamFinishReasonPath(cfg.ChatWireShape),
+			ID:           providers.WireShapeStreamResponseIDPath(cfg.ChatWireShape),
+			Model:        providers.WireShapeStreamResponseModelPath(cfg.ChatWireShape),
+		}
 	}
-	return providers.StreamConfig(provider), cfg.StreamFinishReasonPath
+	return providers.StreamConfig(provider), streamLocators{
+		FinishReason: cfg.StreamFinishReasonPath,
+		ID:           cfg.StreamResponseIDPath,
+		Model:        cfg.StreamResponseModelPath,
+	}
 }
 
 // buildStreamURL constructs the streaming endpoint URL.
@@ -1053,6 +1063,7 @@ func DecodeResponse(provider, chatWireShape string, body []byte) (Response, erro
 
 	text := extractResponseText(raw, provider, chatWireShape)
 	finishReason, finishMessage := extractFinishSignal(raw, provider)
+	id, model := extractResponseIdentity(raw, provider)
 
 	return Response{
 		Text:          text,
@@ -1060,6 +1071,8 @@ func DecodeResponse(provider, chatWireShape string, body []byte) (Response, erro
 		FinishReason:  finishReason,
 		FinishMessage: finishMessage,
 		ProviderTurn:  turn,
+		ID:            id,
+		Model:         model,
 	}, nil
 }
 
@@ -1165,6 +1178,8 @@ func EncodeResponse(provider, chatWireShape string, resp Response) ([]byte, erro
 		setWirePath(raw, cfg.ReasoningTokensPath, resp.Usage.Reasoning)
 		setWirePath(raw, cfg.FinishReasonPath, resp.FinishReason)
 		setWirePath(raw, cfg.FinishMessagePath, resp.FinishMessage)
+		setWirePath(raw, cfg.ResponseIDPath, resp.ID)
+		setWirePath(raw, cfg.ResponseModelPath, resp.Model)
 	}
 	return json.Marshal(raw)
 }
@@ -1300,6 +1315,8 @@ func encodeResponsesEnvelope(resp Response) map[string]any {
 	setWirePath(raw, "usage.input_tokens_details.cached_tokens", resp.Usage.CacheRead)
 	setWirePath(raw, "usage.output_tokens_details.reasoning_tokens", resp.Usage.Reasoning)
 	setWirePath(raw, "status", resp.FinishReason)
+	setWirePath(raw, providers.WireShapeResponseIDPath(providers.ChatResponsesOpenAI), resp.ID)
+	setWirePath(raw, providers.WireShapeResponseModelPath(providers.ChatResponsesOpenAI), resp.Model)
 	return raw
 }
 
@@ -1323,6 +1340,8 @@ func parseResponsesEnvelope(raw map[string]any) Response {
 	if pathPresent(raw, "status") {
 		resp.FinishReason = optString(extractPath(raw, "status"))
 	}
+	resp.ID = optStringPath(raw, providers.WireShapeResponseIDPath(providers.ChatResponsesOpenAI))
+	resp.Model = optStringPath(raw, providers.WireShapeResponseModelPath(providers.ChatResponsesOpenAI))
 	return resp
 }
 
@@ -1376,6 +1395,26 @@ func extractFinishSignal(raw map[string]any, provider string) (reason, message *
 		message = optString(extractPath(raw, cfg.FinishMessagePath))
 	}
 	return reason, message
+}
+
+// extractResponseIdentity reads the response id and the reported model
+// (ADR-099 CRF-012) at the provider's declared paths. Each is absent when the
+// provider declares no path (Bedrock) or the body has no value there.
+func extractResponseIdentity(raw map[string]any, provider string) (id, model *string) {
+	cfg, ok := providerSpecs()[provider]
+	if !ok {
+		return nil, nil
+	}
+	return optStringPath(raw, cfg.ResponseIDPath), optStringPath(raw, cfg.ResponseModelPath)
+}
+
+// optStringPath is optIntPath for a string field: nil when the path is empty
+// or names no value in data.
+func optStringPath(data map[string]any, path string) *string {
+	if path == "" || !pathPresent(data, path) {
+		return nil
+	}
+	return optString(extractPath(data, path))
 }
 
 // pathPresent reports whether the given dot-path navigates to a non-nil

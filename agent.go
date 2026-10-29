@@ -183,12 +183,15 @@ func (a *legacyAgent) runToolLoop(ctx context.Context) (Response, error) {
 				ProviderTurn: turn,
 			})
 			finishReason, finishMessage := extractFinishSignal(raw, a.provider.Name)
+			id, model := extractResponseIdentity(raw, a.provider.Name)
 			resp := Response{
 				Text:          text,
 				Usage:         totalUsage,
 				FinishReason:  finishReason,
 				FinishMessage: finishMessage,
 				ProviderTurn:  turn,
+				ID:            id,
+				Model:         model,
 			}
 			return attachRaw(resp, respBody, a.opts.raw), nil
 		}
