@@ -15,17 +15,11 @@ import (
 // plan-018 D1.3a.
 func (b *Text) Prompt(ctx context.Context, finalText string) (Response, error) {
 	req := b.request(finalText)
-	p := b.client.provider.toProvider(b.model)
+	p := b.client.provider.toProvider("")
 	o := b.sendOptions()
 	o.httpClient = withRequestTimeout(o.httpClient, p.Timeout)
 
 	if err := validateProvider(p); err != nil {
-		return Response{}, err
-	}
-	if err := validateRequest(req); err != nil {
-		return Response{}, err
-	}
-	if err := validateOptions(p.Name, req); err != nil {
 		return Response{}, err
 	}
 
@@ -41,11 +35,11 @@ func (b *Text) Prompt(ctx context.Context, finalText string) (Response, error) {
 		return Response{}, err
 	}
 
-	model, err := requestModel(p, cfg, req)
+	req, err = prepareRequest(p, cfg, req)
 	if err != nil {
 		return Response{}, err
 	}
-	req.Model = model
+	model := req.Model
 	baseEvent := providers.Event{
 		Op:       providers.OpLLMRequest,
 		Provider: p.Name,
@@ -67,7 +61,7 @@ func (b *Text) Prompt(ctx context.Context, finalText string) (Response, error) {
 	headers := sendHeaders(p, cfg, content)
 
 	if o.caching {
-		if err := applyCaching(ctx, body, p, o, cfg); err != nil {
+		if err := applyCaching(ctx, body, p, model, o, cfg); err != nil {
 			postEv := baseEvent
 			postEv.Err = err
 			postEv.Duration = time.Since(start)
@@ -123,18 +117,17 @@ func (b *Text) Prompt(ctx context.Context, finalText string) (Response, error) {
 // request builds the chained config into the one Request form (ADR-098).
 // (*Text).Prompt, Stream and Batch all encode what it returns.
 //
+//   - Model   -> req.Model; empty leaves the provider's default (RQC-004)
 //   - System  -> req.System
 //   - History, then the final user turn -> req.Messages
 //   - each request-shaping chain option -> its Request field
-//
-// The builder's model is not copied: it rides on the Provider, so a
-// Request.Model set later still wins (RQC-004).
 func (b *Text) request(finalText string) Request {
 	messages := b.history
 	if turn := b.finalTurn(finalText); len(turn) > 0 {
 		messages = append(append([]Message{}, b.history...), Message{Role: "user", Parts: turn})
 	}
 	return Request{
+		Model:            b.model,
 		System:           b.system,
 		Messages:         messages,
 		Schema:           b.schema,

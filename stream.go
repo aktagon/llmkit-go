@@ -39,7 +39,7 @@ type TextStream struct {
 // *TextStream is a trailing-handle: chunks are produced lazily via
 // Chunks(); Response() is populated when iteration completes.
 func (b *Text) Stream(ctx context.Context, finalText string) *TextStream {
-	provider := b.client.provider.toProvider(b.model)
+	provider := b.client.provider.toProvider("")
 	ts := &TextStream{
 		ctx:      ctx,
 		provider: provider,

@@ -212,8 +212,8 @@ type Request struct {
 	// PresencePenalty is the penalty on tokens that already appeared.
 	PresencePenalty *float64
 
-	// ReasoningEffort is the reasoning effort level, such as "low" or "high". Empty sends none.
-	ReasoningEffort string
+	// ReasoningEffort is the reasoning effort level, such as "low" or "high". Unset sends none.
+	ReasoningEffort *string
 
 	// ThinkingBudget is the token budget for extended thinking.
 	ThinkingBudget *int
