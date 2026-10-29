@@ -159,6 +159,7 @@ func (c *Client) Timeout(d time.Duration) *Client {
 type Text struct {
 	client           *Client
 	middleware       []MiddlewareFn
+	cacheTTL         time.Duration
 	caching          bool
 	files            []File
 	frequencyPenalty *float64
@@ -186,7 +187,12 @@ func (b *Text) AddMiddleware(fns ...MiddlewareFn) *Text {
 	out.middleware = append(append([]MiddlewareFn{}, b.middleware...), fns...)
 	return &out
 }
-func (b *Text) Caching() *Text { out := *b; out.caching = true; return &out }
+
+// CacheTTL sets how long the cache that Caching creates for this call lives.
+// Only resource caching (Google) creates a cache and reads it; without it
+// the provider's default TTL applies. Other providers ignore it.
+func (b *Text) CacheTTL(d time.Duration) *Text { out := *b; out.cacheTTL = d; return &out }
+func (b *Text) Caching() *Text                 { out := *b; out.caching = true; return &out }
 func (b *Text) File(id string) *Text {
 	out := *b
 	out.files = append(append([]File{}, b.files...), File{ID: id})

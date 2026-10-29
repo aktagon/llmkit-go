@@ -172,10 +172,11 @@ func (b *Text) finalTurn(finalText string) []Part {
 }
 
 // sendOptions holds the chain settings that do not shape the request
-// (RQC-002): caching, middleware and Raw.
+// (RQC-002): caching and its TTL, middleware and Raw.
 func (b *Text) sendOptions() *options {
 	o := defaultOptions()
 	o.caching = b.caching
+	o.cacheTTL = b.cacheTTL
 	o.middleware = b.middleware
 	o.raw = b.raw
 	return o
