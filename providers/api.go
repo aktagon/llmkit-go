@@ -90,6 +90,7 @@ func APIEntryPoints() []APIEntryPointDef {
 	return []APIEntryPointDef{
 		{GoFunc: "Agent", GoParamType: "Provider"},
 		{GoFunc: "Batch", GoParamType: "[]Request"},
+		{GoFunc: "DecodeRequest", GoParamType: "ChatWireShape"},
 		{GoFunc: "DecodeResponse", GoParamType: "ChatWireShape"},
 		{GoFunc: "EncodeRequest", GoParamType: "ChatWireShape"},
 		{GoFunc: "EncodeResponse", GoParamType: "ChatWireShape"},
