@@ -51,6 +51,7 @@ func APIOptions() []APIOptionDef {
 		{GoFunc: "WithImage", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithImageSize", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithIncludeText", SubOptions: []APISubOptionDef{}},
+		{GoFunc: "WithKeepStored", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithLastFrame", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithLyrics", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithMask", SubOptions: []APISubOptionDef{}},

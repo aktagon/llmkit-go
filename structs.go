@@ -295,6 +295,9 @@ type VideoHandle struct {
 
 	// Model is the submitted model id, carried so Wait can build a model-templated poll URL (Vertex Veo polls POST /{model}:fetchPredictOperation). Submit sets it from the request; empty for providers whose poll endpoint does not template the model.
 	Model string
+
+	// KeepStored is the caller's choice to keep the provider's stored job after Wait has the video. False (the default) makes Wait delete it on providers that store jobs (Gemini Omni); a failed delete returns the video with a VideoDeleteError. Submit copies the builder's KeepStored() flag here; cross-process resume callers set it directly.
+	KeepStored bool
 }
 
 // VideoResponse is the universal video-generation response container returned by VideoHandle.Wait. Carries the finished video references, usage, and the same finish-reason / finish-message / raw fields the image-gen and music-gen responses carry.
@@ -302,7 +305,7 @@ type VideoResponse struct {
 	// Videos are the finished video references. url-delivery providers (grok) fill VideoData.url; download-delivery providers fill VideoData.bytes with bytes the SDK fetched; output-uri providers (Bedrock) carry the caller S3 URI in url. Empty when the job failed — inspect FinishReason / FinishMessage.
 	Videos []VideoData
 
-	// Usage holds token consumption metrics for the video-generation call. No verified provider reports a video usage axis yet; the dimensions stay unreported unless a provider surfaces counts (ADR-034 OQ-3). Unreported is not zero.
+	// Usage holds token consumption metrics for the video-generation call, read at the provider config's video usage paths (Gemini Omni: input, output and reasoning tokens). Providers that report no counts leave every dimension unreported (ADR-034 OQ-3). Unreported is not zero.
 	Usage Usage
 
 	// FinishReason is the provider terminal status / stop signal (grok: a non-done status such as expired or failed). Empty on success. Optional.

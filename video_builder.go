@@ -33,6 +33,9 @@ func (b *Video) Submit(ctx context.Context, finalText string) (VideoHandle, erro
 	if b.raw {
 		opts = append(opts, withVideoRaw())
 	}
+	if b.keepStored {
+		opts = append(opts, withVideoKeepStored())
+	}
 
 	provider := b.client.provider.toProvider(b.model)
 	return submitVideo(ctx, provider, req, opts...)

@@ -32,6 +32,25 @@ func (e *ValidationError) Error() string {
 	return fmt.Sprintf("validation: %s - %s", e.Field, e.Message)
 }
 
+// VideoDeleteError reports that VideoHandle.Wait has the finished video but
+// could not delete the provider's stored job (HANDOFF-109). Wait returns the
+// video in its VideoResponse as well; Video holds the same value so a caller
+// that only inspects the error still has it.
+type VideoDeleteError struct {
+	// ID is the stored job's id, the VideoHandle.ID.
+	ID string
+	// Video is the finished video Wait received before the delete failed.
+	Video VideoResponse
+	// Err is the delete call's error.
+	Err error
+}
+
+func (e *VideoDeleteError) Error() string {
+	return fmt.Sprintf("video delete: stored job %s was not deleted: %v", e.ID, e.Err)
+}
+
+func (e *VideoDeleteError) Unwrap() error { return e.Err }
+
 // parseError parses provider-specific error responses into APIError.
 //
 func parseError(provider string, statusCode int, body []byte, headers http.Header) *APIError {

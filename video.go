@@ -91,6 +91,7 @@ type videoOptions struct {
 	middleware []providers.MiddlewareFn
 	httpClient *http.Client
 	raw        bool
+	keepStored bool
 }
 
 // WithVideoHTTPClient overrides the http.Client used for the video calls.
@@ -109,6 +110,13 @@ func WithVideoMiddleware(fns ...providers.MiddlewareFn) VideoOption {
 // *Video.Raw().
 func withVideoRaw() VideoOption {
 	return func(o *videoOptions) { o.raw = true }
+}
+
+// withVideoKeepStored makes Submit record on the handle that Wait keeps the
+// provider's stored job (HANDOFF-109). Internal: typed-builder users reach this
+// via *Video.KeepStored().
+func withVideoKeepStored() VideoOption {
+	return func(o *videoOptions) { o.keepStored = true }
 }
 
 func resolveVideoOptions(opts []VideoOption) *videoOptions {
@@ -150,6 +158,9 @@ func submitVideo(ctx context.Context, p Provider, req VideoRequest, opts ...Vide
 	model := findVideoModel(vgCfg, req.Model)
 	if model == nil {
 		return VideoHandle{}, &ValidationError{Field: "model", Message: req.Model + " is not a known video-generation model for " + p.Name}
+	}
+	if err := validateGeminiOmniInputs(vgCfg, parts, req); err != nil {
+		return VideoHandle{}, err
 	}
 
 	for i, part := range parts {
@@ -222,7 +233,7 @@ func submitVideo(ctx context.Context, p Provider, req VideoRequest, opts ...Vide
 	if err != nil {
 		return VideoHandle{}, err
 	}
-	return VideoHandle{ID: requestID, Provider: p, Raw: o.raw, Model: req.Model}, nil
+	return VideoHandle{ID: requestID, Provider: p, Raw: o.raw, Model: req.Model, KeepStored: o.keepStored}, nil
 }
 
 // dispatchVideoSubmit POSTs the submit body and returns the provider-assigned
@@ -343,6 +354,25 @@ func dispatchVideoSubmit(
 			"outputDataConfig": map[string]any{
 				"s3OutputDataConfig": map[string]any{"s3Uri": outputURI},
 			},
+		}
+	case providers.VideoShapeGeminiOmni:
+		// Gemini Omni (HANDOFF-109): a string input and a video response_format.
+		// background + store make the reply carry the interaction id that the
+		// handle polls; validateGeminiOmniInputs has rejected every non-text
+		// input and a duration.
+		format := map[string]any{"type": "video"}
+		if req.AspectRatio != "" {
+			format["aspect_ratio"] = req.AspectRatio
+		}
+		if req.Resolution != "" {
+			format["resolution"] = req.Resolution
+		}
+		body = map[string]any{
+			"model":           model,
+			"input":           joinPromptText(parts),
+			"response_format": format,
+			"background":      true,
+			"store":           true,
 		}
 	case providers.VideoShapeOpenRouter:
 		body = map[string]any{
@@ -552,6 +582,15 @@ func (h VideoHandle) Wait(ctx context.Context, opts ...VideoOption) (VideoRespon
 			if o.raw || h.Raw {
 				resp.Raw = append(json.RawMessage(nil), respBody...)
 			}
+			// A provider that stores the job (Gemini Omni) gets a DELETE once
+			// the video is in hand, unless the handle keeps it. A failed
+			// delete still returns the video (owner, 2026-10-29).
+			if vgCfg.DeleteEndpoint != "" && !h.KeepStored {
+				deleteURL := appendVideoAuth(videoPollURL(vgCfg.DeleteEndpoint, base, h.ID), p, cfg)
+				if _, err := doDelete(ctx, client, deleteURL, headers); err != nil {
+					return resp, &VideoDeleteError{ID: h.ID, Video: resp, Err: err}
+				}
+			}
 			return resp, nil
 		}
 
@@ -672,8 +711,40 @@ func parseVideoPoll(vgCfg *providers.VideoGenDef, body []byte) (VideoResponse, b
 	if err := json.Unmarshal(body, &raw); err != nil {
 		return VideoResponse{}, false, fmt.Errorf("unmarshal video poll response: %w", err)
 	}
+	resp, done, err := parseVideoPollShape(vgCfg, raw)
+	if done {
+		// Usage paths are config facts; empty paths leave a dimension unreported.
+		resp.Usage = Usage{
+			Input:     optIntPath(raw, vgCfg.UsageInputPath),
+			Output:    optIntPath(raw, vgCfg.UsageOutputPath),
+			Reasoning: optIntPath(raw, vgCfg.UsageReasoningPath),
+		}
+	}
+	return resp, done, err
+}
 
+// parseVideoPollShape is parseVideoPoll's per-wire-shape status and result
+// transform over the decoded poll body.
+func parseVideoPollShape(vgCfg *providers.VideoGenDef, raw map[string]any) (VideoResponse, bool, error) {
 	switch vgCfg.WireShape {
+	case providers.VideoShapeGeminiOmni:
+		// Interactions status (HANDOFF-109): in_progress is the only running
+		// state; every status other than completed ends the job.
+		status, _ := raw["status"].(string)
+		switch status {
+		case "completed":
+			return videoResultFromGeminiOmni(vgCfg, raw)
+		case "in_progress":
+			return VideoResponse{}, false, nil
+		default:
+			msg := status
+			if errObj, ok := raw["error"].(map[string]any); ok {
+				if m, ok := errObj["message"].(string); ok && m != "" {
+					msg = m
+				}
+			}
+			return VideoResponse{}, false, fmt.Errorf("video generation %s: %s", status, msg)
+		}
 	case providers.VideoShapeQwen:
 		output, _ := raw["output"].(map[string]any)
 		status, _ := output["task_status"].(string)
@@ -1038,6 +1109,28 @@ func videoResultFromVertexVeo(vgCfg *providers.VideoGenDef, raw map[string]any) 
 	return VideoResponse{Videos: []VideoData{{MimeType: mime, Bytes: decoded}}}, nil
 }
 
+// videoResultFromGeminiOmni extracts the finished video from a completed Gemini
+// Omni interaction (HANDOFF-109). The video arrives inline as base64 in the
+// model_output step's video item, found by type (lastInteractionOutputItem).
+// Download delivery with no fetch hop, like Vertex Veo: Bytes is filled and URL
+// stays empty. A completed reply with no video item is an error.
+func videoResultFromGeminiOmni(vgCfg *providers.VideoGenDef, raw map[string]any) (VideoResponse, bool, error) {
+	item := lastInteractionOutputItem(raw, "video")
+	b64, _ := item["data"].(string)
+	if b64 == "" {
+		return VideoResponse{}, false, fmt.Errorf("video generation: completed but carried no video item in steps[model_output].content")
+	}
+	decoded, err := base64.StdEncoding.DecodeString(b64)
+	if err != nil {
+		return VideoResponse{}, false, fmt.Errorf("decode gemini omni video bytes: %w", err)
+	}
+	mime := videoFallbackMime(vgCfg)
+	if m, _ := item["mime_type"].(string); m != "" {
+		mime = m
+	}
+	return VideoResponse{Videos: []VideoData{{MimeType: mime, Bytes: decoded}}}, true, nil
+}
+
 // videoResultFromBedrock extracts the finished video reference from a Bedrock
 // Nova Reel poll response. Bedrock uses output-uri delivery: the provider wrote
 // the mp4 to the caller's own S3 bucket and the finished poll echoes the S3 URI
@@ -1170,7 +1263,7 @@ func setRootVideoOptions(body map[string]any, req VideoRequest) {
 func videoShapeSendsOptions(shape string) bool {
 	switch shape {
 	case providers.VideoShapeOpenRouter, providers.VideoShapeGrok,
-		providers.VideoShapeVertexVeo:
+		providers.VideoShapeVertexVeo, providers.VideoShapeGeminiOmni:
 		return true
 	}
 	return false
@@ -1218,6 +1311,34 @@ func validateVideoOptions(providerName string, vgCfg *providers.VideoGenDef, mod
 		return &ValidationError{Field: "resolution", Message: model.ModelID + " does not support resolution " + req.Resolution}
 	case req.AspectRatio != "" && len(model.AspectRatios) > 0 && !contains(model.AspectRatios, req.AspectRatio):
 		return &ValidationError{Field: "aspect_ratio", Message: model.ModelID + " does not support aspect ratio " + req.AspectRatio}
+	}
+	return nil
+}
+
+// validateGeminiOmniInputs rejects what Gemini Omni slice 1 cannot send, before
+// any HTTP call (owner, 2026-10-29, ADR-097): a duration (Omni has no duration
+// field), a seed frame, a last frame and reference images (llmkit sends text
+// only). It is a config check on the wire shape, so it holds for every model on
+// it (ADR-102 MPT-006). The rules run in this order in every SDK.
+func validateGeminiOmniInputs(vgCfg *providers.VideoGenDef, parts []Part, req VideoRequest) error {
+	if vgCfg.WireShape != providers.VideoShapeGeminiOmni {
+		return nil
+	}
+	hasImage := false
+	for _, part := range parts {
+		if part.Image != nil {
+			hasImage = true
+		}
+	}
+	switch {
+	case req.DurationSeconds != 0:
+		return &ValidationError{Field: "duration", Message: "Gemini Omni video has no duration field"}
+	case hasImage:
+		return &ValidationError{Field: "parts", Message: "Gemini Omni video sends text only, not a seed frame"}
+	case req.LastFrame != nil:
+		return &ValidationError{Field: "last_frame", Message: "Gemini Omni video sends text only, not a last frame"}
+	case len(req.ReferenceImages) > 0:
+		return &ValidationError{Field: "reference_images", Message: "Gemini Omni video sends text only, not reference images"}
 	}
 	return nil
 }
