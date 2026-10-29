@@ -92,26 +92,8 @@ func generateMusic(ctx context.Context, p Provider, req MusicRequest, opts ...Mu
 	if err != nil {
 		return MusicResponse{}, err
 	}
-	for i, part := range parts {
-		set := 0
-		if part.Text != "" {
-			set++
-		}
-		if part.Lyrics != "" {
-			set++
-		}
-		if part.Image != nil {
-			return MusicResponse{}, &ValidationError{
-				Field:   fmt.Sprintf("parts[%d]", i),
-				Message: "music generation does not accept image parts",
-			}
-		}
-		if set != 1 {
-			return MusicResponse{}, &ValidationError{
-				Field:   fmt.Sprintf("parts[%d]", i),
-				Message: "must have exactly one of Text or Lyrics set",
-			}
-		}
+	if err := checkPartKinds("music_generation", parts); err != nil {
+		return MusicResponse{}, err
 	}
 
 	cfg, ok := providerSpecs()[p.Name]

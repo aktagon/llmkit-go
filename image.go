@@ -35,26 +35,8 @@ type ImageRequest struct {
 	Parts  []Part
 }
 
-// Part is the universal multimodal input atom. Exactly one of Text, Image,
-// or Lyrics is set; none or more than one is invalid (rejected by pre-flight
-// validation). Lyrics is a text payload tagged as song lyrics, used only by
-// music generation (ADR-033) — image and text generation reject it.
-// Construct via the parts/ sub-package: parts.Text(s) / parts.Image(mime,
-// bytes) / parts.Lyrics(s).
-type Part struct {
-	Text   string
-	Image  *MediaRef
-	Lyrics string
-
-	// AudioURL is a public audio URL for transcription (ADR-048), constructed
-	// via parts.Audio(url). Submitted to the provider directly as audio_url.
-	AudioURL string
-
-	// Audio is local audio bytes for transcription (ADR-048), constructed via
-	// parts.AudioBytes(mime, raw). The runtime uploads them first to obtain a
-	// URL, then submits that.
-	Audio *MediaRef
-}
+// Part is declared in go/structs.go (ADR-100 MSG-005). Construct it via the
+// parts/ sub-package: parts.Text(s) / parts.Image(mime, bytes) / parts.Lyrics(s).
 
 // ImageData and ImageResponse are declared in go/structs.go (ADR-018, API-PDS-002).
 
@@ -216,13 +198,8 @@ func generateImage(ctx context.Context, p Provider, req ImageRequest, opts ...Im
 	if err != nil {
 		return ImageResponse{}, err
 	}
-	for i, part := range parts {
-		if (part.Text != "") == (part.Image != nil) {
-			return ImageResponse{}, &ValidationError{
-				Field:   fmt.Sprintf("parts[%d]", i),
-				Message: "must have exactly one of Text or Image set",
-			}
-		}
+	if err := checkPartKinds("image_generation", parts); err != nil {
+		return ImageResponse{}, err
 	}
 
 	cfg, ok := providerSpecs()[p.Name]
