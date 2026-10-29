@@ -115,6 +115,7 @@ func (b *Agent) initAgent() {
 		o.maxToolIterations = *b.maxToolIterations
 	}
 	o.caching = b.caching
+	o.cacheTTL = b.cacheTTL
 	o.middleware = b.middleware
 	o.raw = b.raw
 

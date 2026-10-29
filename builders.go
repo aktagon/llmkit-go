@@ -503,6 +503,7 @@ type Agent struct {
 	client            *Client
 	middleware        []MiddlewareFn
 	tools             []Tool
+	cacheTTL          time.Duration
 	caching           bool
 	frequencyPenalty  *float64
 	history           []Message
@@ -532,6 +533,16 @@ func (b *Agent) AddMiddleware(fns ...MiddlewareFn) *Agent {
 func (b *Agent) AddTool(t Tool) *Agent {
 	out := *b
 	out.tools = append(append([]Tool{}, b.tools...), t)
+	out.state = nil
+	return &out
+}
+
+// CacheTTL sets how long the cache that Caching creates for this call lives.
+// Only resource caching (Google) creates a cache and reads it; without it
+// the provider's default TTL applies. Other providers ignore it.
+func (b *Agent) CacheTTL(d time.Duration) *Agent {
+	out := *b
+	out.cacheTTL = d
 	out.state = nil
 	return &out
 }
