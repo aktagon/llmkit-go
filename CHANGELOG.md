@@ -52,7 +52,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `providers.WireShapeRequiredParams(chatWireShape)` lists the generation
   params a chat wire shape's API rejects a request without. Today that is
   `OptionMaxTokens` on `ChatAnthropic`.
-- `Text.CacheTTL(d)` sets how long the cache that `.Caching()` creates lives.
+- `Text.CacheTTL(d)` and `Agent.CacheTTL(d)` set how long the cache that
+  `.Caching()` creates lives.
   Google resource caching sends it on the cache-create request; without it,
   Google's default TTL (3600 s) applies. Other providers ignore it.
 
