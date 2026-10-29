@@ -41,6 +41,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `Response.ID` and `Response.Model` carry the response id and the model the
+  provider reports. `Prompt`, `Stream`, `Agent.Prompt` and `DecodeResponse`
+  fill them, and `EncodeResponse` writes them back. Each is `nil` when the
+  response carries none, as on Bedrock. `Model` can differ from the requested
+  model: OpenAI returns the dated snapshot, and Google returns the served
+  version.
 - `Text.Request(req)` sets the whole `Request` on the text builder: its model, system
   prompt, messages, tools, schema and options. It replaces what the chain set
   before it, the text, image and file parts included; a chain method after it
