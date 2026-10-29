@@ -41,6 +41,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `DecodeRequest(provider, chatWireShape, wire)` decodes an OpenAI Chat
+  Completions request into a `Request`, the inverse of `EncodeRequest`. It
+  reads the model, a leading system turn, user and assistant turns with text
+  content, and every option the provider takes. `max_tokens` and
+  `max_completion_tokens` both set `MaxTokens`. Any other field, such as
+  `stream`, `tools`, `response_format` or a content list, fails with a
+  `*ValidationError` that names it, for example `messages[1].tool_calls`.
+  Other wire shapes fail on field `chatWireShape`.
 - `providers.WireShapeRequiredParams(chatWireShape)` lists the generation
   params a chat wire shape's API rejects a request without. Today that is
   `OptionMaxTokens` on `ChatAnthropic`.
