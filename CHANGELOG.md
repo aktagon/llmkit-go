@@ -29,12 +29,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   send it. A batch prompt with no text and no parts is rejected the same way.
 - The builder's model is the `Request`'s model. The `batch_submit` middleware
   event reports it, and a Google cache is created for it.
+- **BREAKING — a chat request without max tokens sends none, except to
+  Anthropic.** Every request used to carry `max_tokens: 4096` (or the
+  provider's key for it) when you set none, so a long answer was cut at 4096
+  tokens. Now the provider's own default applies. The Anthropic Messages API
+  rejects a request without `max_tokens`, so an Anthropic request still sends
+  4096 when you set none. To keep a cap, set it: `.MaxTokens(4096)`.
 - **BREAKING — the `CacheTTL` option is removed.** Since 3.0.0 it reached only
   `BatchHandle.Wait` and `Poll`, which create no cache, so it had no effect.
   Use `Text.CacheTTL(d)` instead.
 
 ### Added
 
+- `providers.WireShapeRequiredParams(chatWireShape)` lists the generation
+  params a chat wire shape's API rejects a request without. Today that is
+  `OptionMaxTokens` on `ChatAnthropic`.
 - `Text.CacheTTL(d)` sets how long the cache that `.Caching()` creates lives.
   Google resource caching sends it on the cache-create request; without it,
   Google's default TTL (3600 s) applies. Other providers ignore it.

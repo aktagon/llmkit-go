@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -620,16 +621,19 @@ func encodeRequest(provider string, cfg providerSpec, req Request) (map[string]a
 		body["model"] = model
 	}
 
-	// Max tokens
-	maxTokens := cfg.DefaultMaxTokens
-	if req.MaxTokens != nil {
-		maxTokens = *req.MaxTokens
+	// Max tokens: the caller's value, else the provider's default where the
+	// wire shape requires the param, else none (ADR-098 RQC-015).
+	maxTokens := req.MaxTokens
+	if maxTokens == nil && slices.Contains(providers.WireShapeRequiredParams(cfg.ChatWireShape), providers.OptionMaxTokens) {
+		maxTokens = &cfg.DefaultMaxTokens
 	}
 
 	// Provider-specific max tokens key (per-model override aware, ADR-024)
 	supported := providers.SupportedOptions(provider)
-	if key, ok := resolveOptionKey(provider, model, cfg.ChatWireShape, providers.OptionMaxTokens, supported); ok {
-		body[key] = maxTokens
+	if maxTokens != nil {
+		if key, ok := resolveOptionKey(provider, model, cfg.ChatWireShape, providers.OptionMaxTokens, supported); ok {
+			body[key] = *maxTokens
+		}
 	}
 
 	// System message placement
@@ -665,8 +669,8 @@ func encodeRequest(provider string, cfg providerSpec, req Request) (map[string]a
 		optBody := map[string]any{}
 		addOptions(body, optBody, req, provider, model, cfg.ChatWireShape)
 		// Also move max tokens into the wrapper
-		if key, ok := resolveOptionKey(provider, model, cfg.ChatWireShape, providers.OptionMaxTokens, supported); ok {
-			setNestedField(optBody, key, maxTokens)
+		if key, ok := resolveOptionKey(provider, model, cfg.ChatWireShape, providers.OptionMaxTokens, supported); ok && maxTokens != nil {
+			setNestedField(optBody, key, *maxTokens)
 			delete(body, strings.SplitN(key, ".", 2)[0])
 		}
 		if len(optBody) > 0 {
