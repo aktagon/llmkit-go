@@ -91,6 +91,7 @@ func APIEntryPoints() []APIEntryPointDef {
 		{GoFunc: "Agent", GoParamType: "Provider"},
 		{GoFunc: "Batch", GoParamType: "[]Request"},
 		{GoFunc: "DecodeResponse", GoParamType: "ChatWireShape"},
+		{GoFunc: "EncodeRequest", GoParamType: "ChatWireShape"},
 		{GoFunc: "EncodeResponse", GoParamType: "ChatWireShape"},
 		{GoFunc: "GenerateImage", GoParamType: "ImageRequest"},
 		{GoFunc: "GenerateMusic", GoParamType: "MusicRequest"},
