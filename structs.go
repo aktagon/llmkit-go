@@ -27,7 +27,7 @@ type BatchHandle struct {
 	Raw bool
 }
 
-// File is a reference to an uploaded file. Returned by UploadFile and attached to subsequent text-generation requests via Request.Files.
+// File is a reference to an uploaded file. Returned by UploadFile and attached to a later text-generation request as a file Part.
 type File struct {
 	// ID is the provider-assigned file identifier returned by the upload endpoint. Empty when the provider returns only a URI.
 	ID string
@@ -90,21 +90,15 @@ type MediaRef struct {
 	Bytes []byte
 }
 
-// Message is a single turn in a multi-turn conversation. Discriminated by role: text turns set content; assistant-with-tools turns set tool_calls; tool turns set tool_result. Consumers MUST inspect role before reading the optional tool-turn fields. ADR-020 extends Message with tool_calls and tool_result so *Agent history round-trips fully across process boundaries.
+// Message is a single turn in a multi-turn conversation: a role plus an ordered list of parts (ADR-100 MSG-001). The role decides which part kinds the turn may carry: a user turn text, images and files; an assistant turn text and tool calls; a tool turn tool results (MSG-002). The encoder rejects any other kind with a ValidationError.
 type Message struct {
-	// Role is the speaker identifier. Conventionally "user", "assistant", or "tool"; provider transforms may map to other roles (Bedrock's "USER"/"ASSISTANT", Google's "user"/"model").
+	// Role is the speaker: "user", "assistant" or "tool". Provider transforms may map it to other roles (Bedrock's "USER"/"ASSISTANT", Google's "user"/"model").
 	Role string
 
-	// Content is the turn's text content. Empty on assistant-with-tools turns and on tool turns (the carrier field switches to tool_calls or tool_result respectively).
-	Content string
+	// Parts are the turn's content, in order. The encoder keeps this order where the provider's wire keeps it (Anthropic, Google, Bedrock, Responses); OpenAI Chat Completions joins the text parts into content and moves the tool calls into tool_calls (ADR-100 MSG-003).
+	Parts []Part
 
-	// ToolCalls are the tool invocations the model produced on an assistant turn. Defaults to an empty list (never null) so consumers can iterate without a None-guard regardless of role. Empty on text turns and tool turns.
-	ToolCalls []ToolCall
-
-	// ToolResult is the tool execution result on a role=tool turn. Null on text turns and assistant turns. Singular (not plural) because one tool turn carries exactly one result.
-	ToolResult *ToolResult
-
-	// ProviderTurn is the provider's own serialization of this turn, when the SDK received it from a provider (ADR-085). Null on user turns, tool turns, and any assistant turn the caller authored via History(...) or a compaction hook — those are reconstructed from the fields above, as every turn was before ADR-085. Consumers never need to read it: it exists so the next request can replay the turn verbatim instead of rebuilding a lossy copy.
+	// ProviderTurn is the provider's own serialization of this turn, when the SDK received it from a provider (ADR-085). Null on user turns, tool turns, and any assistant turn the caller authored via History(...) or a compaction hook — those are reconstructed from the parts, as every turn was before ADR-085. Consumers never need to read it: it exists so the next request can replay the turn verbatim instead of rebuilding a lossy copy.
 	ProviderTurn *ProviderTurn
 }
 
@@ -168,7 +162,7 @@ type ProviderError struct {
 	Message string
 }
 
-// ProviderTurn is one assistant turn exactly as the provider serialized it, captured at assistantTurnPath and replayed unchanged on every subsequent request in the run (ADR-085). It sits BESIDE the canonical projection, not instead of it: Message.role/.content/.tool_calls stay the consumer's view of the turn, and this is what goes back on the wire. Present only on a turn the SDK received from a provider; a caller-authored turn (History(...), a compaction hook) has none and is reconstructed as before.
+// ProviderTurn is one assistant turn exactly as the provider serialized it, captured at assistantTurnPath and replayed unchanged on every subsequent request in the run (ADR-085). It sits BESIDE the canonical projection, not instead of it: Message.role and Message.parts stay the consumer's view of the turn, and this is what goes back on the wire. Present only on a turn the SDK received from a provider; a caller-authored turn (History(...), a compaction hook) has none and is reconstructed as before.
 type ProviderTurn struct {
 	// WireShape is the ChatWireShape value that produced this payload, spelled exactly as the SDK constant: ChatOpenAI, ChatAnthropic, ChatGoogle, ChatResponsesOpenAI, ChatBedrock. The spelling is part of the contract, not decoration — a payload whose wire_shape does not match is dropped rather than rejected, so a caller who hand-writes a lower-case variant gets silent reconstruction with no error to explain it. Load-bearing: a payload captured under one shape is never replayed under another, because the shapes disagree on what an assistant turn even is — an array of blocks on Anthropic, a message object on OpenAI, an item list on Responses. On a mismatch the payload is dropped and the turn reconstructed (ADR-085 RSN-006).
 	WireShape string

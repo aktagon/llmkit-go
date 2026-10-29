@@ -52,11 +52,9 @@ type Request struct {
 	// (RQC-004). Empty keeps the usual resolution.
 	Model    string
 	System   string
-	Messages []Message // every turn, including the final prompt
+	Messages []Message // every turn, including the final prompt; media are parts of a user turn
 	Tools    []Tool
-	Schema   string       // JSON schema for structured output
-	Files    []File       // attached to the final user turn
-	Images   []InputImage // attached to the final user turn
+	Schema   string // JSON schema for structured output
 
 	MaxTokens        *int
 	Temperature      *float64
@@ -90,18 +88,6 @@ type Usage = providers.Usage
 // Aliased to providers.MiddlewareFn so callers don't need to import the
 // providers subpackage just to declare a hook.
 type MiddlewareFn = providers.MiddlewareFn
-
-// InputImage references an image attached to a text-generation request
-// (vision input). The Text builder's Image(mime, bytes) part lowers into this
-// carrier as a base64 data URI and reaches the wire as the provider's native
-// image block (ADR-060). Distinct from Part's Image() constructor used for
-// image-generation calls; unifying text-gen input onto Part vocabulary
-// wholesale remains future work.
-type InputImage struct {
-	URL      string // URL or base64 data URI
-	MimeType string
-	Detail   string // "auto", "low", "high" (provider-specific)
-}
 
 // Tool defines a callable function for the agent.
 type Tool struct {
