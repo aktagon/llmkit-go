@@ -18,8 +18,9 @@ import (
 // (a leading system turn becomes Request.System) with text content, and every
 // option the provider takes, under any key the encoder may write for it. So
 // max_tokens and max_completion_tokens both decode to MaxTokens (RQC-010).
-// The model comes from the body, or from wire.Path where the provider puts
-// it in the URL. Any field the Request does not model, such as stream, tools
+// A bare-string stop decodes as a one-item list, stream false as no stream,
+// and a developer turn as the system turn. The model comes from the body, or
+// from wire.Path where the provider puts it in the URL. Any field the Request does not model, such as stream, tools
 // or a content list, fails with a *ValidationError that names it (RQC-007).
 func DecodeRequest(provider, chatWireShape string, wire WireRequest) (Request, error) {
 	cfg, ok := providerSpecs()[provider]
@@ -57,6 +58,10 @@ func DecodeRequest(provider, chatWireShape string, wire WireRequest) (Request, e
 	}
 	turns, hasTurns := body["messages"]
 	delete(body, "messages")
+	// stream false asks for what an absent stream does (HANDOFF-105 R3b).
+	if body["stream"] == false {
+		delete(body, "stream")
+	}
 	if err := rejectUnmodeled(body, ""); err != nil {
 		return Request{}, err
 	}
@@ -199,15 +204,20 @@ func setOption(req *Request, param providers.OptionKey, v any) error {
 		}
 		req.ReasoningEffort = &s
 	case providers.OptionStopSequences:
+		// A bare string is a one-item list (HANDOFF-105 R3b).
+		if s, ok := v.(string); ok {
+			req.Stop = []string{s}
+			return nil
+		}
 		list, ok := v.([]any)
 		if !ok {
-			return fmt.Errorf("must be a list of strings")
+			return fmt.Errorf("must be a string or a list of strings")
 		}
 		stop := make([]string, 0, len(list))
 		for _, item := range list {
 			s, ok := item.(string)
 			if !ok {
-				return fmt.Errorf("must be a list of strings")
+				return fmt.Errorf("must be a string or a list of strings")
 			}
 			stop = append(stop, s)
 		}
@@ -291,7 +301,9 @@ func decodeTurns(req *Request, cfg providerSpec, v any) error {
 	if !ok {
 		return &ValidationError{Field: "messages", Message: "must be a list"}
 	}
-	roles := map[string]string{}
+	// OpenAI's developer role is its system role for newer models
+	// (HANDOFF-105 R3b); the provider's role mappings come after it.
+	roles := map[string]string{"developer": "system"}
 	for canonical, onWire := range cfg.RoleMappings {
 		roles[onWire] = canonical
 	}
