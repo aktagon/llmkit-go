@@ -171,6 +171,57 @@ type ProviderTurn struct {
 	Wire string
 }
 
+// Request is the one form of a chat call (ADR-098): every turn, the tool definitions, and every option that shapes the request body. Text, Agent and batch build one and encode it; nothing else builds a chat body (RQC-001). Settings that do not shape the request (transport, caching, middleware, the Agent's loop limit, raw) stay outside it (RQC-002). Unset and empty fields are absent from the wire body.
+type Request struct {
+	// Model is the model id. When set, it wins over the builder's and the client's model (RQC-004); empty keeps the usual resolution.
+	Model string
+
+	// System is the system prompt. Empty sends none.
+	System string
+
+	// Messages are every turn, including the final prompt (RQC-001). Media are parts of a user turn (ADR-100 MSG-015).
+	Messages []Message
+
+	// Tools are the tools the model may call (RQC-018).
+	Tools []ToolDefinition
+
+	// Schema is the JSON Schema text for structured output. Empty asks for none.
+	Schema string
+
+	// MaxTokens is the cap on output tokens.
+	MaxTokens *int
+
+	// Temperature is the sampling temperature.
+	Temperature *float64
+
+	// TopP is the nucleus sampling probability mass.
+	TopP *float64
+
+	// TopK is the number of most likely tokens sampled from.
+	TopK *int
+
+	// Stop are the stop sequences. Empty sets none.
+	Stop []string
+
+	// Seed is the sampling seed.
+	Seed *int64
+
+	// FrequencyPenalty is the penalty on tokens by how often they appeared.
+	FrequencyPenalty *float64
+
+	// PresencePenalty is the penalty on tokens that already appeared.
+	PresencePenalty *float64
+
+	// ReasoningEffort is the reasoning effort level, such as "low" or "high". Empty sends none.
+	ReasoningEffort string
+
+	// ThinkingBudget is the token budget for extended thinking.
+	ThinkingBudget *int
+
+	// SafetySettings are the per-category safety filters for Gemini providers. Empty sets none.
+	SafetySettings []SafetySetting
+}
+
 // Response is the universal response container returned by text-generation terminals (Text.Prompt, Agent.Prompt). Five fields; all five are core (no per-capability augmentation).
 type Response struct {
 	// Text is the assistant's response text. Providers that return content as a list of blocks may put other blocks first — reasoning, or an image — and the text is found by matching the block, never by taking the first one. Empty is a normal outcome, not an error: a turn that only called a tool carries no text, and so does a turn cut off before it finished reasoning. Check the finish reason to tell those apart.
@@ -190,6 +241,15 @@ type Response struct {
 
 	// ProviderTurn is the assistant turn this response carried, as the provider serialized it (ADR-085). Always captured — unlike raw, it is not opt-in — so a caller running their own loop on Text.Prompt can thread the turn into the next request without parsing raw per provider, which is the work this library exists to absorb. Null when the response carries no assistant turn at the wire shape's declared position, or when the shape declares none (Bedrock).
 	ProviderTurn *ProviderTurn
+}
+
+// SafetySetting configures one per-category content safety filter for Gemini providers. Category and threshold pass through verbatim to the wire body: use the HARM_CATEGORY_* and HARM_BLOCK_THRESHOLD_* constants or Google's latest string values.
+type SafetySetting struct {
+	// Category is the harm category, for example "HARM_CATEGORY_DANGEROUS_CONTENT".
+	Category string
+
+	// Threshold is the block threshold, for example "BLOCK_ONLY_HIGH" or "BLOCK_NONE".
+	Threshold string
 }
 
 // SpeechResponse is the universal text-to-speech response container returned by Speech.Generate. Carries the synthesized audio (a single clip), the provider-reported usage, and an optional finish reason — reusing the music pipeline's AudioData container unchanged (ADR-049).
@@ -214,6 +274,18 @@ type ToolCall struct {
 
 	// Input is the JSON-decoded argument object the model passed. Null on absent or empty arg sets; otherwise a provider-specific JSON value (typically an object, but type-erased through OptionalAny because schemas vary per tool).
 	Input json.RawMessage
+}
+
+// ToolDefinition is a tool the model may call, as the request describes it: name, description and input schema (ADR-098 RQC-018). It is plain data; the Agent keeps the function that runs the tool beside the Request.
+type ToolDefinition struct {
+	// Name is the tool name the model calls it by. ToolCall.name carries it back.
+	Name string
+
+	// Description tells the model what the tool does and when to call it.
+	Description string
+
+	// Schema is the JSON Schema of the tool's input object.
+	Schema map[string]any
 }
 
 // ToolResult is the execution result of one tool call, attached to a role=tool turn. Pairs with a prior ToolCall via tool_use_id. ADR-020 promotes this from a private per-SDK type into a public generated struct.

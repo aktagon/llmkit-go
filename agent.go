@@ -11,8 +11,10 @@ import (
 )
 
 // legacyAgent manages multi-turn conversations with optional tool calling.
-// req holds the system prompt, the tools and the request-shaping options;
-// each turn sends it with the history as its Messages (ADR-098 RQC-001).
+// req holds the system prompt, the tool definitions and the request-shaping
+// options; each turn sends it with the history as its Messages (ADR-098
+// RQC-001). tools holds the functions that run them, beside the Request
+// (RQC-018).
 // The history is the public []Message: an assistant turn the loop received
 // carries its ProviderTurn (ADR-085) beside its parts, which stay what the
 // loop reads to run tools.
@@ -20,6 +22,7 @@ type legacyAgent struct {
 	provider Provider
 	opts     *options
 	req      Request
+	tools    []Tool
 	history  []Message
 }
 
@@ -30,12 +33,13 @@ type toolCall struct {
 }
 
 // newLegacyAgent creates a new agent for multi-turn conversations.
-func newLegacyAgent(p Provider, req Request, o *options) *legacyAgent {
+func newLegacyAgent(p Provider, req Request, tools []Tool, o *options) *legacyAgent {
 	o.httpClient = withRequestTimeout(o.httpClient, p.Timeout)
 	return &legacyAgent{
 		provider: p,
 		opts:     o,
 		req:      req,
+		tools:    tools,
 	}
 }
 
@@ -261,9 +265,9 @@ func toolResultMessage(toolUseID, content string) Message {
 }
 
 func (a *legacyAgent) findTool(name string) *Tool {
-	for i := range a.req.Tools {
-		if a.req.Tools[i].Name == name {
-			return &a.req.Tools[i]
+	for i := range a.tools {
+		if a.tools[i].Name == name {
+			return &a.tools[i]
 		}
 	}
 	return nil
