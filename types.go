@@ -150,12 +150,6 @@ func WithPollTimeout(d time.Duration) Option {
 	return func(o *options) { o.pollTimeout = d }
 }
 
-// CacheTTL sets the cache time-to-live. Used by resource caching (Google).
-// Ignored by providers with automatic or explicit caching.
-func CacheTTL(d time.Duration) Option {
-	return func(o *options) { o.cacheTTL = d }
-}
-
 // withRaw opts the call into populating Response.Raw with the parsed
 // provider response body (ADR-014). Internal — typed-builder users
 // reach this via *Text.Raw() / *Agent.Raw(); BatchHandle.Wait reads
