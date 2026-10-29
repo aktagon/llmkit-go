@@ -41,7 +41,9 @@ func submitBatch(ctx context.Context, p Provider, reqs []Request, o *options) (B
 		return BatchHandle{}, &ValidationError{Field: "provider", Message: "async batching not supported: " + p.Name}
 	}
 
-	model, err := resolveModel(p, cfg)
+	// Every item runs the one setup step before anything is sent (RQC-017),
+	// so an unsupported option fails the submit as it fails Text.
+	reqs, model, err := prepareBatch(p, cfg, reqs)
 	if err != nil {
 		return BatchHandle{}, err
 	}
@@ -247,15 +249,12 @@ func newBatchAdapter(handle BatchHandle, o *options) (batchAdapter, error) {
 // per-request bodies require (files-api / structured output), composed across
 // items, so the caller can attach them to the batch CREATE request (buildRequest
 // returns them per request, but the batch submit sends only auth headers).
+// reqs are prepared (prepareBatch).
 func buildBatchBody(ctx context.Context, reqs []Request, o *options, p Provider, cfg providerSpec, bc *providers.BatchDef) (map[string]any, map[string]string, error) {
 	body := map[string]any{}
 	betaHeaders := map[string]string{}
 	var items []map[string]any
 	for i, req := range reqs {
-		req, err := batchRequest(p, cfg, req)
-		if err != nil {
-			return nil, nil, err
-		}
 		reqBody, reqHeaders, err := encodeRequest(p.Name, cfg, req)
 		if err != nil {
 			return nil, nil, err
@@ -266,7 +265,7 @@ func buildBatchBody(ctx context.Context, reqs []Request, o *options, p Provider,
 		// Caching is a shared request-construction step (ADR-026), applied on
 		// the batch path like Text/Agent — matching the TS/Python batch paths.
 		if o.caching {
-			if err := applyCaching(ctx, reqBody, p, o, cfg); err != nil {
+			if err := applyCaching(ctx, reqBody, p, req.Model, o, cfg); err != nil {
 				return nil, nil, err
 			}
 		}
@@ -289,31 +288,38 @@ func buildBatchBody(ctx context.Context, reqs []Request, o *options, p Provider,
 	return body, betaHeaders, nil
 }
 
-// batchRequest resolves one batch item's model (RQC-004).
-func batchRequest(p Provider, cfg providerSpec, req Request) (Request, error) {
-	model, err := requestModel(p, cfg, req)
-	if err != nil {
-		return req, err
+// prepareBatch runs prepareRequest on every item and returns the prepared
+// items and the model the batch_submit event reports: the first item's.
+// Text.Batch builds every item from one builder, so they share one model.
+// With no items, the model is p's, as before.
+func prepareBatch(p Provider, cfg providerSpec, reqs []Request) ([]Request, string, error) {
+	out := make([]Request, 0, len(reqs))
+	for _, req := range reqs {
+		req, err := prepareRequest(p, cfg, req)
+		if err != nil {
+			return nil, "", err
+		}
+		out = append(out, req)
 	}
-	req.Model = model
-	return req, nil
+	if len(out) > 0 {
+		return out, out[0].Model, nil
+	}
+	model, err := resolveModel(p, cfg)
+	return out, model, err
 }
 
 // buildBatchJSONL serializes requests as JSONL for file-reference batch input.
 // Each line is: {"custom_id":"req-N","method":"POST","url":endpoint,"body":{...}}
+// reqs are prepared (prepareBatch).
 func buildBatchJSONL(ctx context.Context, reqs []Request, o *options, p Provider, cfg providerSpec, bc *providers.BatchDef) ([]byte, error) {
 	var buf strings.Builder
 	for i, req := range reqs {
-		req, err := batchRequest(p, cfg, req)
-		if err != nil {
-			return nil, err
-		}
 		reqBody, _, err := encodeRequest(p.Name, cfg, req)
 		if err != nil {
 			return nil, err
 		}
 		if o.caching {
-			if err := applyCaching(ctx, reqBody, p, o, cfg); err != nil {
+			if err := applyCaching(ctx, reqBody, p, req.Model, o, cfg); err != nil {
 				return nil, err
 			}
 		}

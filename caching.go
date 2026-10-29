@@ -12,7 +12,9 @@ import (
 
 // applyCaching mutates the request body to enable caching based on the provider's mode.
 // Dispatches on CachingDef.Mode — each branch follows the behavioral spec in rdfs:comment.
-func applyCaching(ctx context.Context, body map[string]any, p Provider, o *options, cfg providerSpec) error {
+// model is the request's resolved model (prepareRequest); a cached resource is
+// created for it.
+func applyCaching(ctx context.Context, body map[string]any, p Provider, model string, o *options, cfg providerSpec) error {
 	cc := providers.CachingConfig(p.Name)
 	if cc == nil {
 		return &ValidationError{Field: "caching", Message: "not supported by " + p.Name}
@@ -27,7 +29,7 @@ func applyCaching(ctx context.Context, body map[string]any, p Provider, o *optio
 		return applyExplicitCaching(body, cc, cfg)
 
 	case providers.CachingResource:
-		return applyResourceCaching(ctx, body, p, o, cc, cfg)
+		return applyResourceCaching(ctx, body, p, model, o, cc, cfg)
 
 	default:
 		return fmt.Errorf("unknown caching mode: %s", cc.Mode)
@@ -102,15 +104,11 @@ func applyExplicitCaching(body map[string]any, cc *providers.CachingDef, cfg pro
 //  2. Extract resource ID from response at Lifecycle.ResponseIdPath.
 //  3. Set body[Lifecycle.ReferenceField] = resource ID.
 //  4. Remove system prompt from main request body.
-func applyResourceCaching(ctx context.Context, body map[string]any, p Provider, o *options, cc *providers.CachingDef, cfg providerSpec) error {
+func applyResourceCaching(ctx context.Context, body map[string]any, p Provider, model string, o *options, cc *providers.CachingDef, cfg providerSpec) error {
 	lc := cc.Lifecycle
 	if lc == nil {
 		return fmt.Errorf("resource caching requires lifecycle config")
 	}
-
-	// Determine model. Both-empty is rejected by resolveModel at every
-	// entry point before caching applies.
-	model, _ := resolveModel(p, cfg)
 
 	baseEvent := providers.Event{
 		Op:       providers.OpCacheCreate,
