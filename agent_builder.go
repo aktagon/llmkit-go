@@ -120,7 +120,7 @@ func (b *Agent) initAgent() {
 
 	req := Request{
 		System:           b.system,
-		Tools:            b.tools,
+		Tools:            toolDefinitions(b.tools),
 		MaxTokens:        b.maxTokens,
 		Temperature:      b.temperature,
 		TopP:             b.topP,
@@ -133,7 +133,7 @@ func (b *Agent) initAgent() {
 		ThinkingBudget:   b.thinkingBudget,
 		SafetySettings:   b.safetySettings,
 	}
-	a := newLegacyAgent(b.client.provider.toProvider(b.model), req, o)
+	a := newLegacyAgent(b.client.provider.toProvider(b.model), req, b.tools, o)
 	// ADR-020 HIST-007: seed the agent's history from the chain's Message
 	// list. A turn restored from Load() carries its ProviderTurn back into
 	// the loop, which is what makes cross-process resume (ADR-023) replay

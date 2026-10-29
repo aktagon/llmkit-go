@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **BREAKING — `Request.Tools` is `[]ToolDefinition`.** A `ToolDefinition`
+  holds the name, description and input schema of a tool. `Tool`, with its
+  `Run` function, stays the type `Agent.AddTool` takes; the Agent sends its
+  definition and keeps `Run` to itself.
 - `Part` gains the fields `File`, `ToolCall` and `ToolResult`. Image, music,
   video and transcription reject a part kind they do not accept, before any
   HTTP call, with a `*ValidationError` that names the kind, for example

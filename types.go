@@ -41,34 +41,6 @@ const (
 	CapCatalogue       Capability = "catalogue"
 )
 
-// Request is the one form of a chat call (ADR-098): every turn, the tools, and
-// every option that shapes the request body. Text, Agent and batch build one
-// and encode it with EncodeRequest; nothing else builds a chat body (RQC-001).
-// Settings that do not shape the request (transport, caching, middleware, the
-// Agent's loop limit, Raw) stay outside it (RQC-002). Nil and empty fields are
-// absent.
-type Request struct {
-	// Model, when set, wins over the builder's and the client's model
-	// (RQC-004). Empty keeps the usual resolution.
-	Model    string
-	System   string
-	Messages []Message // every turn, including the final prompt; media are parts of a user turn
-	Tools    []Tool
-	Schema   string // JSON schema for structured output
-
-	MaxTokens        *int
-	Temperature      *float64
-	TopP             *float64
-	TopK             *int
-	Stop             []string
-	Seed             *int64
-	FrequencyPenalty *float64
-	PresencePenalty  *float64
-	ReasoningEffort  string
-	ThinkingBudget   *int
-	SafetySettings   []SafetySetting
-}
-
 // WireRequest is a chat request as the provider receives it, minus the key
 // (RQC-006). Path is the endpoint with the model filled in where the wire
 // shape puts it; the base URL is the client's. Headers are content headers
@@ -89,7 +61,9 @@ type Usage = providers.Usage
 // providers subpackage just to declare a hook.
 type MiddlewareFn = providers.MiddlewareFn
 
-// Tool defines a callable function for the agent.
+// Tool is a callable function for the agent: its definition, which the
+// request carries as a ToolDefinition, plus Run, which the Agent keeps beside
+// the Request (ADR-098 RQC-018).
 type Tool struct {
 	Name        string
 	Description string
@@ -97,13 +71,21 @@ type Tool struct {
 	Run         func(map[string]any) (string, error)
 }
 
-// SafetySetting configures a per-category content safety filter for Gemini providers.
-// Category and Threshold are passed through verbatim to the provider wire body —
-// use the HARM_CATEGORY_* and HARM_BLOCK_THRESHOLD_* constants or Google's latest
-// string values directly.
-type SafetySetting struct {
-	Category  string // e.g. "HARM_CATEGORY_DANGEROUS_CONTENT"
-	Threshold string // e.g. "BLOCK_ONLY_HIGH" or "BLOCK_NONE"
+// definition is the plain-data part of t that Request.Tools carries.
+func (t Tool) definition() ToolDefinition {
+	return ToolDefinition{Name: t.Name, Description: t.Description, Schema: t.Schema}
+}
+
+// toolDefinitions maps tools to the definitions Request.Tools carries.
+func toolDefinitions(tools []Tool) []ToolDefinition {
+	if len(tools) == 0 {
+		return nil
+	}
+	defs := make([]ToolDefinition, len(tools))
+	for i, t := range tools {
+		defs[i] = t.definition()
+	}
+	return defs
 }
 
 // Harm category constants for SafetySetting.Category.
