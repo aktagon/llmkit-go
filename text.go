@@ -2,7 +2,6 @@ package llmkit
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -125,31 +124,20 @@ func (b *Text) Prompt(ctx context.Context, finalText string) (Response, error) {
 // (*Text).Prompt, Stream and Batch all encode what it returns.
 //
 //   - System  -> req.System
-//   - History, then the parts and finalText as the last user turn
-//     (Text parts joined by newlines) -> req.Messages
-//   - image Parts -> req.Images (base64 data URIs; ADR-060)
-//   - files   -> req.Files
+//   - History, then the final user turn -> req.Messages
 //   - each request-shaping chain option -> its Request field
 //
 // The builder's model is not copied: it rides on the Provider, so a
 // Request.Model set later still wins (RQC-004).
 func (b *Text) request(finalText string) Request {
-	parts := b.parts
-	if finalText != "" {
-		parts = append(parts, Part{Text: finalText})
-	}
-	user, images := splitTextAndImages(parts)
-
 	messages := b.history
-	if user != "" || len(images) > 0 || len(b.files) > 0 {
-		messages = append(append([]Message{}, b.history...), Message{Role: "user", Content: user})
+	if turn := b.finalTurn(finalText); len(turn) > 0 {
+		messages = append(append([]Message{}, b.history...), Message{Role: "user", Parts: turn})
 	}
 	return Request{
 		System:           b.system,
 		Messages:         messages,
 		Schema:           b.schema,
-		Files:            b.files,
-		Images:           images,
 		MaxTokens:        b.maxTokens,
 		Temperature:      b.temperature,
 		TopP:             b.topP,
@@ -164,6 +152,32 @@ func (b *Text) request(finalText string) Request {
 	}
 }
 
+// finalTurn builds the parts of the final user turn so that every request
+// golden keeps its bytes (ADR-100 MSG-004): the files, then the image
+// parts, then one text part joining the text parts and finalText with
+// newlines (the join the text-parts-openai golden holds every SDK to). The
+// text part is left out when there is no text.
+func (b *Text) finalTurn(finalText string) []Part {
+	var parts, texts []Part
+	for _, f := range b.files {
+		parts = append(parts, Part{File: &f})
+	}
+	for _, p := range b.parts {
+		if p.Image != nil {
+			parts = append(parts, p)
+		} else if p.Text != "" {
+			texts = append(texts, p)
+		}
+	}
+	if finalText != "" {
+		texts = append(texts, Part{Text: finalText})
+	}
+	if len(texts) > 0 {
+		parts = append(parts, Part{Text: joinedText(texts)})
+	}
+	return parts
+}
+
 // sendOptions holds the chain settings that do not shape the request
 // (RQC-002): caching, middleware and Raw.
 func (b *Text) sendOptions() *options {
@@ -172,30 +186,6 @@ func (b *Text) sendOptions() *options {
 	o.middleware = b.middleware
 	o.raw = b.raw
 	return o
-}
-
-// splitTextAndImages separates a Parts slice into the Request shape: Text
-// parts join into the final user turn's text (newline-separated,
-// the join every SDK holds via the text-parts-openai request-wire golden),
-// Image parts become InputImage entries via base64 data URIs.
-func splitTextAndImages(parts []Part) (string, []InputImage) {
-	var text string
-	var images []InputImage
-	for _, p := range parts {
-		switch {
-		case p.Image != nil:
-			images = append(images, InputImage{
-				URL:      "data:" + p.Image.MimeType + ";base64," + base64.StdEncoding.EncodeToString(p.Image.Bytes),
-				MimeType: p.Image.MimeType,
-			})
-		case p.Text != "":
-			if text != "" {
-				text += "\n"
-			}
-			text += p.Text
-		}
-	}
-	return text, images
 }
 
 // decodeResponseRaw is DecodeResponse plus the ADR-014 raw opt-in. Every

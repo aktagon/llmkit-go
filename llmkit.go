@@ -339,9 +339,9 @@ func validateRequest(req Request) error {
 			Message: "set Text(), Parts, History, or Image() before calling Prompt",
 		}
 	}
-	// The carrier invariant (ADR-026: each message holds at most one of
-	// {text content, tool calls, tool result}) is enforced at the single
-	// toInternal boundary (PIPE-008), not here.
+	// The part invariants (ADR-100: one kind per part, a kind the role may
+	// carry) are enforced at the single toInternal boundary (PIPE-008), not
+	// here.
 	return nil
 }
 
@@ -604,8 +604,7 @@ func requestModel(p Provider, cfg providerSpec, req Request) (string, error) {
 // encoding, and the content headers. req.Model must be resolved.
 //
 // The message transforms read one ordered list built by requestMsgs: every
-// turn, validated at the carrier boundary (PIPE-008), with the files and
-// images on the final user turn (BUG-108).
+// turn, validated at the part boundary (PIPE-008, ADR-100 MSG-002).
 func encodeRequest(provider string, cfg providerSpec, req Request) (map[string]any, map[string]string, error) {
 	msgs, err := requestMsgs(req)
 	if err != nil {
@@ -694,7 +693,7 @@ func encodeRequest(provider string, cfg providerSpec, req Request) (map[string]a
 	// the beta the provider's upload declares (uploadBetaHeader). Compose
 	// with any existing value (e.g. structured output) rather than overwrite.
 	// Anthropic declares none since its Files API left beta (BUG-078).
-	if len(req.Files) > 0 {
+	if requestHasFiles(req) {
 		if fu := providers.FileUploadConfig(provider); fu != nil && fu.BetaHeader != "" {
 			headers["anthropic-beta"] = appendBeta(headers["anthropic-beta"], fu.BetaHeader)
 		}

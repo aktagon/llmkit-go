@@ -13,36 +13,20 @@ import (
 // legacyAgent manages multi-turn conversations with optional tool calling.
 // req holds the system prompt, the tools and the request-shaping options;
 // each turn sends it with the history as its Messages (ADR-098 RQC-001).
+// The history is the public []Message: an assistant turn the loop received
+// carries its ProviderTurn (ADR-085) beside its parts, which stay what the
+// loop reads to run tools.
 type legacyAgent struct {
 	provider Provider
 	opts     *options
 	req      Request
-	history  []internalMessage
-}
-
-// internalMessage tracks conversation state including tool calls/results.
-type internalMessage struct {
-	role       string
-	content    string
-	toolCalls  []toolCall
-	toolResult *toolResult
-	// providerTurn is this turn as the provider serialized it (ADR-085), set
-	// on assistant turns the loop received and nil on everything the loop
-	// authored (tool results) or the caller supplied. It sits beside the four
-	// fields above rather than replacing them: those stay the projection the
-	// loop reads to run tools, this is what goes back on the wire.
-	providerTurn *ProviderTurn
+	history  []Message
 }
 
 type toolCall struct {
 	id    string
 	name  string
 	input map[string]any
-}
-
-type toolResult struct {
-	toolUseID string
-	content   string
 }
 
 // newLegacyAgent creates a new agent for multi-turn conversations.
@@ -57,7 +41,7 @@ func newLegacyAgent(p Provider, req Request, o *options) *legacyAgent {
 
 // Chat sends a message and returns the response, executing tool calls if needed.
 func (a *legacyAgent) chat(ctx context.Context, msg string) (Response, error) {
-	a.history = append(a.history, internalMessage{role: "user", content: msg})
+	a.history = append(a.history, Message{Role: "user", Parts: textParts(msg)})
 	return a.runToolLoop(ctx)
 }
 
@@ -90,10 +74,7 @@ func (a *legacyAgent) runToolLoop(ctx context.Context) (Response, error) {
 		// identically to the Text/batch path.
 		req := a.req
 		req.Model = model
-		req.Messages = make([]Message, 0, len(a.history))
-		for _, m := range a.history {
-			req.Messages = append(req.Messages, toPublicMessage(m))
-		}
+		req.Messages = a.history
 		body, content, err := encodeRequest(a.provider.Name, cfg, req)
 		if err != nil {
 			return Response{Usage: totalUsage}, err
@@ -192,10 +173,10 @@ func (a *legacyAgent) runToolLoop(ctx context.Context) (Response, error) {
 			// another Chat() replays it like any other, and Response carries
 			// it so a caller running their own loop can thread it forward
 			// without parsing Raw per provider (ADR-085 § 6).
-			a.history = append(a.history, internalMessage{
-				role:         "assistant",
-				content:      text,
-				providerTurn: turn,
+			a.history = append(a.history, Message{
+				Role:         "assistant",
+				Parts:        textParts(text),
+				ProviderTurn: turn,
 			})
 			finishReason, finishMessage := extractFinishSignal(raw, a.provider.Name)
 			resp := Response{
@@ -214,10 +195,14 @@ func (a *legacyAgent) runToolLoop(ctx context.Context) (Response, error) {
 		// was rebuilt from toolCalls alone, which silently dropped any prose
 		// the model emitted alongside the call — the one confirmed defect the
 		// ADR's probe left standing.
-		a.history = append(a.history, internalMessage{
-			role:         "assistant",
-			toolCalls:    calls,
-			providerTurn: captureProviderTurn(respBody, cfg, cfg.ChatWireShape),
+		callParts := make([]Part, 0, len(calls))
+		for _, tc := range calls {
+			callParts = append(callParts, Part{ToolCall: &ToolCall{ID: tc.id, Name: tc.name, Input: encodeToolInput(tc.input)}})
+		}
+		a.history = append(a.history, Message{
+			Role:         "assistant",
+			Parts:        callParts,
+			ProviderTurn: captureProviderTurn(respBody, cfg, cfg.ChatWireShape),
 		})
 
 		// Execute tools and record results using selected transform
@@ -225,10 +210,7 @@ func (a *legacyAgent) runToolLoop(ctx context.Context) (Response, error) {
 			tool := a.findTool(tc.name)
 			if tool == nil {
 				result := fmt.Sprintf("error: unknown tool %q", tc.name)
-				a.history = append(a.history, internalMessage{
-					role:       "tool_result",
-					toolResult: &toolResult{toolUseID: tc.id, content: result},
-				})
+				a.history = append(a.history, toolResultMessage(tc.id, result))
 				continue
 			}
 
@@ -255,14 +237,27 @@ func (a *legacyAgent) runToolLoop(ctx context.Context) (Response, error) {
 			postEv.Duration = time.Since(toolStart)
 			firePost(ctx, a.opts.middleware, postEv)
 
-			a.history = append(a.history, internalMessage{
-				role:       "tool_result",
-				toolResult: &toolResult{toolUseID: tc.id, content: output},
-			})
+			a.history = append(a.history, toolResultMessage(tc.id, output))
 		}
 	}
 
 	return Response{Usage: totalUsage}, fmt.Errorf("max tool iterations (%d) reached", a.opts.maxToolIterations)
+}
+
+// textParts is one text part, or none for empty text: Go's Part cannot
+// carry an empty text (ADR-100 MSG-006), and a turn with no parts sends ""
+// as before.
+func textParts(text string) []Part {
+	if text == "" {
+		return nil
+	}
+	return []Part{{Text: text}}
+}
+
+// toolResultMessage is the tool turn the loop writes for one result. The
+// Agent writes one tool turn per result (ADR-100 MSG-009).
+func toolResultMessage(toolUseID, content string) Message {
+	return Message{Role: "tool", Parts: []Part{{ToolResult: &ToolResult{ToolUseID: toolUseID, Content: content}}}}
 }
 
 func (a *legacyAgent) findTool(name string) *Tool {
