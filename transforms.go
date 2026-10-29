@@ -57,7 +57,7 @@ func selectToolDefTransform(cfg providerSpec) toolDefTransformFunc {
 		if tc := providers.ToolCallConfig(cfg.Name); tc != nil && tc.ParamsWireField != "" {
 			field = tc.ParamsWireField
 		}
-		return func(body map[string]any, tools []Tool) {
+		return func(body map[string]any, tools []ToolDefinition) {
 			transformGoogleFunctionDeclarations(body, tools, field)
 		}
 	}
@@ -543,9 +543,9 @@ func googleParts(parts []Part, idToName map[string]string) []map[string]any {
 // Tool definition transforms — add tool schemas to request body
 // =============================================================================
 
-type toolDefTransformFunc func(body map[string]any, tools []Tool)
+type toolDefTransformFunc func(body map[string]any, tools []ToolDefinition)
 
-func transformOpenAIFunctions(body map[string]any, tools []Tool) {
+func transformOpenAIFunctions(body map[string]any, tools []ToolDefinition) {
 	defs := []map[string]any{}
 	for _, t := range tools {
 		defs = append(defs, map[string]any{
@@ -560,7 +560,7 @@ func transformOpenAIFunctions(body map[string]any, tools []Tool) {
 	body["tools"] = defs
 }
 
-func transformAnthropicTools(body map[string]any, tools []Tool) {
+func transformAnthropicTools(body map[string]any, tools []ToolDefinition) {
 	defs := []map[string]any{}
 	for _, t := range tools {
 		defs = append(defs, map[string]any{
@@ -572,7 +572,7 @@ func transformAnthropicTools(body map[string]any, tools []Tool) {
 	body["tools"] = defs
 }
 
-func transformGoogleFunctionDeclarations(body map[string]any, tools []Tool, paramsWireField string) {
+func transformGoogleFunctionDeclarations(body map[string]any, tools []ToolDefinition, paramsWireField string) {
 	decls := []map[string]any{}
 	for _, t := range tools {
 		decls = append(decls, map[string]any{
@@ -894,7 +894,7 @@ func bedrockImageFormat(mimeType string) string {
 	return mimeType
 }
 
-func transformBedrockToolDefs(body map[string]any, tools []Tool) {
+func transformBedrockToolDefs(body map[string]any, tools []ToolDefinition) {
 	defs := []map[string]any{}
 	for _, t := range tools {
 		defs = append(defs, map[string]any{
