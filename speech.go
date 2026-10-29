@@ -437,20 +437,7 @@ func parseInworldSpeechResponse(providerName string, raw map[string]any, fallbac
 // is used when present, else the model's outputMime. No audio item, or invalid
 // base64, is a decoding error (HANDOFF-036 A5).
 func parseInteractionStepsSpeechResponse(providerName string, raw map[string]any, fallbackMime string) (SpeechResponse, error) {
-	var last map[string]any
-	steps, _ := raw["steps"].([]any)
-	for _, s := range steps {
-		step, _ := s.(map[string]any)
-		if step == nil || step["type"] != "model_output" {
-			continue
-		}
-		content, _ := step["content"].([]any)
-		for _, c := range content {
-			if item, _ := c.(map[string]any); item != nil && item["type"] == "audio" {
-				last = item
-			}
-		}
-	}
+	last := lastInteractionOutputItem(raw, "audio")
 	b64, _ := last["data"].(string)
 	if b64 == "" {
 		return SpeechResponse{}, fmt.Errorf("%s speech response: no audio item in steps[model_output].content", providerName)
@@ -464,6 +451,29 @@ func parseInteractionStepsSpeechResponse(providerName string, raw map[string]any
 		mime = m
 	}
 	return SpeechResponse{Audio: AudioData{MimeType: mime, Bytes: decoded}}, nil
+}
+
+// lastInteractionOutputItem returns the last content item of type itemType
+// across the model_output steps of a Gemini Interactions API reply, or nil.
+// Steps are matched by type, never by position: a reply may hold user_input
+// and thought steps before the model_output step (speech, BUG-091; Omni video,
+// HANDOFF-109).
+func lastInteractionOutputItem(raw map[string]any, itemType string) map[string]any {
+	var last map[string]any
+	steps, _ := raw["steps"].([]any)
+	for _, s := range steps {
+		step, _ := s.(map[string]any)
+		if step == nil || step["type"] != "model_output" {
+			continue
+		}
+		content, _ := step["content"].([]any)
+		for _, c := range content {
+			if item, _ := c.(map[string]any); item != nil && item["type"] == itemType {
+				last = item
+			}
+		}
+	}
+	return last
 }
 
 // parseHexEnvelopeSpeechResponse decodes a MiniMax t2a_v2 reply (HANDOFF-094).

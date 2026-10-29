@@ -15,6 +15,7 @@ const (
 	VideoShapeVidu       = "VideoVidu"
 	VideoShapePixVerse   = "VideoPixVerse"
 	VideoShapeOpenRouter = "VideoOpenRouter"
+	VideoShapeGeminiOmni = "VideoGeminiOmni"
 )
 
 // Video output-delivery modes. Drive whether the runtime downloads
@@ -59,9 +60,14 @@ type VideoGenDef struct {
 	PollEndpoint      string           // poll endpoint template with {id}, relative to the resolved video base
 	FileEndpoint      string           // file-retrieve template with {file_id} for two-hop providers; "" = single-hop
 	CancelEndpoint    string           // cancel template with {model} and {operation_id}; "" = no documented cancel
+	DeleteEndpoint    string           // stored-job delete template with {id}; "" = nothing to delete
 	SubmitHandleField string           // dotted path to the poll handle id in the submit response
 	RequiresOutputURI bool
-	Models            []VideoModelDef
+	// Usage paths are dotted from the root of the finished poll reply; "" = unreported.
+	UsageInputPath     string
+	UsageOutputPath    string
+	UsageReasoningPath string
+	Models             []VideoModelDef
 }
 
 // VideoGenConfig returns the video-generation config for a provider, or nil
@@ -76,11 +82,15 @@ func VideoGenConfig(provider string) *VideoGenDef {
 			Variants: []RequestVariant{
 				{Carries: []string{"TextOnly"}, Shape: "", Endpoint: "/async-invoke"},
 			},
-			PollEndpoint:      "/async-invoke/{id}",
-			FileEndpoint:      "",
-			CancelEndpoint:    "",
-			SubmitHandleField: "invocationArn",
-			RequiresOutputURI: true,
+			PollEndpoint:       "/async-invoke/{id}",
+			FileEndpoint:       "",
+			CancelEndpoint:     "",
+			DeleteEndpoint:     "",
+			SubmitHandleField:  "invocationArn",
+			RequiresOutputURI:  true,
+			UsageInputPath:     "",
+			UsageOutputPath:    "",
+			UsageReasoningPath: "",
 			Models: []VideoModelDef{
 				{
 					ModelID:                 "amazon.nova-reel-v1:0",
@@ -96,6 +106,38 @@ func VideoGenConfig(provider string) *VideoGenDef {
 				},
 			},
 		}
+	case Google:
+		return &VideoGenDef{
+			WireShape:      "VideoGeminiOmni",
+			OutputDelivery: "DeliveryDownload",
+			VideoBaseURL:   "",
+			Variants: []RequestVariant{
+				{Carries: []string{"TextOnly"}, Shape: "", Endpoint: "/v1beta/interactions"},
+			},
+			PollEndpoint:       "/v1beta/interactions/{id}",
+			FileEndpoint:       "",
+			CancelEndpoint:     "",
+			DeleteEndpoint:     "/v1beta/interactions/{id}",
+			SubmitHandleField:  "id",
+			RequiresOutputURI:  false,
+			UsageInputPath:     "usage.total_input_tokens",
+			UsageOutputPath:    "usage.total_output_tokens",
+			UsageReasoningPath: "usage.total_thought_tokens",
+			Models: []VideoModelDef{
+				{
+					ModelID:                 "gemini-omni-1.1-flash",
+					Label:                   "Gemini Omni 1.1 Flash",
+					SupportsImageToVideo:    false,
+					SupportsLastFrame:       false,
+					SupportsReferenceImages: false,
+					MaxDurationSeconds:      0,
+					OutputMime:              "video/mp4",
+					Resolutions:             []string{},
+					AspectRatios:            []string{},
+					MaxInputImages:          0,
+				},
+			},
+		}
 	case Grok:
 		return &VideoGenDef{
 			WireShape:      "VideoGrok",
@@ -105,11 +147,15 @@ func VideoGenConfig(provider string) *VideoGenDef {
 				{Carries: []string{"TextOnly"}, Shape: "", Endpoint: "/v1/videos/generations"},
 				{Carries: []string{"WithSeedFrame"}, Shape: "", Endpoint: "/v1/videos/generations"},
 			},
-			PollEndpoint:      "/v1/videos/{id}",
-			FileEndpoint:      "",
-			CancelEndpoint:    "",
-			SubmitHandleField: "request_id",
-			RequiresOutputURI: false,
+			PollEndpoint:       "/v1/videos/{id}",
+			FileEndpoint:       "",
+			CancelEndpoint:     "",
+			DeleteEndpoint:     "",
+			SubmitHandleField:  "request_id",
+			RequiresOutputURI:  false,
+			UsageInputPath:     "",
+			UsageOutputPath:    "",
+			UsageReasoningPath: "",
 			Models: []VideoModelDef{
 				{
 					ModelID:                 "grok-imagine-video",
@@ -157,11 +203,15 @@ func VideoGenConfig(provider string) *VideoGenDef {
 			Variants: []RequestVariant{
 				{Carries: []string{"TextOnly"}, Shape: "", Endpoint: "/v1/video_generation"},
 			},
-			PollEndpoint:      "/v1/query/video_generation?task_id={id}",
-			FileEndpoint:      "/v1/files/retrieve?file_id={file_id}",
-			CancelEndpoint:    "",
-			SubmitHandleField: "task_id",
-			RequiresOutputURI: false,
+			PollEndpoint:       "/v1/query/video_generation?task_id={id}",
+			FileEndpoint:       "/v1/files/retrieve?file_id={file_id}",
+			CancelEndpoint:     "",
+			DeleteEndpoint:     "",
+			SubmitHandleField:  "task_id",
+			RequiresOutputURI:  false,
+			UsageInputPath:     "",
+			UsageOutputPath:    "",
+			UsageReasoningPath: "",
 			Models: []VideoModelDef{
 				{
 					ModelID:                 "MiniMax-Hailuo-2.3",
@@ -187,11 +237,15 @@ func VideoGenConfig(provider string) *VideoGenDef {
 				{Carries: []string{"WithSeedFrame"}, Shape: "", Endpoint: "/v1/videos"},
 				{Carries: []string{"WithSeedFrame", "WithLastFrame"}, Shape: "", Endpoint: "/v1/videos"},
 			},
-			PollEndpoint:      "/v1/videos/{id}",
-			FileEndpoint:      "",
-			CancelEndpoint:    "",
-			SubmitHandleField: "id",
-			RequiresOutputURI: false,
+			PollEndpoint:       "/v1/videos/{id}",
+			FileEndpoint:       "",
+			CancelEndpoint:     "",
+			DeleteEndpoint:     "",
+			SubmitHandleField:  "id",
+			RequiresOutputURI:  false,
+			UsageInputPath:     "",
+			UsageOutputPath:    "",
+			UsageReasoningPath: "",
 			Models: []VideoModelDef{
 				{
 					ModelID:                 "alibaba/wan-3.0",
@@ -323,11 +377,15 @@ func VideoGenConfig(provider string) *VideoGenDef {
 			Variants: []RequestVariant{
 				{Carries: []string{"TextOnly"}, Shape: "", Endpoint: "/openapi/v2/video/text/generate"},
 			},
-			PollEndpoint:      "/openapi/v2/video/result/{id}",
-			FileEndpoint:      "",
-			CancelEndpoint:    "",
-			SubmitHandleField: "Resp.video_id",
-			RequiresOutputURI: false,
+			PollEndpoint:       "/openapi/v2/video/result/{id}",
+			FileEndpoint:       "",
+			CancelEndpoint:     "",
+			DeleteEndpoint:     "",
+			SubmitHandleField:  "Resp.video_id",
+			RequiresOutputURI:  false,
+			UsageInputPath:     "",
+			UsageOutputPath:    "",
+			UsageReasoningPath: "",
 			Models: []VideoModelDef{
 				{
 					ModelID:                 "v4.5",
@@ -375,11 +433,15 @@ func VideoGenConfig(provider string) *VideoGenDef {
 			Variants: []RequestVariant{
 				{Carries: []string{"TextOnly"}, Shape: "", Endpoint: "/api/v1/services/aigc/video-generation/video-synthesis"},
 			},
-			PollEndpoint:      "/api/v1/tasks/{id}",
-			FileEndpoint:      "",
-			CancelEndpoint:    "",
-			SubmitHandleField: "output.task_id",
-			RequiresOutputURI: false,
+			PollEndpoint:       "/api/v1/tasks/{id}",
+			FileEndpoint:       "",
+			CancelEndpoint:     "",
+			DeleteEndpoint:     "",
+			SubmitHandleField:  "output.task_id",
+			RequiresOutputURI:  false,
+			UsageInputPath:     "",
+			UsageOutputPath:    "",
+			UsageReasoningPath: "",
 			Models: []VideoModelDef{
 				{
 					ModelID:                 "wan2.2-t2v-plus",
@@ -403,11 +465,15 @@ func VideoGenConfig(provider string) *VideoGenDef {
 			Variants: []RequestVariant{
 				{Carries: []string{"TextOnly"}, Shape: "", Endpoint: "/v2/videos"},
 			},
-			PollEndpoint:      "/v2/videos/{id}",
-			FileEndpoint:      "",
-			CancelEndpoint:    "",
-			SubmitHandleField: "id",
-			RequiresOutputURI: false,
+			PollEndpoint:       "/v2/videos/{id}",
+			FileEndpoint:       "",
+			CancelEndpoint:     "",
+			DeleteEndpoint:     "",
+			SubmitHandleField:  "id",
+			RequiresOutputURI:  false,
+			UsageInputPath:     "",
+			UsageOutputPath:    "",
+			UsageReasoningPath: "",
 			Models: []VideoModelDef{
 				{
 					ModelID:                 "minimax/video-01-director",
@@ -434,11 +500,15 @@ func VideoGenConfig(provider string) *VideoGenDef {
 				{Carries: []string{"WithSeedFrame"}, Shape: "", Endpoint: "/{model}:predictLongRunning"},
 				{Carries: []string{"WithSeedFrame", "WithLastFrame"}, Shape: "", Endpoint: "/{model}:predictLongRunning"},
 			},
-			PollEndpoint:      "/{model}:fetchPredictOperation",
-			FileEndpoint:      "",
-			CancelEndpoint:    "/{model}/operations/{operation_id}:cancel",
-			SubmitHandleField: "name",
-			RequiresOutputURI: false,
+			PollEndpoint:       "/{model}:fetchPredictOperation",
+			FileEndpoint:       "",
+			CancelEndpoint:     "/{model}/operations/{operation_id}:cancel",
+			DeleteEndpoint:     "",
+			SubmitHandleField:  "name",
+			RequiresOutputURI:  false,
+			UsageInputPath:     "",
+			UsageOutputPath:    "",
+			UsageReasoningPath: "",
 			Models: []VideoModelDef{
 				{
 					ModelID:                 "veo-3.1-fast-generate-001",
@@ -498,11 +568,15 @@ func VideoGenConfig(provider string) *VideoGenDef {
 			Variants: []RequestVariant{
 				{Carries: []string{"TextOnly"}, Shape: "", Endpoint: "/ent/v2/text2video"},
 			},
-			PollEndpoint:      "/ent/v2/tasks/{id}/creations",
-			FileEndpoint:      "",
-			CancelEndpoint:    "",
-			SubmitHandleField: "task_id",
-			RequiresOutputURI: false,
+			PollEndpoint:       "/ent/v2/tasks/{id}/creations",
+			FileEndpoint:       "",
+			CancelEndpoint:     "",
+			DeleteEndpoint:     "",
+			SubmitHandleField:  "task_id",
+			RequiresOutputURI:  false,
+			UsageInputPath:     "",
+			UsageOutputPath:    "",
+			UsageReasoningPath: "",
 			Models: []VideoModelDef{
 				{
 					ModelID:                 "viduq1",
@@ -550,11 +624,15 @@ func VideoGenConfig(provider string) *VideoGenDef {
 			Variants: []RequestVariant{
 				{Carries: []string{"TextOnly"}, Shape: "", Endpoint: "/v4/videos/generations"},
 			},
-			PollEndpoint:      "/v4/async-result/{id}",
-			FileEndpoint:      "",
-			CancelEndpoint:    "",
-			SubmitHandleField: "id",
-			RequiresOutputURI: false,
+			PollEndpoint:       "/v4/async-result/{id}",
+			FileEndpoint:       "",
+			CancelEndpoint:     "",
+			DeleteEndpoint:     "",
+			SubmitHandleField:  "id",
+			RequiresOutputURI:  false,
+			UsageInputPath:     "",
+			UsageOutputPath:    "",
+			UsageReasoningPath: "",
 			Models: []VideoModelDef{
 				{
 					ModelID:                 "cogvideox-3",
