@@ -133,6 +133,45 @@ func ResponseTextConfig(chatWireShape string) *ResponseTextConfigDef {
 	}
 }
 
+// WireShapeResponseIDPath returns where a chat wire shape carries the response
+// id (ADR-099 CRF-013). The runtime reads it for a call on a shape other than
+// the provider's default; the default shape reaches ProviderSpec.ResponseIDPath.
+func WireShapeResponseIDPath(chatWireShape string) string {
+	switch chatWireShape {
+	case ChatAnthropic:
+		return "id"
+	case ChatBedrock:
+		return ""
+	case ChatGoogle:
+		return "responseId"
+	case ChatOpenAI:
+		return "id"
+	case ChatResponsesOpenAI:
+		return "id"
+	default:
+		return ""
+	}
+}
+
+// WireShapeResponseModelPath returns where a chat wire shape carries the
+// reported model, read like WireShapeResponseIDPath.
+func WireShapeResponseModelPath(chatWireShape string) string {
+	switch chatWireShape {
+	case ChatAnthropic:
+		return "model"
+	case ChatBedrock:
+		return ""
+	case ChatGoogle:
+		return "modelVersion"
+	case ChatOpenAI:
+		return "model"
+	case ChatResponsesOpenAI:
+		return "model"
+	default:
+		return ""
+	}
+}
+
 // UsagePaths returns the JSON paths for input and output token counts.
 func UsagePaths(provider string) (inputPath, outputPath string) {
 	switch ProviderName(provider) {
