@@ -41,16 +41,6 @@ const (
 	CapCatalogue       Capability = "catalogue"
 )
 
-// WireRequest is a chat request as the provider receives it, minus the key
-// (RQC-006). Path is the endpoint with the model filled in where the wire
-// shape puts it; the base URL is the client's. Headers are content headers
-// only, such as anthropic-beta: the send path adds auth and caller headers.
-type WireRequest struct {
-	Path    string
-	Headers map[string]string
-	Body    []byte
-}
-
 // Usage holds token consumption metrics.
 // Aliased to providers.Usage so middleware events and the public API share
 // one type without conversion.
