@@ -140,9 +140,10 @@ func blockArrayPaths(textCfg *providers.ResponseTextConfigDef, toolCfg *provider
 // carries no id on the wire; the id is the tool name when the provider's
 // toolCallIDSource says so (Google). The arguments are decoded per the
 // provider's ArgsFormat: a JSON string (json_string) or a JSON value (map).
-// Absent arguments leave Input nil. A block with no tool name, or arguments
-// that do not decode, is a ValidationError on field "toolCalls": it is not a
-// call the caller can run.
+// Absent arguments, and an empty JSON string, leave Input nil: an empty
+// argument set is null, as ToolCall.Input documents. A block with no tool
+// name, or arguments that do not decode, is a ValidationError on field
+// "toolCalls": it is not a call the caller can run.
 func readToolCall(block map[string]any, cfg *providers.ToolCallResponseConfigDef, def *providers.ToolCallDef) (ToolCall, error) {
 	call := ToolCall{Name: extractPath(block, cfg.NamePath)}
 	if call.Name == "" {
@@ -163,6 +164,9 @@ func readToolCall(block map[string]any, cfg *providers.ToolCallResponseConfigDef
 		s, ok := args.(string)
 		if !ok {
 			return ToolCall{}, malformedToolCall("%q: arguments at %s are not a JSON string", call.Name, cfg.ArgsPath)
+		}
+		if s == "" {
+			return call, nil
 		}
 		if err := json.Unmarshal([]byte(s), &value); err != nil {
 			return ToolCall{}, malformedToolCall("%q: arguments at %s: %v", call.Name, cfg.ArgsPath, err)
