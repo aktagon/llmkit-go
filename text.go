@@ -74,7 +74,7 @@ func (b *Text) Prompt(ctx context.Context, finalText string) (Response, error) {
 		}
 	}
 
-	jsonBody, err := json.Marshal(body)
+	jsonBody, err := marshalWire(body)
 	if err != nil {
 		postEv := baseEvent
 		postEv.Err = err
