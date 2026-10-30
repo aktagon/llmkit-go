@@ -233,18 +233,16 @@ func generateImage(ctx context.Context, p Provider, req ImageRequest, opts ...Im
 	if imgCfg == nil {
 		return ImageResponse{}, &ValidationError{Field: "provider", Message: p.Name + " does not support image generation"}
 	}
-	model := findImageModel(imgCfg, req.Model)
-	if model == nil {
-		return ImageResponse{}, &ValidationError{Field: "model", Message: req.Model + " is not a known image-generation model for " + p.Name}
-	}
+	// ADR-102 MPT-001: an unlisted model (nil) skips the per-model checks.
+	model, listed := lookupModel(imgCfg.Models, req.Model, imageModelID)
 	// Empty whitelist means "no client-side check; pass through" — used by
 	// providers (e.g., OpenAI) that accept arbitrary sizes within documented
 	// bounds. The provider API rejects bad values with a clean 400; trust
 	// the boundary instead of carrying a stale whitelist (plan 020 q1).
-	if o.aspectRatio != "" && len(model.AspectRatios) > 0 && !contains(model.AspectRatios, o.aspectRatio) {
+	if listed && o.aspectRatio != "" && len(model.AspectRatios) > 0 && !contains(model.AspectRatios, o.aspectRatio) {
 		return ImageResponse{}, &ValidationError{Field: "aspect_ratio", Message: o.aspectRatio + " not supported by " + req.Model}
 	}
-	if o.imageSize != "" && len(model.ImageSizes) > 0 && !contains(model.ImageSizes, o.imageSize) {
+	if listed && o.imageSize != "" && len(model.ImageSizes) > 0 && !contains(model.ImageSizes, o.imageSize) {
 		return ImageResponse{}, &ValidationError{Field: "image_size", Message: o.imageSize + " not supported by " + req.Model}
 	}
 	imageCount := 0
@@ -393,8 +391,12 @@ func validateImageShapeOptions(providerName, shape string, o *imageOptions) erro
 
 // validateImageArity rejects image parts the model does not take.
 // BUG-096: both limits are llmkit wire facts per model. MaxInputImages 0
-// means no llmkit limit; the provider decides volume.
+// means no llmkit limit; the provider decides volume. An unlisted model (nil)
+// has no limits, so the caller's image parts are sent (decision 009).
 func validateImageArity(model *providers.ImageModelDef, imageCount int) error {
+	if model == nil {
+		return nil
+	}
 	if imageCount > 0 && !model.SupportsImageInput {
 		return &ValidationError{
 			Field:   "parts",
@@ -729,14 +731,7 @@ func normalizeImageParts(req ImageRequest) ([]Part, error) {
 	}
 }
 
-func findImageModel(cfg *providers.ImageGenDef, modelID string) *providers.ImageModelDef {
-	for i := range cfg.Models {
-		if cfg.Models[i].ModelID == modelID {
-			return &cfg.Models[i]
-		}
-	}
-	return nil
-}
+func imageModelID(m *providers.ImageModelDef) string { return m.ModelID }
 
 func contains(haystack []string, needle string) bool {
 	for _, v := range haystack {
