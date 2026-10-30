@@ -68,21 +68,6 @@ func selectToolDefTransform(cfg providerSpec) toolDefTransformFunc {
 	return transformOpenAIFunctions
 }
 
-// selectToolCallExtractor picks the tool call parser for responses.
-func selectToolCallExtractor(cfg providerSpec) toolCallExtractFunc {
-	switch cfg.ChatWireShape {
-	case providers.ChatBedrock:
-		return extractBedrockToolCalls
-	case providers.ChatGoogle:
-		return extractGoogleToolCalls
-	}
-	tc := providers.ToolCallConfig(cfg.Name)
-	if tc != nil && tc.ArgsFormat == "map" {
-		return extractAnthropicToolCalls
-	}
-	return extractOpenAIToolCalls
-}
-
 // =============================================================================
 // Internal message sum (ADR-026 PIPE-007/008, ADR-100)
 // =============================================================================
@@ -134,20 +119,11 @@ func requestMsgs(req Request) ([]msg, error) {
 func toInternal(messages []Message) ([]msg, error) {
 	out := make([]msg, 0, len(messages))
 	for i, m := range messages {
-		if err := checkPartKinds("chat", m.Parts); err != nil {
+		if err := checkTurnParts(m.Role, m.Parts); err != nil {
 			if ve, ok := err.(*ValidationError); ok {
 				ve.Field = fmt.Sprintf("messages[%d].%s", i, ve.Field)
 			}
 			return nil, err
-		}
-		allowed := roleParts[m.Role]
-		for j, p := range m.Parts {
-			if kind := p.partKinds()[0]; !slices.Contains(allowed, kind) {
-				return nil, &ValidationError{
-					Field:   fmt.Sprintf("messages[%d].parts[%d]", i, j),
-					Message: fmt.Sprintf("%s turn does not accept %s parts", m.Role, kind),
-				}
-			}
 		}
 		projected := msgParts{Role: m.Role, Parts: m.Parts}
 		// ProviderTurn is the same turn in the provider's own serialization.
@@ -164,6 +140,26 @@ func toInternal(messages []Message) ([]msg, error) {
 		out = append(out, projected)
 	}
 	return out, nil
+}
+
+// checkTurnParts rejects a part that sets no kind or two, a kind chat does
+// not accept (MSG-011), or a kind the role cannot carry (MSG-002). The field
+// names the part, parts[j]. The request encoder runs it on every turn, and
+// EncodeResponse on the response's assistant turn.
+func checkTurnParts(role string, parts []Part) error {
+	if err := checkPartKinds("chat", parts); err != nil {
+		return err
+	}
+	allowed := roleParts[role]
+	for j, p := range parts {
+		if kind := p.partKinds()[0]; !slices.Contains(allowed, kind) {
+			return &ValidationError{
+				Field:   fmt.Sprintf("parts[%d]", j),
+				Message: fmt.Sprintf("%s turn does not accept %s parts", role, kind),
+			}
+		}
+	}
+	return nil
 }
 
 // requestHasFiles reports whether any turn carries a file part.
@@ -697,115 +693,6 @@ func googleFunctionResponse(result ToolResult) map[string]any {
 }
 
 // =============================================================================
-// Block selection — the ONE scanner over a provider's mixed content array
-// =============================================================================
-
-// matchingBlocks returns the elements of the array at blocksPath that the
-// marker identifies, in wire order. It is the single primitive behind every
-// "which blocks in this response are of kind X" question — text extraction and
-// tool-call extraction both run through it, so the two cannot come to disagree
-// about what an array element is.
-//
-// Marker semantics are exactly the generated config contract:
-//
-//	markerPath == ""                     homogeneous array; every element matches
-//	markerPath set, markerValue == ""    element matches if the key is PRESENT
-//	markerPath and markerValue both set  element matches if the key EQUALS the value
-//
-// Presence rather than equality is not a shortcut: a Bedrock ContentBlock and a
-// Gemini Part are UNIONS whose text member carries no type key at all, so an
-// equality test there would match nothing.
-//
-// Navigation reuses walkPath, so there is no second path grammar here — which
-// is what kept this fix clear of the rejected content[type=text].text filter
-// syntax (java's Json.at calls parseInt on the bracket body).
-func matchingBlocks(raw map[string]any, blocksPath, markerPath, markerValue string) []map[string]any {
-	arr, ok := walkPath(raw, blocksPath).([]any)
-	if !ok {
-		return nil
-	}
-
-	var out []map[string]any
-	for _, elem := range arr {
-		block, ok := elem.(map[string]any)
-		if !ok {
-			continue
-		}
-		if markerPath != "" {
-			marker, present := block[markerPath]
-			if !present {
-				continue
-			}
-			if markerValue != "" && marker != markerValue {
-				continue
-			}
-		}
-		out = append(out, block)
-	}
-	return out
-}
-
-// =============================================================================
-// Tool call extraction — parse tool calls from provider responses
-// =============================================================================
-
-type toolCallExtractFunc func(raw map[string]any, tcConfig *providers.ToolCallDef) []toolCall
-
-func extractOpenAIToolCalls(raw map[string]any, tcConfig *providers.ToolCallDef) []toolCall {
-	choices, ok := raw["choices"].([]any)
-	if !ok || len(choices) == 0 {
-		return nil
-	}
-	choice := choices[0].(map[string]any)
-	message, ok := choice["message"].(map[string]any)
-	if !ok {
-		return nil
-	}
-	tcs, ok := message["tool_calls"].([]any)
-	if !ok {
-		return nil
-	}
-	var calls []toolCall
-	for _, tc := range tcs {
-		tcMap := tc.(map[string]any)
-		fn := tcMap["function"].(map[string]any)
-
-		var input map[string]any
-		if tcConfig.ArgsFormat == "json_string" {
-			argsStr, _ := fn["arguments"].(string)
-			json.Unmarshal([]byte(argsStr), &input)
-		} else {
-			input, _ = fn["arguments"].(map[string]any)
-		}
-
-		calls = append(calls, toolCall{
-			id:    fmt.Sprintf("%v", tcMap["id"]),
-			name:  fmt.Sprintf("%v", fn["name"]),
-			input: input,
-		})
-	}
-	return calls
-}
-
-// The N=1 proof for matchingBlocks: this is the SAME call the text reader
-// makes, with a different marker value. Before BUG-053 these were two
-// hand-rolled scans over one array that happened to agree; agreement by
-// coincidence is what let text extraction break on thinking blocks while
-// tool-call extraction, scanning the very same array, kept working.
-func extractAnthropicToolCalls(raw map[string]any, _ *providers.ToolCallDef) []toolCall {
-	var calls []toolCall
-	for _, block := range matchingBlocks(raw, "content", "type", "tool_use") {
-		input, _ := block["input"].(map[string]any)
-		calls = append(calls, toolCall{
-			id:    fmt.Sprintf("%v", block["id"]),
-			name:  fmt.Sprintf("%v", block["name"]),
-			input: input,
-		})
-	}
-	return calls
-}
-
-// =============================================================================
 // Bedrock Converse transforms — 4th API shape
 // Content wrapped in [{text: "..."}] arrays, tools in toolConfig.tools
 // =============================================================================
@@ -925,69 +812,4 @@ func bedrockToolResultBlock(result ToolResult) map[string]any {
 			"content":   []map[string]any{{"text": result.Content}},
 		},
 	}
-}
-
-func extractBedrockToolCalls(raw map[string]any, _ *providers.ToolCallDef) []toolCall {
-	output, ok := raw["output"].(map[string]any)
-	if !ok {
-		return nil
-	}
-	message, ok := output["message"].(map[string]any)
-	if !ok {
-		return nil
-	}
-	content, ok := message["content"].([]any)
-	if !ok {
-		return nil
-	}
-	var calls []toolCall
-	for _, c := range content {
-		block, ok := c.(map[string]any)
-		if !ok {
-			continue
-		}
-		tu, ok := block["toolUse"].(map[string]any)
-		if !ok {
-			continue
-		}
-		input, _ := tu["input"].(map[string]any)
-		calls = append(calls, toolCall{
-			id:    fmt.Sprintf("%v", tu["toolUseId"]),
-			name:  fmt.Sprintf("%v", tu["name"]),
-			input: input,
-		})
-	}
-	return calls
-}
-
-func extractGoogleToolCalls(raw map[string]any, _ *providers.ToolCallDef) []toolCall {
-	candidates, ok := raw["candidates"].([]any)
-	if !ok || len(candidates) == 0 {
-		return nil
-	}
-	candidate := candidates[0].(map[string]any)
-	content, ok := candidate["content"].(map[string]any)
-	if !ok {
-		return nil
-	}
-	parts, ok := content["parts"].([]any)
-	if !ok {
-		return nil
-	}
-	var calls []toolCall
-	for _, p := range parts {
-		part := p.(map[string]any)
-		fc, ok := part["functionCall"].(map[string]any)
-		if !ok {
-			continue
-		}
-		args, _ := fc["args"].(map[string]any)
-		name := fmt.Sprintf("%v", fc["name"])
-		calls = append(calls, toolCall{
-			id:    name,
-			name:  name,
-			input: args,
-		})
-	}
-	return calls
 }
