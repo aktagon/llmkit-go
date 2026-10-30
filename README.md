@@ -24,7 +24,7 @@ go get github.com/aktagon/llmkit-go/v3
 ```go
 c := llmkit.New("anthropic", os.Getenv("ANTHROPIC_API_KEY"))
 resp, err := c.Text.System("You are helpful").Prompt(ctx, "Hello")
-fmt.Println(resp.Text)
+fmt.Println(resp.Text())
 ```
 
 `c.Text`, `c.Image`, `c.Music`, `c.Video`, `c.Agent`, and `c.Upload` are
@@ -99,7 +99,7 @@ resp, err := c.Text.
     Temperature(0.7).
     Prompt(ctx, "What is 2+2?")
 
-fmt.Println(resp.Text) // "4"
+fmt.Println(resp.Text()) // "4"
 
 // Every Usage dimension is optional. nil means the provider did not report
 // the value, which is NOT the same as reporting zero: a provider that says it
@@ -159,7 +159,7 @@ Pass a JSON schema to get typed responses:
 resp, err := c.Text.
     Schema(`{"type":"object","properties":{"color":{"type":"string"}}}`).
     Prompt(ctx, "The sky is blue")
-// resp.Text == `{"color":"blue"}`
+// resp.Text() == `{"color":"blue"}`
 ```
 
 ### Agent — tool loop
