@@ -1,6 +1,7 @@
 package llmkit
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -1078,7 +1079,7 @@ func DecodeResponse(provider, chatWireShape string, body []byte) (Response, erro
 		return resp, nil
 	}
 
-	parts, err := decodeChatParts(raw, provider, chatWireShape)
+	parts, err := decodeChatParts(body, raw, provider, chatWireShape)
 	if err != nil {
 		return Response{}, err
 	}
@@ -1146,7 +1147,7 @@ func EncodeResponse(provider, chatWireShape string, resp Response) ([]byte, erro
 		if err != nil {
 			return nil, err
 		}
-		return json.Marshal(envelope)
+		return marshalWire(envelope)
 	}
 
 	raw := map[string]any{}
@@ -1174,7 +1175,21 @@ func EncodeResponse(provider, chatWireShape string, resp Response) ([]byte, erro
 	}
 	setWirePath(raw, providers.WireShapeResponseCreatedPath(chatWireShape), resp.Created)
 	encodeFixedValues(raw, chatWireShape)
-	return json.Marshal(raw)
+	return marshalWire(raw)
+}
+
+// marshalWire renders an encoded body as JSON without HTML escaping. A tool
+// call's map-format input is embedded as its own bytes (json.RawMessage), and
+// json.Marshal would rewrite a "<" inside it as \u003c, so a body decoded and
+// encoded again would not carry the bytes it was read from (HANDOFF-105 F5).
+func marshalWire(v any) ([]byte, error) {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(v); err != nil {
+		return nil, err
+	}
+	return bytes.TrimSuffix(buf.Bytes(), []byte("\n")), nil
 }
 
 // servedChatWireShape resolves the shape DecodeResponse reads and
