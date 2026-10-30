@@ -13,7 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   holds one of five values shared by every provider: `FinishStop`,
   `FinishLength`, `FinishToolCalls`, `FinishContentFilter` or `FinishOther`,
   and is empty when the provider reported none. Anthropic `end_turn` is
-  `FinishStop`, Google `SAFETY` and `RECITATION` are `FinishContentFilter`, and
+  `FinishStop`, Anthropic `refusal` and Google `SAFETY`, `RECITATION`,
+  `BLOCKLIST`, `PROHIBITED_CONTENT` and `SPII` are `FinishContentFilter`, and
   a Responses `incomplete` is `FinishLength` or `FinishContentFilter` by its
   `incomplete_details.reason`. A value with no canonical meaning is
   `FinishOther`. The provider's own string moved to
