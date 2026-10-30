@@ -141,7 +141,7 @@ func applyResourceCaching(ctx context.Context, body map[string]any, p Provider, 
 		createBody["systemInstruction"] = sysInstr
 	}
 
-	createJSON, err := json.Marshal(createBody)
+	createJSON, err := marshalWire(createBody)
 	if err != nil {
 		wrapped := fmt.Errorf("marshal cache create request: %w", err)
 		postEv := baseEvent

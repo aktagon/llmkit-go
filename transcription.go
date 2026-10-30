@@ -162,7 +162,7 @@ func dispatchTranscriptionSubmit(
 		}
 	}
 
-	jsonBody, err := json.Marshal(map[string]any{"audio_url": audioURL})
+	jsonBody, err := marshalWire(map[string]any{"audio_url": audioURL})
 	if err != nil {
 		return "", fmt.Errorf("marshal transcription request: %w", err)
 	}
