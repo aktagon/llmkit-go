@@ -53,6 +53,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **The Vertex and Gemini music replies read the filtered reason at one
   declared path.** Vertex reads `predictions[0].raiFilteredReason`.
 
+- **Every body is written without HTML escaping.** Chat, stream, the Agent,
+  batch, image, speech, music, video, transcription, caching, the Google
+  file-upload metadata and the telemetry export write `<`, `>` and `&` as they
+  are, the bytes the TS and Rust SDKs send. They used to go out as
+  `\u003c`, `\u003e` and `\u0026`.
+- **U+2028 and U+2029 are written as the characters**, in prompt text and in
+  OpenAI's string tool-call arguments, as TS and Rust write them. Go used to
+  write `\u2028` and `\u2029`. An escape inside a provider's own argument
+  text is kept.
+- A tool call with an empty `Input` sends `{}` in every request, as nil and
+  `null` do. It used to fail with a `ValidationError`. A provider's
+  `"input": ""` reads as no input, as `null` does.
+
 ### Added
 
 - **`Response.Created` (`*int`).** The Unix time the provider reports, read
