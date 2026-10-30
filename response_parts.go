@@ -209,11 +209,7 @@ func encodeChatParts(raw map[string]any, provider, chatWireShape string, parts [
 			if toolCfg == nil || toolDef == nil {
 				return noToolCallConfigError(provider, chatWireShape)
 			}
-			block, err := writeToolCall(*p.ToolCall, toolCfg, toolDef)
-			if err != nil {
-				return err
-			}
-			appendBlock(toolCfg.BlocksPath, block)
+			appendBlock(toolCfg.BlocksPath, writeToolCall(*p.ToolCall, toolCfg, toolDef))
 		case textCfg != nil:
 			block := map[string]any{}
 			if textCfg.MarkerValue != "" {
@@ -232,12 +228,17 @@ func encodeChatParts(raw map[string]any, provider, chatWireShape string, parts [
 	return nil
 }
 
-// writeToolCall renders one tool call as a block of the shape. The marker is
-// written when it is a value (Anthropic type=tool_use); a presence marker is
-// the key the name path starts with, so writing the name writes it (the
-// generator checks this). No id is written where the shape has no id path
-// (Google): exceptGoogleToolCallID is OneWay (owner decision 3).
-func writeToolCall(call ToolCall, cfg *providers.ToolCallResponseConfigDef, def *providers.ToolCallDef) (map[string]any, error) {
+// writeToolCall renders one tool call as a block of the shape. EncodeResponse
+// and the request encoder both write through it (owner decision 3,
+// HANDOFF-105 F5), so a request turn carries the block the response did. The
+// marker is written when it is a value (Anthropic type=tool_use, OpenAI
+// type=function); a presence marker is the key the name path starts with, so
+// writing the name writes it (the generator checks this). No id is written
+// where the shape has no id path (Google): exceptGoogleToolCallID is
+// OneWay (owner decision 3, F4). The input's bytes go out as they are: as the
+// JSON string itself (json_string) or embedded as JSON (map). checkTurnParts
+// has already rejected input that is not JSON.
+func writeToolCall(call ToolCall, cfg *providers.ToolCallResponseConfigDef, def *providers.ToolCallDef) map[string]any {
 	block := map[string]any{}
 	if cfg.MarkerValue != "" {
 		setWirePath(block, cfg.MarkerPath, cfg.MarkerValue)
@@ -245,17 +246,14 @@ func writeToolCall(call ToolCall, cfg *providers.ToolCallResponseConfigDef, def 
 	setWirePath(block, cfg.IDPath, call.ID)
 	setWirePath(block, cfg.NamePath, call.Name)
 	if call.Input == nil {
-		return block, nil
+		return block
 	}
-	var value any
-	if err := json.Unmarshal(call.Input, &value); err != nil {
-		return nil, &ValidationError{Field: "toolCalls", Message: fmt.Sprintf("tool call %q input is not JSON: %v", call.Name, err)}
-	}
+	var value any = call.Input
 	if def.ArgsFormat == "json_string" {
 		value = string(call.Input)
 	}
 	setWirePath(block, cfg.ArgsPath, value)
-	return block, nil
+	return block
 }
 
 // noToolCallConfigError is the rejection for a response with tool calls on a
