@@ -48,7 +48,10 @@ func decodeFinishReason(chatWireShape string, wire *string, raw map[string]any) 
 // encodeFinishReason picks the wire value EncodeResponse writes for resp
 // (ADR-099 CRF-010). The provider's own string wins when the target shape
 // knows it with the same canonical value, so a same-format round trip is
-// exact (Google RECITATION stays RECITATION). Otherwise the preferred entry
+// exact (Google RECITATION stays RECITATION). A response decoded from the
+// target shape also keeps a string the table does not know (owner decision 1,
+// HANDOFF-105 F3): Anthropic pause_turn decodes as other and encodes back as
+// pause_turn. Otherwise the preferred entry
 // for the canonical value is written (Anthropic end_turn becomes OpenAI stop).
 // A canonical value the shape has no entry for is written as the shape's
 // declared fallback (owner decision 1, HANDOFF-105 section 3b): ChatOpenAI
@@ -67,6 +70,10 @@ func encodeFinishReason(chatWireShape string, resp Response) (entry providers.Fi
 			if e.WireValue == *resp.ProviderFinishReason && e.Canonical == resp.FinishReason {
 				return e, true
 			}
+		}
+		// After the table, so a fused entry (CRF-007) keeps its detail.
+		if resp.ChatWireShape != nil && *resp.ChatWireShape == chatWireShape {
+			return providers.FinishReasonEntry{WireValue: *resp.ProviderFinishReason, Canonical: resp.FinishReason}, true
 		}
 	}
 	for _, e := range table {

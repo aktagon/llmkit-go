@@ -156,6 +156,7 @@ func promptStream(ctx context.Context, p Provider, req Request, protocol string,
 		ProviderFinishReason: fields.FinishReason,
 		ID:                   fields.ID,
 		Model:                fields.Model,
+		ChatWireShape:        optString(cfg.ChatWireShape),
 	}, nil
 }
 
@@ -1062,6 +1063,7 @@ func DecodeResponse(provider, chatWireShape string, body []byte) (Response, erro
 	if chatWireShape == providers.ChatResponsesOpenAI {
 		resp := parseResponsesEnvelope(raw)
 		resp.ProviderTurn = turn
+		resp.ChatWireShape = optString(chatWireShape)
 		return resp, nil
 	}
 
@@ -1080,6 +1082,7 @@ func DecodeResponse(provider, chatWireShape string, body []byte) (Response, erro
 		Model:                model,
 		Created:              optIntPath(raw, providers.WireShapeResponseCreatedPath(chatWireShape)),
 		ToolCalls:            decodeToolCalls(raw, provider, chatWireShape),
+		ChatWireShape:        optString(chatWireShape),
 	}, nil
 }
 
