@@ -1,6 +1,7 @@
 package llmkit
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -143,7 +144,8 @@ func toInternal(messages []Message) ([]msg, error) {
 }
 
 // checkTurnParts rejects a part that sets no kind or two, a kind chat does
-// not accept (MSG-011), or a kind the role cannot carry (MSG-002). The field
+// not accept (MSG-011), a kind the role cannot carry (MSG-002), or a tool
+// call whose input is not JSON, which no wire can carry. The field
 // names the part, parts[j]. The request encoder runs it on every turn, and
 // EncodeResponse on the response's assistant turn.
 func checkTurnParts(role string, parts []Part) error {
@@ -156,6 +158,12 @@ func checkTurnParts(role string, parts []Part) error {
 			return &ValidationError{
 				Field:   fmt.Sprintf("parts[%d]", j),
 				Message: fmt.Sprintf("%s turn does not accept %s parts", role, kind),
+			}
+		}
+		if p.ToolCall != nil && p.ToolCall.Input != nil && !json.Valid(p.ToolCall.Input) {
+			return &ValidationError{
+				Field:   fmt.Sprintf("parts[%d]", j),
+				Message: fmt.Sprintf("tool call %q input is not JSON", p.ToolCall.Name),
 			}
 		}
 	}
@@ -248,7 +256,7 @@ func flatProjectedEntries(m msgParts, cfg providerSpec) []map[string]any {
 		case providers.ChatAnthropic:
 			return []map[string]any{{
 				"role":    mapRole("assistant", cfg.RoleMappings),
-				"content": anthropicContent(m.Parts),
+				"content": anthropicContent(m.Parts, cfg),
 			}}
 		case providers.ChatResponsesOpenAI:
 			return responsesAssistantTurn(m.Parts, cfg)
@@ -258,7 +266,7 @@ func flatProjectedEntries(m msgParts, cfg providerSpec) []map[string]any {
 	if cfg.ChatWireShape == providers.ChatAnthropic {
 		return []map[string]any{{
 			"role":    mapRole(m.Role, cfg.RoleMappings),
-			"content": anthropicContent(m.Parts),
+			"content": anthropicContent(m.Parts, cfg),
 		}}
 	}
 	return []map[string]any{{
@@ -297,7 +305,11 @@ func openAIAssistantTurn(parts []Part, cfg providerSpec) map[string]any {
 	entry := map[string]any{"role": mapRole("assistant", cfg.RoleMappings)}
 	calls := toolCalls(parts)
 	if len(calls) > 0 {
-		entry["tool_calls"] = openAIToolCalls(calls)
+		blocks := make([]map[string]any, 0, len(calls))
+		for _, tc := range calls {
+			blocks = append(blocks, requestToolCall(tc, cfg))
+		}
+		entry["tool_calls"] = blocks
 	}
 	if len(calls) == 0 || len(calls) < len(parts) {
 		entry["content"] = joinedText(parts)
@@ -352,7 +364,7 @@ func openAIContent(parts []Part) any {
 
 // anthropicContent renders a user or assistant turn's content for Anthropic:
 // a string for at most one text part, else blocks in part order.
-func anthropicContent(parts []Part) any {
+func anthropicContent(parts []Part, cfg providerSpec) any {
 	if text, ok := plainText(parts); ok {
 		return text
 	}
@@ -374,7 +386,7 @@ func anthropicContent(parts []Part) any {
 				},
 			})
 		case p.ToolCall != nil:
-			blocks = append(blocks, anthropicToolUseBlock(*p.ToolCall))
+			blocks = append(blocks, requestToolCall(*p.ToolCall, cfg))
 		default:
 			blocks = append(blocks, map[string]any{"type": "text", "text": p.Text})
 		}
@@ -493,7 +505,7 @@ func transformGoogleParts(body map[string]any, msgs []msg, req Request, cfg prov
 		}
 		contents = append(contents, map[string]any{
 			"role":  role,
-			"parts": googleParts(parts.Parts, idToName),
+			"parts": googleParts(parts.Parts, idToName, cfg),
 		})
 	}
 
@@ -502,7 +514,7 @@ func transformGoogleParts(body map[string]any, msgs []msg, req Request, cfg prov
 
 // googleParts renders a turn's parts for Google, in part order. A turn with
 // no parts sends one empty text part, as before ADR-100.
-func googleParts(parts []Part, idToName map[string]string) []map[string]any {
+func googleParts(parts []Part, idToName map[string]string, cfg providerSpec) []map[string]any {
 	if len(parts) == 0 {
 		return []map[string]any{{"text": ""}}
 	}
@@ -521,7 +533,7 @@ func googleParts(parts []Part, idToName map[string]string) []map[string]any {
 				},
 			})
 		case p.ToolCall != nil:
-			out = append(out, googleFunctionCall(*p.ToolCall))
+			out = append(out, requestToolCall(*p.ToolCall, cfg))
 		case p.ToolResult != nil:
 			r := *p.ToolResult
 			if name := idToName[r.ToolUseID]; name != "" {
@@ -590,22 +602,50 @@ func transformGoogleFunctionDeclarations(body map[string]any, tools []ToolDefini
 // it in the body map marshals the argument JSON inline (and emits null for a
 // nil/empty RawMessage).
 
-// openAIToolCalls renders Chat Completions tool_calls, with the arguments as
-// a JSON string.
-func openAIToolCalls(calls []ToolCall) []map[string]any {
-	tcs := []map[string]any{}
-	for _, tc := range calls {
-		argsJSON, _ := json.Marshal(tc.Input)
-		tcs = append(tcs, map[string]any{
-			"id":   tc.ID,
-			"type": "function",
-			"function": map[string]any{
-				"name":      tc.Name,
-				"arguments": string(argsJSON),
-			},
-		})
+// requestToolCall renders one assistant tool call for the request body
+// through the generated ToolCallResponseConfig EncodeResponse writes
+// with (owner decision 3, HANDOFF-105 F5), so the request and the response
+// cannot disagree. encodeRequest has checked that the shape and the provider
+// declare one (checkRequestToolCalls). A call with no input goes out as an
+// empty object, as in TypeScript and Rust: the providers take an object, not
+// null.
+func requestToolCall(tc ToolCall, cfg providerSpec) map[string]any {
+	if len(tc.Input) == 0 || string(bytes.TrimSpace(tc.Input)) == "null" {
+		tc.Input = json.RawMessage(`{}`)
 	}
-	return tcs
+	return writeToolCall(tc, providers.ToolCallResponseConfig(cfg.ChatWireShape), providers.ToolCallConfig(cfg.Name))
+}
+
+// checkRequestToolCalls rejects a request whose turns carry a tool call the
+// provider has no tool-call config to write, on a shape that writes tool calls
+// from config (every chat shape but ChatResponsesOpenAI, whose function_call
+// item is written by responsesFunctionCall). Dropping the call would send a
+// different conversation; EncodeResponse rejects the same case.
+func checkRequestToolCalls(msgs []msg, cfg providerSpec) error {
+	if cfg.ChatWireShape == providers.ChatResponsesOpenAI {
+		return nil
+	}
+	if providers.ToolCallResponseConfig(cfg.ChatWireShape) != nil && providers.ToolCallConfig(cfg.Name) != nil {
+		return nil
+	}
+	for i, m := range msgs {
+		turn, ok := m.(msgParts)
+		if replayed, isTurn := m.(msgTurn); isTurn {
+			turn, ok = replayed.fallback, true
+		}
+		if !ok {
+			continue
+		}
+		for j, p := range turn.Parts {
+			if p.ToolCall != nil {
+				return &ValidationError{
+					Field:   fmt.Sprintf("messages[%d].parts[%d]", i, j),
+					Message: fmt.Sprintf("provider %q has no tool-call shape on chat wire shape %q", cfg.Name, cfg.ChatWireShape),
+				}
+			}
+		}
+	}
+	return nil
 }
 
 // responsesFunctionCall renders one tool call for the OpenAI Responses
@@ -627,24 +667,6 @@ func responsesFunctionCall(tc ToolCall) map[string]any {
 		"call_id":   tc.ID,
 		"name":      tc.Name,
 		"arguments": string(argsJSON),
-	}
-}
-
-func anthropicToolUseBlock(tc ToolCall) map[string]any {
-	return map[string]any{
-		"type":  "tool_use",
-		"id":    tc.ID,
-		"name":  tc.Name,
-		"input": tc.Input,
-	}
-}
-
-func googleFunctionCall(tc ToolCall) map[string]any {
-	return map[string]any{
-		"functionCall": map[string]any{
-			"name": tc.Name,
-			"args": tc.Input,
-		},
 	}
 }
 
@@ -718,7 +740,7 @@ func transformBedrockConverse(body map[string]any, msgs []msg, req Request, cfg 
 			turn = m.(msgParts)
 		}
 		isResult := turn.Role == "tool"
-		content := bedrockContent(turn.Parts)
+		content := bedrockContent(turn.Parts, cfg)
 		switch {
 		case isResult && prevResult:
 			// Converse wants every toolResult answering one assistant
@@ -745,7 +767,7 @@ func transformBedrockConverse(body map[string]any, msgs []msg, req Request, cfg 
 // {image:{format,source:{bytes}}}. Converse has no block for an uploaded
 // file id, so a file part is not sent, as before ADR-100. A turn with no
 // parts sends one empty text block.
-func bedrockContent(parts []Part) []map[string]any {
+func bedrockContent(parts []Part, cfg providerSpec) []map[string]any {
 	if len(parts) == 0 {
 		return []map[string]any{{"text": ""}}
 	}
@@ -762,7 +784,7 @@ func bedrockContent(parts []Part) []map[string]any {
 				},
 			})
 		case p.ToolCall != nil:
-			out = append(out, bedrockToolUseBlock(*p.ToolCall))
+			out = append(out, requestToolCall(*p.ToolCall, cfg))
 		case p.ToolResult != nil:
 			out = append(out, bedrockToolResultBlock(*p.ToolResult))
 		default:
@@ -793,16 +815,6 @@ func transformBedrockToolDefs(body map[string]any, tools []ToolDefinition) {
 		})
 	}
 	body["toolConfig"] = map[string]any{"tools": defs}
-}
-
-func bedrockToolUseBlock(tc ToolCall) map[string]any {
-	return map[string]any{
-		"toolUse": map[string]any{
-			"toolUseId": tc.ID,
-			"name":      tc.Name,
-			"input":     tc.Input,
-		},
-	}
 }
 
 func bedrockToolResultBlock(result ToolResult) map[string]any {

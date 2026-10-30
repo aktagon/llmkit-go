@@ -671,6 +671,9 @@ func encodeRequest(provider string, cfg providerSpec, req Request) (map[string]a
 	// resolveTurns runs first and only here: it is the one place cfg and the
 	// message list meet, so the ADR-085 RSN-006 shape check is made once rather
 	// than remembered in each transform.
+	if err := checkRequestToolCalls(msgs, cfg); err != nil {
+		return nil, nil, err
+	}
 	msgTransform := selectMessageTransform(cfg)
 	msgTransform(body, resolveTurns(msgs, cfg), req, cfg)
 
