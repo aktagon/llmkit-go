@@ -17,8 +17,10 @@ import (
 //
 // It decodes the ChatOpenAI wire shape only (RQC-011): the model, the turns
 // (a leading system turn becomes Request.System) with text content, and every
-// option the provider takes, under any key the encoder may write for it. So
-// max_tokens and max_completion_tokens both decode to MaxTokens (RQC-010).
+// option some provider of the wire shape writes, under any key the encoder may
+// write for it (owner decision 5, HANDOFF-105 F4). So max_tokens and
+// max_completion_tokens both decode to MaxTokens (RQC-010), and top_k decodes
+// for OpenAI, which does not take it: EncodeRequest checks support (RQC-017).
 // A bare-string stop decodes as a one-item list, stream false as no stream,
 // and a developer turn as the system turn where the provider declares that
 // role (OpenAI, OpenRouter). The model comes from the body, or
@@ -55,7 +57,7 @@ func DecodeRequest(provider, chatWireShape string, wire WireRequest) (Request, e
 	if err := decodeModel(&req, cfg, body, wire.Path); err != nil {
 		return Request{}, err
 	}
-	if err := decodeOptions(&req, provider, cfg, body); err != nil {
+	if err := decodeOptions(&req, cfg, body); err != nil {
 		return Request{}, err
 	}
 	turns, hasTurns := body["messages"]
@@ -102,12 +104,29 @@ func decodeModel(req *Request, cfg providerSpec, body map[string]any, path strin
 	return nil
 }
 
-// decodeOptionKeys maps every wire key the encoder may write for an option of
+// decodeOptionKeys maps every wire key some provider of the wire shape may
+// write for an option to that option (owner decision 5, HANDOFF-105 F4).
+// DecodeRequest reads what the client sent, which need not be what the named
+// provider takes; the target's encoder checks support (RQC-017). CQ-OPT-011
+// checks that no key maps to two options on one shape.
+func decodeOptionKeys(chatWireShape string) map[string]providers.OptionKey {
+	keys := map[string]providers.OptionKey{}
+	for name, cfg := range providerSpecs() {
+		if _, ok := withWireShape(cfg, chatWireShape); !ok {
+			continue
+		}
+		for key, param := range providerOptionKeys(name, chatWireShape) {
+			keys[key] = param
+		}
+	}
+	return keys
+}
+
+// providerOptionKeys maps every wire key the encoder may write for an option of
 // (provider, wire shape) to that option (RQC-008): the wire shape's key, which
 // replaces the others for every model (BUG-075), else the provider's key and
-// each per-model override key (ADR-024). CQ-OPT-011 checks that no key maps to
-// two options.
-func decodeOptionKeys(provider, chatWireShape string) map[string]providers.OptionKey {
+// each per-model override key (ADR-024).
+func providerOptionKeys(provider, chatWireShape string) map[string]providers.OptionKey {
 	supported := providers.SupportedOptions(provider)
 	shapeKeys := providers.WireShapeOptionOverrides(chatWireShape)
 	keys := map[string]providers.OptionKey{}
@@ -129,7 +148,7 @@ func decodeOptionKeys(provider, chatWireShape string) map[string]providers.Optio
 
 // decodeOptions takes each option out of the body, or out of the provider's
 // options container (wrapsOptionsIn), into its Request field (RQC-010).
-func decodeOptions(req *Request, provider string, cfg providerSpec, body map[string]any) error {
+func decodeOptions(req *Request, cfg providerSpec, body map[string]any) error {
 	container, prefix := body, ""
 	if cfg.WrapsOptionsIn != "" {
 		wrapped, ok := body[cfg.WrapsOptionsIn]
@@ -141,7 +160,7 @@ func decodeOptions(req *Request, provider string, cfg providerSpec, body map[str
 		}
 		prefix = cfg.WrapsOptionsIn + "."
 	}
-	byKey := decodeOptionKeys(provider, cfg.ChatWireShape)
+	byKey := decodeOptionKeys(cfg.ChatWireShape)
 	keys := make([]string, 0, len(byKey))
 	for key := range byKey {
 		keys = append(keys, key)
