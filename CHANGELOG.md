@@ -32,7 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `completed` for Responses; `FinishToolCalls` is `STOP` for Google and
   `completed` for Responses; `FinishContentFilter` is `end_turn` for Bedrock.
 - **BREAKING — `EncodeResponse` rejects a format the provider does not
-  serve.** It returns a `*ValidationError` with `Field` `"shape"`, for
+  serve.** It returns a `*ValidationError` with `Field` `"chatWireShape"`, for
   example for `EncodeResponse("vertex", "", resp)`, since Vertex serves no
   chat format. `EncodeResponse("openai", "ChatOpenAI", resp)` is unchanged.
 - **BREAKING — `Response.State` is a `*JobState`.** It is nil on a reply
@@ -126,7 +126,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   content, and every option the provider takes. `max_tokens` and
   `max_completion_tokens` both set `MaxTokens`. A bare-string `stop` is a
   one-item list, `"stream": false` is ignored, and a `developer` turn is the
-  system turn. Any other field, such as `"stream": true`, `tools`, `response_format` or a content list, fails with a
+  system turn for OpenAI and OpenRouter, whose APIs define that role; other
+  providers reject it on the turn's role. An integer option takes an
+  integral number in any notation, such as `4096.0`, and rejects a fraction.
+  A number out of range, such as `1e999`, fails on its own field. Any other field, such as `"stream": true`, `tools`, `response_format` or a content list, fails with a
   `*ValidationError` that names it, for example `messages[1].tool_calls`.
   Other wire shapes fail on field `chatWireShape`.
 - `providers.WireShapeRequiredParams(chatWireShape)` lists the generation
@@ -135,7 +138,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Text.CacheTTL(d)` and `Agent.CacheTTL(d)` set how long the cache that
   `.Caching()` creates lives.
   Google resource caching sends it on the cache-create request; without it,
-  Google's default TTL (3600 s) applies. Other providers ignore it.
+  Google's default TTL (3600 s) applies. Other providers ignore it. The TTL
+  is positive whole seconds: `CacheTTL(0)`, a negative TTL and
+  `1500*time.Millisecond` fail the call with a `*ValidationError` on field
+  `cacheTTL`.
+
+### Fixed
+
+- `Agent.Prompt` leaves the history unchanged when it rejects the request,
+  for example an option the provider does not take. The rejected user turn
+  used to stay in the history, so the next prompt sent two user turns.
 
 ## [3.0.0] — 2026-10-27
 
