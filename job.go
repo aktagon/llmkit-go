@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	"github.com/aktagon/llmkit-go/v3/providers"
 )
 
 // ErrPollTimeout is the sentinel a blocking Wait / waitBatch wraps when the
@@ -69,23 +71,46 @@ func (s JobState) String() string {
 	}
 }
 
-// JobFailure is the normalized failure detail carried by a JobFailed status. It
-// is ONE terminal, not a taxonomy (ADR-062 §"Implementation refinements" 1):
-// the raw provider status, an optional provider error message, and a timedOut
-// flag. A consumer that needs the expired-vs-cancelled distinction reads
-// Status; promoting it to a typed cause enum is a non-breaking follow-up
-// (slice 2).
+// JobFailureCode says why an async job, or one batch item, failed (ADR-099
+//
+// generated into the providers package; JobFailure.Code holds one.
+type JobFailureCode = providers.JobFailureCode
+
+// The job failure codes.
+const (
+	// FailureError: the provider reported a failure, or a failure status
+	// with no entry in the provider's table.
+	FailureError = providers.FailureError
+	// FailureExpired: the job, or the batch that held the item, reached the
+	// end of its time window before the work ran.
+	FailureExpired = providers.FailureExpired
+	// FailureCancelled: the job, or the batch that held the item, was
+	// cancelled before the work ran.
+	FailureCancelled = providers.FailureCancelled
+	// FailureTimeout: the poll deadline passed while the provider still
+	// reported the job as running. Status is empty.
+	FailureTimeout = providers.FailureTimeout
+	// FailureMissing: no result line came back for a batch item. Status is
+	// empty.
+	FailureMissing = providers.FailureMissing
+)
+
+// JobFailure is the normalized failure detail carried by a JobFailed status
+// and by a failed batch item (ADR-099 CRF-015, CRF-016): the typed code, the
+// raw provider status, and an optional provider error message.
 type JobFailure struct {
+	// Code is the typed cause. The provider's failure-code table maps Status
+	// to it; a status with no entry is FailureError.
+	Code JobFailureCode
 	// Status is the raw provider status string that classified as failure
-	// (OpenAI batch "failed"/"expired"/"cancelled"; AssemblyAI "error"). Empty
-	// when the failure is the engine's deadline backstop firing.
+	// (OpenAI batch "failed"/"expired"/"cancelled"; AssemblyAI "error"; a
+	// batch item's "errored" or "batch_expired"). Empty for FailureTimeout
+	// and FailureMissing.
 	Status string
 	// Message is the provider error message when the provider reports one
-	// (AssemblyAI's top-level "error"); empty otherwise.
+	// (AssemblyAI's top-level "error", a batch item's error message); empty
+	// otherwise.
 	Message string
-	// TimedOut is true iff this failure is the engine's deadline backstop, not a
-	// provider-reported terminal.
-	TimedOut bool
 }
 
 // JobStatus is the normalized result of a single Poll (ADR-063 POLL-001): the
@@ -132,6 +157,9 @@ type LifecycleConfig struct {
 	//
 	// supplies its ErrorStatus.
 	ErrorValues []string
+	// FailureCodes maps each failure status to its JobFailureCode, from the
+	// provider's failureCodeValue table (ADR-099 CRF-016).
+	FailureCodes map[string]JobFailureCode
 	// ErrorMessagePath is the dotted path to a provider error message, surfaced
 	// in JobFailure.Message. Empty = no message extraction.
 	ErrorMessagePath string
@@ -202,7 +230,7 @@ func classifyByConfig(lc LifecycleConfig, raw pollBody) classification {
 	}
 	for _, e := range lc.ErrorValues {
 		if status == e {
-			f := &JobFailure{Status: status}
+			f := &JobFailure{Code: failureCode(lc.FailureCodes, status), Status: status}
 			if lc.ErrorMessagePath != "" {
 				f.Message = raw.Status(lc.ErrorMessagePath)
 			}
@@ -210,6 +238,16 @@ func classifyByConfig(lc LifecycleConfig, raw pollBody) classification {
 		}
 	}
 	return classification{state: JobRunning, rawStatus: status}
+}
+
+// failureCode maps a failure status to its code through the provider's table.
+// A status with no entry is FailureError (ADR-099 CRF-016), the same rule a
+// batch item follows with providers.BatchSlotError.
+func failureCode(codes map[string]JobFailureCode, status string) JobFailureCode {
+	if code, ok := codes[status]; ok {
+		return code
+	}
+	return FailureError
 }
 
 // jobFailedError is the error pollJob returns (and Wait, which loops it) on a
@@ -222,7 +260,7 @@ type jobFailedError struct {
 }
 
 func (e *jobFailedError) Error() string {
-	if e.failure.TimedOut {
+	if e.failure.Code == FailureTimeout {
 		// Teach the async / handle pattern (ADR-062 OQ-1): a long job should be
 		// polled across requests, not synchronously blocked on.
 		return fmt.Sprintf("%s poll: timed out; the job may still be running — poll the handle across requests, or raise the deadline with WithPollTimeout", e.noun)
@@ -239,9 +277,9 @@ func (e *jobFailedError) Error() string {
 
 // Is lets errors.Is(err, ErrPollTimeout) identify the deadline-backstop timeout
 // (POLL-008) without matching a provider-reported failure — only the backstop
-// terminal sets TimedOut.
+// terminal has the FailureTimeout code.
 func (e *jobFailedError) Is(target error) bool {
-	return target == ErrPollTimeout && e.failure.TimedOut
+	return target == ErrPollTimeout && e.failure.Code == FailureTimeout
 }
 
 // pollOnce runs a single engine iteration: poll → classify → (on success) the
@@ -303,7 +341,7 @@ func pollJob[T any](ctx context.Context, a jobAdapter[T]) (T, error) {
 		// fresh timer per iteration, Stopped on the cancel path so no timer
 		// outlives the loop (a bare time.After would leak one until it fires).
 		if !deadline.IsZero() && time.Now().After(deadline) {
-			return zero, &jobFailedError{noun: lc.Noun, failure: JobFailure{TimedOut: true}}
+			return zero, &jobFailedError{noun: lc.Noun, failure: JobFailure{Code: FailureTimeout}}
 		}
 		timer := time.NewTimer(interval)
 		select {

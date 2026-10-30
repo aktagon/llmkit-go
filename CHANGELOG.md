@@ -9,6 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **BREAKING — a batch item reports its outcome in `State` and `Cause`.**
+  Each `Response` from `BatchHandle.Wait` or `Poll` has `State` `JobSucceeded`
+  or `JobFailed`. A failed item has a `Cause` (`*JobFailure`) and no
+  `FinishReason` or `FinishMessage`: the provider's failure status
+  (`"errored"`, `"batch_expired"`, an error code) moved from `FinishReason` to
+  `Cause.Status`, and its error message from `FinishMessage` to
+  `Cause.Message`. Branch on `item.State == llmkit.JobFailed`.
+- **BREAKING — `JobFailure.TimedOut` is replaced by `JobFailure.Code`.**
+  `Code` is a `JobFailureCode`: `FailureError`, `FailureExpired`,
+  `FailureCancelled`, `FailureTimeout` or `FailureMissing`. `Poll` reports
+  it too: an OpenAI batch whose status is `expired` has `Code`
+  `FailureExpired`, and `cancelled` has `FailureCancelled`. Replace
+  `cause.TimedOut` with `cause.Code == llmkit.FailureTimeout`;
+  `errors.Is(err, ErrPollTimeout)` still matches the poll deadline.
+- **BREAKING — `providers.BatchSlotMissing` and `providers.BatchSlotError`
+  are `JobFailureCode` values.** They are the `Cause.Code` of an item with no
+  result line and of a failure the provider gives no known status for. They
+  were `FinishReason` strings.
+- Batch items carry `ID` and `Model` from the provider's response body.
 - **BREAKING — `Request.Tools` is `[]ToolDefinition`.** A `ToolDefinition`
   holds the name, description and input schema of a tool. `Tool`, with its
   `Run` function, stays the type `Agent.AddTool` takes; the Agent sends its
