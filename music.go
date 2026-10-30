@@ -223,7 +223,7 @@ func musicBaseURL(p Provider, cfg providerSpec, mgCfg *providers.MusicGenDef) st
 }
 
 func postMusicJSON(ctx context.Context, client *http.Client, url string, body map[string]any, headers map[string]string) ([]byte, error) {
-	jsonBody, err := json.Marshal(body)
+	jsonBody, err := marshalWire(body)
 	if err != nil {
 		return nil, fmt.Errorf("marshal music request: %w", err)
 	}
