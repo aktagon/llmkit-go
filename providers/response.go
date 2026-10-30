@@ -214,6 +214,7 @@ func WireShapeFinishReasons(chatWireShape string) []FinishReasonEntry {
 		return []FinishReasonEntry{
 			{WireValue: "end_turn", Canonical: FinishStop, Preferred: true},
 			{WireValue: "max_tokens", Canonical: FinishLength, Preferred: true},
+			{WireValue: "refusal", Canonical: FinishContentFilter, Preferred: true},
 			{WireValue: "stop_sequence", Canonical: FinishStop},
 			{WireValue: "tool_use", Canonical: FinishToolCalls, Preferred: true},
 		}
@@ -226,9 +227,12 @@ func WireShapeFinishReasons(chatWireShape string) []FinishReasonEntry {
 		}
 	case ChatGoogle:
 		return []FinishReasonEntry{
+			{WireValue: "BLOCKLIST", Canonical: FinishContentFilter},
 			{WireValue: "MAX_TOKENS", Canonical: FinishLength, Preferred: true},
+			{WireValue: "PROHIBITED_CONTENT", Canonical: FinishContentFilter},
 			{WireValue: "RECITATION", Canonical: FinishContentFilter},
 			{WireValue: "SAFETY", Canonical: FinishContentFilter, Preferred: true},
+			{WireValue: "SPII", Canonical: FinishContentFilter},
 			{WireValue: "STOP", Canonical: FinishStop, Preferred: true},
 		}
 	case ChatOpenAI:
