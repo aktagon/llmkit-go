@@ -144,10 +144,11 @@ func blockArrayPaths(textCfg *providers.ResponseTextConfigDef, toolCfg *provider
 // carries no id on the wire; the id is the tool name when the provider's
 // toolCallIDSource says so (Google). The arguments are read per the
 // provider's ArgsFormat: a JSON string (json_string) or a JSON value (map),
-// whose bytes in the body are rawArgs. Absent arguments, and an empty JSON
-// string, leave Input nil: an empty argument set is null, as ToolCall.Input
-// documents. A block with no tool name, or arguments that are not JSON, is a
-// ValidationError on field "toolCalls": it is not a call the caller can run.
+// whose bytes in the body are rawArgs. Absent or null arguments, and an empty
+// JSON string, leave Input nil: an empty argument set is no input, as
+// ToolCall.Input documents (HANDOFF-105 F8, owner decision 2). A block with no
+// tool name, or arguments that are not JSON, is a ValidationError on field
+// "toolCalls": it is not a call the caller can run.
 //
 // Input is the provider's text, validated and not re-encoded (HANDOFF-105 F5,
 // F6 owner decision 1): a decode-and-marshal round trip sorts the keys,
@@ -157,6 +158,10 @@ func blockArrayPaths(textCfg *providers.ResponseTextConfigDef, toolCfg *provider
 // removes only the whitespace between them, which is the body's layout, and
 // every encoder writes an embedded value without it. A JSON string "null" is
 // the text null, not absent.
+//
+// A map-format argument is read from rawArgs alone, for where it is and what
+// it is: one scan, so the parse cannot name other arguments than the text
+// (HANDOFF-105 F8).
 func readToolCall(block map[string]any, rawArgs []byte, cfg *providers.ToolCallResponseConfigDef, def *providers.ToolCallDef) (ToolCall, error) {
 	call := ToolCall{Name: extractPath(block, cfg.NamePath)}
 	if call.Name == "" {
@@ -168,16 +173,21 @@ func readToolCall(block map[string]any, rawArgs []byte, cfg *providers.ToolCallR
 	case def.IDSource == "function_name":
 		call.ID = call.Name
 	}
-	args := walkPath(block, cfg.ArgsPath)
-	if args == nil {
-		return call, nil
-	}
 	if def.ArgsFormat != "json_string" {
+		if rawArgs == nil {
+			return call, nil
+		}
 		var compact bytes.Buffer
 		if err := json.Compact(&compact, rawArgs); err != nil {
 			return ToolCall{}, malformedToolCall("%q: arguments at %s: %v", call.Name, cfg.ArgsPath, err)
 		}
-		call.Input = compact.Bytes()
+		if text := compact.String(); text != "null" && text != `""` {
+			call.Input = compact.Bytes()
+		}
+		return call, nil
+	}
+	args := walkPath(block, cfg.ArgsPath)
+	if args == nil {
 		return call, nil
 	}
 	s, ok := args.(string)
@@ -292,5 +302,5 @@ func noToolCallConfigError(provider, chatWireShape string) error {
 // MSG-002) before EncodeResponse writes anything, with the check the request
 // encoder runs on every turn. The field names the part, parts[j].
 func checkResponseParts(parts []Part) error {
-	return checkTurnParts("assistant", parts)
+	return checkTurnParts("assistant", parts, func(input json.RawMessage) json.RawMessage { return input })
 }

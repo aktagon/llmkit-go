@@ -120,7 +120,7 @@ func requestMsgs(req Request) ([]msg, error) {
 func toInternal(messages []Message) ([]msg, error) {
 	out := make([]msg, 0, len(messages))
 	for i, m := range messages {
-		if err := checkTurnParts(m.Role, m.Parts); err != nil {
+		if err := checkTurnParts(m.Role, m.Parts, requestToolInput); err != nil {
 			if ve, ok := err.(*ValidationError); ok {
 				ve.Field = fmt.Sprintf("messages[%d].%s", i, ve.Field)
 			}
@@ -147,8 +147,11 @@ func toInternal(messages []Message) ([]msg, error) {
 // not accept (MSG-011), a kind the role cannot carry (MSG-002), or a tool
 // call whose input is not JSON, which no wire can carry. The field
 // names the part, parts[j]. The request encoder runs it on every turn, and
-// EncodeResponse on the response's assistant turn.
-func checkTurnParts(role string, parts []Part) error {
+// EncodeResponse on the response's assistant turn. written is the input text
+// the caller's encoder writes for a tool call (nil: it writes none), so the
+// check judges the text that goes out: a request writes requestToolInput,
+// which turns "" into {} (HANDOFF-105 F8, owner decision 2).
+func checkTurnParts(role string, parts []Part, written func(json.RawMessage) json.RawMessage) error {
 	if err := checkPartKinds("chat", parts); err != nil {
 		return err
 	}
@@ -160,7 +163,10 @@ func checkTurnParts(role string, parts []Part) error {
 				Message: fmt.Sprintf("%s turn does not accept %s parts", role, kind),
 			}
 		}
-		if p.ToolCall != nil && p.ToolCall.Input != nil && !json.Valid(p.ToolCall.Input) {
+		if p.ToolCall == nil {
+			continue
+		}
+		if input := written(p.ToolCall.Input); input != nil && !json.Valid(input) {
 			return &ValidationError{
 				Field:   fmt.Sprintf("parts[%d]", j),
 				Message: fmt.Sprintf("tool call %q input is not JSON", p.ToolCall.Name),
@@ -617,8 +623,9 @@ func requestToolCall(tc ToolCall, cfg providerSpec) map[string]any {
 
 // requestToolInput is the argument text a request sends for a tool call, on
 // every chat shape, Responses included (HANDOFF-105 F6): the caller's or the
-// provider's text as it is, or an empty object when there is no input or the
-// input is null, because the providers take an object.
+// provider's text as it is, or an empty object when there is no input, the
+// input is null or the input is empty, because the providers take an object
+// (HANDOFF-105 F8, owner decision 2).
 func requestToolInput(input json.RawMessage) json.RawMessage {
 	if len(input) == 0 || string(bytes.TrimSpace(input)) == "null" {
 		return json.RawMessage(`{}`)
