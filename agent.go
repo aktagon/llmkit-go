@@ -44,6 +44,11 @@ func newLegacyAgent(p Provider, req Request, tools []Tool, o *options) *legacyAg
 // before the turn joins the history, so a rejected request leaves the history
 // as it was (HANDOFF-105 F3). Every turn of the loop sends the same Request
 // with a longer history, so one preparation holds for all of them.
+//
+// Chat is all-or-nothing (owner decision 4, HANDOFF-105 F4): on any error
+// after the call starts, the history is restored to what it was before the
+// call, and the *AgentError carries the turns the call made, tool results
+// included.
 func (a *legacyAgent) chat(ctx context.Context, msg string) (Response, error) {
 	cfg, ok := providerSpecs()[a.provider.Name]
 	if !ok {
@@ -55,8 +60,15 @@ func (a *legacyAgent) chat(ctx context.Context, msg string) (Response, error) {
 	if err != nil {
 		return Response{}, err
 	}
+	before := a.history
 	a.history = req.Messages
-	return a.runToolLoop(ctx, cfg, req)
+	resp, err := a.runToolLoop(ctx, cfg, req)
+	if err != nil {
+		unsaved := slices.Clone(a.history[len(before):])
+		a.history = before
+		return resp, &AgentError{Err: err, UnsavedTurns: unsaved}
+	}
+	return resp, nil
 }
 
 // runToolLoop sends requests and executes tools until no more tool calls or
