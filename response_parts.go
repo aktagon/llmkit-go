@@ -1,6 +1,7 @@
 package llmkit
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -74,7 +75,10 @@ func blockMatches(block map[string]any, markerPath, markerValue string) bool {
 // names, ChatOpenAI), an element that fails the marker, such as an OpenAI
 // call of type "custom". In an array shared with text the marker selects, so
 // a block that matches neither config (a thinking block) is not a part.
-func decodeChatParts(raw map[string]any, provider, chatWireShape string) ([]Part, error) {
+//
+// body is the bytes raw was parsed from: a map-format argument object is read
+// from them, so Input keeps the provider's bytes (readToolCall).
+func decodeChatParts(body []byte, raw map[string]any, provider, chatWireShape string) ([]Part, error) {
 	textCfg := providers.ResponseTextConfig(chatWireShape)
 	toolCfg := providers.ToolCallResponseConfig(chatWireShape)
 	toolDef := providers.ToolCallConfig(provider)
@@ -101,7 +105,7 @@ func decodeChatParts(raw map[string]any, provider, chatWireShape string) ([]Part
 				if toolDef == nil {
 					return nil, noToolCallConfigError(provider, chatWireShape)
 				}
-				call, err := readToolCall(block, toolCfg, toolDef)
+				call, err := readToolCall(block, extractRawJSONPath(body, fmt.Sprintf("%s[%d].%s", path, i, toolCfg.ArgsPath)), toolCfg, toolDef)
 				if err != nil {
 					return nil, err
 				}
@@ -138,13 +142,19 @@ func blockArrayPaths(textCfg *providers.ResponseTextConfigDef, toolCfg *provider
 
 // readToolCall reads one tool-call block. An empty IDPath means the family
 // carries no id on the wire; the id is the tool name when the provider's
-// toolCallIDSource says so (Google). The arguments are decoded per the
-// provider's ArgsFormat: a JSON string (json_string) or a JSON value (map).
-// Absent arguments, and an empty JSON string, leave Input nil: an empty
-// argument set is null, as ToolCall.Input documents. A block with no tool
-// name, or arguments that do not decode, is a ValidationError on field
-// "toolCalls": it is not a call the caller can run.
-func readToolCall(block map[string]any, cfg *providers.ToolCallResponseConfigDef, def *providers.ToolCallDef) (ToolCall, error) {
+// toolCallIDSource says so (Google). The arguments are read per the
+// provider's ArgsFormat: a JSON string (json_string) or a JSON value (map),
+// whose bytes in the body are rawArgs. Absent arguments, and an empty JSON
+// string, leave Input nil: an empty argument set is null, as ToolCall.Input
+// documents. A block with no tool name, or arguments that are not JSON, is a
+// ValidationError on field "toolCalls": it is not a call the caller can run.
+//
+// Input is the provider's bytes, validated and not re-encoded (HANDOFF-105
+// F5): a decode-and-marshal round trip sorts the keys, escapes "<" and turns
+// integers past 2^53 into floats. json.Compact removes only the whitespace
+// between tokens, so a map-format object reads the same whether the body was
+// indented or not, and EncodeResponse writes back what was read.
+func readToolCall(block map[string]any, rawArgs []byte, cfg *providers.ToolCallResponseConfigDef, def *providers.ToolCallDef) (ToolCall, error) {
 	call := ToolCall{Name: extractPath(block, cfg.NamePath)}
 	if call.Name == "" {
 		return ToolCall{}, malformedToolCall("no tool name at %s", cfg.NamePath)
@@ -159,7 +169,7 @@ func readToolCall(block map[string]any, cfg *providers.ToolCallResponseConfigDef
 	if args == nil {
 		return call, nil
 	}
-	var value any = args
+	input := rawArgs
 	if def.ArgsFormat == "json_string" {
 		s, ok := args.(string)
 		if !ok {
@@ -168,15 +178,13 @@ func readToolCall(block map[string]any, cfg *providers.ToolCallResponseConfigDef
 		if s == "" {
 			return call, nil
 		}
-		if err := json.Unmarshal([]byte(s), &value); err != nil {
-			return ToolCall{}, malformedToolCall("%q: arguments at %s: %v", call.Name, cfg.ArgsPath, err)
-		}
+		input = []byte(s)
 	}
-	input, err := json.Marshal(value)
-	if err != nil {
-		return ToolCall{}, malformedToolCall("%q: %v", call.Name, err)
+	var compact bytes.Buffer
+	if err := json.Compact(&compact, input); err != nil {
+		return ToolCall{}, malformedToolCall("%q: arguments at %s: %v", call.Name, cfg.ArgsPath, err)
 	}
-	call.Input = input
+	call.Input = compact.Bytes()
 	return call, nil
 }
 
