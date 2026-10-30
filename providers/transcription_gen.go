@@ -16,16 +16,17 @@ const (
 // providers; PollEndpoint / SubmitHandleField / StatusPath / DoneStatus /
 // ErrorStatus are the async-only status-to-terminal mapping (STT-005).
 type TranscriptionDef struct {
-	WireShape         string // TranscriptionShapeAssemblyAI | TranscriptionShapeOpenAI
-	Interaction       string // "sync" | "async"
-	RequestEncoding   string // "json" | "multipart"
-	SubmitEndpoint    string // submit endpoint path, relative to the provider base
-	PollEndpoint      string // poll endpoint template with {id}; async only
-	UploadEndpoint    string // local-bytes upload hop; "" = url-only / inline-bytes
-	SubmitHandleField string // dotted path to the handle id in the submit response; async only
-	StatusPath        string // dotted path to the status string in the poll response; async only
-	DoneStatus        string // status value marking terminal success; async only
-	ErrorStatus       string // status value marking terminal failure; async only
+	WireShape         string                    // TranscriptionShapeAssemblyAI | TranscriptionShapeOpenAI
+	Interaction       string                    // "sync" | "async"
+	RequestEncoding   string                    // "json" | "multipart"
+	SubmitEndpoint    string                    // submit endpoint path, relative to the provider base
+	PollEndpoint      string                    // poll endpoint template with {id}; async only
+	UploadEndpoint    string                    // local-bytes upload hop; "" = url-only / inline-bytes
+	SubmitHandleField string                    // dotted path to the handle id in the submit response; async only
+	StatusPath        string                    // dotted path to the status string in the poll response; async only
+	DoneStatus        string                    // status value marking terminal success; async only
+	ErrorStatus       string                    // status value marking terminal failure; async only
+	FailureCodes      map[string]JobFailureCode // failure status -> code; see failureCodeValue
 }
 
 // TranscriptionConfig returns the transcription config for a provider, or
@@ -44,6 +45,7 @@ func TranscriptionConfig(provider string) *TranscriptionDef {
 			StatusPath:        "status",
 			DoneStatus:        "completed",
 			ErrorStatus:       "error",
+			FailureCodes:      map[string]JobFailureCode{"error": FailureError},
 		}
 	case OpenAI:
 		return &TranscriptionDef{

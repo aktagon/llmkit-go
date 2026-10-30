@@ -271,6 +271,7 @@ func newTranscriptionAdapter(h TranscriptionHandle, o *transcriptionOptions) (tr
 		StatusPath:       tcCfg.StatusPath,
 		DoneValues:       nonEmptyValues(tcCfg.DoneStatus),
 		ErrorValues:      nonEmptyValues(tcCfg.ErrorStatus),
+		FailureCodes:     tcCfg.FailureCodes,
 		ErrorMessagePath: cfg.ErrorMessagePath,
 		PollInterval:     transcriptionPollInterval,
 		PollTimeout:      transcriptionPollTimeout,

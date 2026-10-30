@@ -234,6 +234,7 @@ func newBatchAdapter(handle BatchHandle, o *options) (batchAdapter, error) {
 		StatusPath:   bc.Lifecycle.PollingStatusPath,
 		DoneValues:   nonEmptyValues(bc.Lifecycle.PollingDoneValue),
 		ErrorValues:  bc.Lifecycle.PollingErrorValues,
+		FailureCodes: bc.Lifecycle.PollingFailureCodes,
 		PollInterval: batchPollInterval,
 		PollTimeout:  timeout,
 	}
@@ -447,7 +448,8 @@ type batchSlot struct {
 //
 // With a request count (hasCount), there are exactly count slots, and an id at
 // or above the count follows them. Without one, slots run to the highest index
-// seen. An index with no line reads providers.BatchSlotMissing. Lines whose id
+// seen. An index with no line is a failed item whose cause code is
+// providers.BatchSlotMissing. Lines whose id
 // has another form (a batch created outside llmkit) follow the indexed slots
 // in file order. A line that is not JSON cannot be placed and is skipped.
 //
@@ -502,8 +504,10 @@ func parseBatchResults(provider string, sources [][]byte, bc *providers.BatchDef
 	responses := make([]Response, 0, len(slots)+len(unkeyed))
 	for _, slot := range slots {
 		if slot == nil {
-			missing := providers.BatchSlotMissing
-			responses = append(responses, Response{FinishReason: &missing})
+			responses = append(responses, Response{
+				State: JobFailed,
+				Cause: &JobFailure{Code: providers.BatchSlotMissing},
+			})
 			continue
 		}
 		responses = append(responses, slot.resp)
@@ -513,10 +517,12 @@ func parseBatchResults(provider string, sources [][]byte, bc *providers.BatchDef
 
 // parseBatchResultLine decodes one result line. The line succeeded when the
 // value at bc.ResultStatusPath is one of bc.ResultSuccessValues (any value when
-// the provider declares no status path) and its body decodes. Every other line
-// becomes a failed Response: empty text, the first reason path that resolves
-// as FinishReason (providers.BatchSlotError when none does) and the first
-// message path that resolves as FinishMessage.
+// the provider declares no status path) and its body decodes; its State is
+// JobSucceeded. Every other line becomes a failed item (ADR-099 CRF-015):
+// empty text, no finish reason or message, State JobFailed, and a Cause whose
+// Status is the first reason path that resolves, whose Code is that status's
+// entry in bc.ResultFailureCodes (providers.BatchSlotError when it has none),
+// and whose Message is the first message path that resolves.
 func parseBatchResultLine(provider string, line []byte, wrapper map[string]any, bc *providers.BatchDef, raw bool) batchSlot {
 	signalled := bc.ResultStatusPath == "" || slices.Contains(bc.ResultSuccessValues, extractPath(wrapper, bc.ResultStatusPath))
 	if signalled {
@@ -536,18 +542,24 @@ func parseBatchResultLine(provider string, line []byte, wrapper map[string]any, 
 			// Batch is Chat-Completions-only (ADR-055): empty wire shape selects
 			// the provider's declared response paths, not the Responses arm.
 			if resp, err := decodeResponseRaw(provider, "", responseBytes, raw); err == nil {
+				resp.State = JobSucceeded
 				return batchSlot{resp: resp, succeeded: true}
 			}
 		}
 	}
 
-	reason := firstPath(wrapper, bc.ResultReasonPaths)
-	if reason == "" {
-		reason = providers.BatchSlotError
+	status := firstPath(wrapper, bc.ResultReasonPaths)
+	code, ok := bc.ResultFailureCodes[status]
+	if !ok {
+		code = providers.BatchSlotError
 	}
 	failed := Response{
-		FinishReason:  &reason,
-		FinishMessage: optString(firstPath(wrapper, bc.ResultMessagePaths)),
+		State: JobFailed,
+		Cause: &JobFailure{
+			Code:    code,
+			Status:  status,
+			Message: firstPath(wrapper, bc.ResultMessagePaths),
+		},
 	}
 	return batchSlot{resp: attachRaw(failed, line, raw)}
 }
