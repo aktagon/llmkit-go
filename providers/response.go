@@ -190,8 +190,8 @@ func ToolCallResponseConfig(chatWireShape string) *ToolCallResponseConfigDef {
 	case ChatOpenAI:
 		return &ToolCallResponseConfigDef{
 			BlocksPath:  "choices[0].message.tool_calls",
-			MarkerPath:  "",
-			MarkerValue: "",
+			MarkerPath:  "type",
+			MarkerValue: "function",
 			IDPath:      "id",
 			NamePath:    "function.name",
 			ArgsPath:    "function.arguments",
