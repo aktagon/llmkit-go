@@ -120,10 +120,11 @@ func applyResourceCaching(ctx context.Context, body map[string]any, p Provider, 
 		return err
 	}
 
-	// Determine TTL
+	// Determine TTL: the caller's whole seconds (checkCacheTTL), else the
+	// provider default.
 	ttl := cc.DefaultTTL
-	if o.cacheTTL > 0 {
-		ttl = strconv.Itoa(int(o.cacheTTL.Seconds()))
+	if o.cacheTTL != nil {
+		ttl = strconv.FormatInt(int64(*o.cacheTTL/time.Second), 10)
 	}
 
 	// Build cached content creation request
@@ -220,4 +221,19 @@ func applyResourceCaching(ctx context.Context, body map[string]any, p Provider, 
 func extractCacheUsage(raw map[string]any, provider string) (creation, read *int) {
 	creationPath, readPath := providers.CacheUsagePaths(provider)
 	return optIntPath(raw, creationPath), optIntPath(raw, readPath)
+}
+
+// checkCacheTTL is the one CacheTTL rule, read by Text and the Agent when they
+// build their send options: a TTL is positive whole seconds, because the
+// cache create call sends seconds (owner decision 2, HANDOFF-105 F3). Before,
+// zero and a negative TTL silently sent the provider default, and 1500ms was
+// cut to 1s. nil is no TTL: the provider default applies.
+func checkCacheTTL(ttl *time.Duration) error {
+	if ttl == nil {
+		return nil
+	}
+	if *ttl <= 0 || *ttl%time.Second != 0 {
+		return &ValidationError{Field: "cacheTTL", Message: fmt.Sprintf("must be a positive whole number of seconds, not %s", *ttl)}
+	}
+	return nil
 }

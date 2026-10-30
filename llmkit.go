@@ -1222,8 +1222,8 @@ func EncodeResponse(provider, chatWireShape string, resp Response) ([]byte, erro
 
 // servedChatWireShape resolves the shape EncodeResponse writes: the named one,
 // or the provider's default when chatWireShape is "". A shape the provider
-// does not serve is a validation error on field "shape" (owner decision 2,
-// HANDOFF-105 section 3b), and so is a provider that serves no chat shape at
+// does not serve is a validation error on field "chatWireShape", the name
+// EncodeRequest uses (owner decision 2, HANDOFF-105 section 3b), and so is a provider that serves no chat shape at
 // all: writing provider paths into another family's body produces a body
 // neither family reads.
 func servedChatWireShape(provider, chatWireShape string) (string, error) {
@@ -1234,7 +1234,7 @@ func servedChatWireShape(provider, chatWireShape string) (string, error) {
 	shape := resolveChatWireShape(provider, chatWireShape)
 	if _, served := withWireShape(cfg, shape); shape == "" || !served {
 		return "", &ValidationError{
-			Field:   "shape",
+			Field:   "chatWireShape",
 			Message: fmt.Sprintf("provider %q does not serve chat wire shape %q", provider, chatWireShape),
 		}
 	}

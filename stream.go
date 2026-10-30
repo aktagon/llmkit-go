@@ -40,12 +40,15 @@ type TextStream struct {
 // Chunks(); Response() is populated when iteration completes.
 func (b *Text) Stream(ctx context.Context, finalText string) *TextStream {
 	provider := b.client.provider.toProvider("")
+	opts, err := b.sendOptions()
 	ts := &TextStream{
 		ctx:      ctx,
 		provider: provider,
 		req:      b.request(finalText),
 		protocol: b.protocol,
-		opts:     b.sendOptions(),
+		opts:     opts,
+		// A setup error is the stream's only yield (Chunks).
+		err: err,
 	}
 	return ts
 }
@@ -63,6 +66,10 @@ func (s *TextStream) Chunks() iter.Seq2[string, error] {
 			return
 		}
 		s.consumed = true
+		if s.err != nil {
+			yield("", s.err)
+			return
+		}
 
 		innerCtx, cancel := context.WithCancel(s.ctx)
 		defer cancel()

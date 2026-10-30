@@ -159,7 +159,7 @@ func (c *Client) Timeout(d time.Duration) *Client {
 type Text struct {
 	client           *Client
 	middleware       []MiddlewareFn
-	cacheTTL         time.Duration
+	cacheTTL         *time.Duration
 	caching          bool
 	files            []File
 	frequencyPenalty *float64
@@ -191,8 +191,10 @@ func (b *Text) AddMiddleware(fns ...MiddlewareFn) *Text {
 
 // CacheTTL sets how long the cache that Caching creates for this call lives.
 // Only resource caching (Google) creates a cache and reads it; without it
-// the provider's default TTL applies. Other providers ignore it.
-func (b *Text) CacheTTL(d time.Duration) *Text { out := *b; out.cacheTTL = d; return &out }
+// the provider's default TTL applies. Other providers ignore it. The TTL
+// is a positive whole number of seconds; any other value fails the call
+// with a validation error on the TTL.
+func (b *Text) CacheTTL(d time.Duration) *Text { out := *b; v := d; out.cacheTTL = &v; return &out }
 func (b *Text) Caching() *Text                 { out := *b; out.caching = true; return &out }
 func (b *Text) File(id string) *Text {
 	out := *b
@@ -512,7 +514,7 @@ type Agent struct {
 	client            *Client
 	middleware        []MiddlewareFn
 	tools             []Tool
-	cacheTTL          time.Duration
+	cacheTTL          *time.Duration
 	caching           bool
 	frequencyPenalty  *float64
 	history           []Message
@@ -548,10 +550,13 @@ func (b *Agent) AddTool(t Tool) *Agent {
 
 // CacheTTL sets how long the cache that Caching creates for this call lives.
 // Only resource caching (Google) creates a cache and reads it; without it
-// the provider's default TTL applies. Other providers ignore it.
+// the provider's default TTL applies. Other providers ignore it. The TTL
+// is a positive whole number of seconds; any other value fails the call
+// with a validation error on the TTL.
 func (b *Agent) CacheTTL(d time.Duration) *Agent {
 	out := *b
-	out.cacheTTL = d
+	v := d
+	out.cacheTTL = &v
 	out.state = nil
 	return &out
 }

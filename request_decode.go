@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 
@@ -19,7 +20,8 @@ import (
 // option the provider takes, under any key the encoder may write for it. So
 // max_tokens and max_completion_tokens both decode to MaxTokens (RQC-010).
 // A bare-string stop decodes as a one-item list, stream false as no stream,
-// and a developer turn as the system turn. The model comes from the body, or
+// and a developer turn as the system turn where the provider declares that
+// role (OpenAI, OpenRouter). The model comes from the body, or
 // from wire.Path where the provider puts it in the URL. Any field the Request does not model, such as stream, tools
 // or a content list, fails with a *ValidationError that names it (RQC-007).
 func DecodeRequest(provider, chatWireShape string, wire WireRequest) (Request, error) {
@@ -180,13 +182,9 @@ func setOption(req *Request, param providers.OptionKey, v any) error {
 	case providers.OptionThinkingBudget:
 		return decodeInt(v, &req.ThinkingBudget)
 	case providers.OptionSeed:
-		n, ok := v.(json.Number)
-		if !ok {
-			return fmt.Errorf("must be an integer")
-		}
-		seed, err := n.Int64()
+		seed, err := decodeInteger(v)
 		if err != nil {
-			return fmt.Errorf("must be an integer")
+			return err
 		}
 		req.Seed = &seed
 	case providers.OptionTemperature:
@@ -229,17 +227,38 @@ func setOption(req *Request, param providers.OptionKey, v any) error {
 }
 
 func decodeInt(v any, dst **int) error {
-	n, ok := v.(json.Number)
-	if !ok {
-		return fmt.Errorf("must be an integer")
-	}
-	i, err := n.Int64()
+	i, err := decodeInteger(v)
 	if err != nil {
-		return fmt.Errorf("must be an integer")
+		return err
 	}
 	out := int(i)
 	*dst = &out
 	return nil
+}
+
+// decodeInteger reads an integer option. JSON has one number type, so an
+// integral number in any notation (4096, 4096.0, 4.096e3) is an integer, and
+// a fraction is not (owner decision 3, HANDOFF-105 F3). A literal integer is
+// read exactly; any other notation is read as a float64, as TS and Rust read
+// it. A value outside int64 is out of range.
+func decodeInteger(v any) (int64, error) {
+	n, ok := v.(json.Number)
+	if !ok {
+		return 0, fmt.Errorf("must be an integer")
+	}
+	if i, err := n.Int64(); err == nil {
+		return i, nil
+	}
+	f, err := n.Float64()
+	switch {
+	case err != nil || math.IsInf(f, 0):
+		return 0, fmt.Errorf("is out of range")
+	case f != math.Trunc(f):
+		return 0, fmt.Errorf("must be an integer")
+	case f < math.MinInt64 || f >= math.MaxInt64:
+		return 0, fmt.Errorf("is out of range")
+	}
+	return int64(f), nil
 }
 
 func decodeFloat(v any, dst **float64) error {
@@ -249,7 +268,8 @@ func decodeFloat(v any, dst **float64) error {
 	}
 	f, err := n.Float64()
 	if err != nil {
-		return fmt.Errorf("must be a number")
+		// strconv reports a literal past float64 (1e999) as ErrRange.
+		return fmt.Errorf("is out of range")
 	}
 	*dst = &f
 	return nil
@@ -301,11 +321,18 @@ func decodeTurns(req *Request, cfg providerSpec, v any) error {
 	if !ok {
 		return &ValidationError{Field: "messages", Message: "must be a list"}
 	}
-	// OpenAI's developer role is its system role for newer models
-	// (HANDOFF-105 R3b); the provider's role mappings come after it.
-	roles := map[string]string{"developer": "system"}
+	// A wire role decodes through the provider's role mappings, then through
+	// its decode-only ones (decodeOnly, HANDOFF-105 F3): OpenAI and
+	// OpenRouter take developer as the system role. The role mappings win, in
+	// every SDK; extract.py rejects a wire role that is in both.
+	roles := map[string]string{}
 	for canonical, onWire := range cfg.RoleMappings {
 		roles[onWire] = canonical
+	}
+	for onWire, canonical := range cfg.DecodeRoleMappings {
+		if _, mapped := roles[onWire]; !mapped {
+			roles[onWire] = canonical
+		}
 	}
 	for i, item := range list {
 		field := fmt.Sprintf("messages[%d]", i)

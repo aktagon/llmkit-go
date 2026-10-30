@@ -25,7 +25,11 @@ func (b *Text) Batch(ctx context.Context, prompts ...string) (BatchHandle, error
 		return BatchHandle{}, err
 	}
 	provider := b.client.provider.toProvider("")
-	legacy, err := submitBatch(ctx, provider, b.batchInputs(prompts), b.sendOptions())
+	opts, err := b.sendOptions()
+	if err != nil {
+		return BatchHandle{}, err
+	}
+	legacy, err := submitBatch(ctx, provider, b.batchInputs(prompts), opts)
 	if err != nil {
 		return BatchHandle{}, err
 	}

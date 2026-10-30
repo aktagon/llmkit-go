@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"slices"
 	"time"
 
 	"github.com/aktagon/llmkit-go/v3/providers"
@@ -44,18 +45,30 @@ func newLegacyAgent(p Provider, req Request, tools []Tool, o *options) *legacyAg
 }
 
 // Chat sends a message and returns the response, executing tool calls if needed.
+//
+// The request is prepared (validated, model resolved) with the user turn
+// before the turn joins the history, so a rejected request leaves the history
+// as it was (HANDOFF-105 F3). Every turn of the loop sends the same Request
+// with a longer history, so one preparation holds for all of them.
 func (a *legacyAgent) chat(ctx context.Context, msg string) (Response, error) {
-	a.history = append(a.history, Message{Role: "user", Parts: textParts(msg)})
-	return a.runToolLoop(ctx)
-}
-
-// runToolLoop sends requests and executes tools until no more tool calls or max iterations.
-func (a *legacyAgent) runToolLoop(ctx context.Context) (Response, error) {
 	cfg, ok := providerSpecs()[a.provider.Name]
 	if !ok {
 		return Response{}, &ValidationError{Field: "provider", Message: "unknown: " + a.provider.Name}
 	}
+	req := a.req
+	req.Messages = append(slices.Clip(a.history), Message{Role: "user", Parts: textParts(msg)})
+	req, err := prepareRequest(a.provider, cfg, req)
+	if err != nil {
+		return Response{}, err
+	}
+	a.history = req.Messages
+	return a.runToolLoop(ctx, cfg, req)
+}
 
+// runToolLoop sends requests and executes tools until no more tool calls or
+// max iterations. req is the prepared Request; each turn sends it with the
+// current history.
+func (a *legacyAgent) runToolLoop(ctx context.Context, cfg providerSpec, req Request) (Response, error) {
 	tcConfig := providers.ToolCallConfig(a.provider.Name)
 	tcExtractor := selectToolCallExtractor(cfg)
 
@@ -68,16 +81,11 @@ func (a *legacyAgent) runToolLoop(ctx context.Context) (Response, error) {
 	for i := 0; i < a.opts.maxToolIterations; i++ {
 		// Build the request through the shared setup and encoder (ADR-026
 		// PIPE-001, ADR-098 RQC-001, RQC-017): the agent constructs no body of
-		// its own. Its history becomes the Request's Messages, so validation,
-		// model resolution, the tool-aware message transforms and the
-		// option/caching/structured-output steps all run identically to the
-		// Text/batch path.
-		req := a.req
+		// its own. Its history becomes the Request's Messages; chat ran the
+		// shared setup, so validation, model resolution, the tool-aware
+		// message transforms and the option/caching/structured-output steps
+		// all run identically to the Text/batch path.
 		req.Messages = a.history
-		req, err := prepareRequest(a.provider, cfg, req)
-		if err != nil {
-			return Response{Usage: totalUsage}, err
-		}
 		model := req.Model
 		body, content, err := encodeRequest(a.provider.Name, cfg, req)
 		if err != nil {
