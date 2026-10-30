@@ -25,6 +25,9 @@ type legacyAgent struct {
 	req      Request
 	tools    []Tool
 	history  []Message
+	// unsaved holds the turns of the last call, when it failed; nil after a
+	// call that succeeded (HANDOFF-105 F5, owner decision 2).
+	unsaved []Message
 }
 
 // newLegacyAgent creates a new agent for multi-turn conversations.
@@ -48,9 +51,11 @@ func newLegacyAgent(p Provider, req Request, tools []Tool, o *options) *legacyAg
 // Chat is all-or-nothing (owner decision 4, HANDOFF-105 F4). The call builds
 // its turns in a list of its own and adds them to the history only when it
 // succeeds (HANDOFF-105 F5), so the history never holds a running call's
-// turns: on any error it is what it was before the call, and the *AgentError
-// carries the turns the call made, tool results included.
+// turns: on any error it is what it was before the call. The error is the one
+// that stopped the call, unwrapped, and the turns the call made, tool results
+// included, are kept for UnsavedTurns (owner decision 2, F5).
 func (a *legacyAgent) chat(ctx context.Context, msg string) (Response, error) {
+	a.unsaved = nil
 	cfg, ok := providerSpecs()[a.provider.Name]
 	if !ok {
 		return Response{}, &ValidationError{Field: "provider", Message: "unknown: " + a.provider.Name}
@@ -65,7 +70,8 @@ func (a *legacyAgent) chat(ctx context.Context, msg string) (Response, error) {
 	turns := slices.Clone(req.Messages[len(a.history):])
 	resp, turns, err := a.runToolLoop(ctx, cfg, req, history, turns)
 	if err != nil {
-		return resp, &AgentError{Err: err, UnsavedTurns: turns}
+		a.unsaved = turns
+		return resp, err
 	}
 	a.history = append(history, turns...)
 	return resp, nil

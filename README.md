@@ -171,6 +171,11 @@ accumulate conversation history. Any chain method (`System`, `AddTool`,
 `agent.Reset()` clears history without dropping the configured tools
 or other chain state.
 
+A `Prompt` call that fails leaves the history as it was and returns the
+error that stopped it, such as an `*APIError`. `agent.UnsavedTurns()`
+returns the turns that call made, tool results included. It is empty
+after a call that succeeds.
+
 ```go
 agent := c.Agent.
     System("You are a calculator").
