@@ -45,16 +45,18 @@ func decodeFinishReason(chatWireShape string, wire *string, raw map[string]any) 
 	return FinishOther
 }
 
-// encodeFinishReason picks the table entry EncodeResponse writes for resp
+// encodeFinishReason picks the wire value EncodeResponse writes for resp
 // (ADR-099 CRF-010). The provider's own string wins when the target shape
 // knows it with the same canonical value, so a same-format round trip is
 // exact (Google RECITATION stays RECITATION). Otherwise the preferred entry
 // for the canonical value is written (Anthropic end_turn becomes OpenAI stop).
+// A canonical value the shape has no entry for is written as the shape's
+// declared fallback (owner decision 1, HANDOFF-105 section 3b): ChatOpenAI
+// other is stop. An unmapped provider string, such as Google LANGUAGE, is not
+// a known wire value, so it too encodes as the fallback (CRF-010).
 //
-// ok is false when the target shape has no wire value for the canonical value:
-// other always, and tool_calls on the shapes whose enum has no tool value
-// (rbox.ttl exceptGoogleToolCallsFinish, exceptResponsesToolCallsFinish).
-// Nothing is written then, because any value would claim a different stop.
+// ok is false only when resp reports no finish reason, or the shape declares
+// no table: there is nothing to write.
 func encodeFinishReason(chatWireShape string, resp Response) (entry providers.FinishReasonEntry, ok bool) {
 	if resp.FinishReason == "" {
 		return entry, false
@@ -71,6 +73,9 @@ func encodeFinishReason(chatWireShape string, resp Response) (entry providers.Fi
 		if e.Preferred && e.Canonical == resp.FinishReason {
 			return e, true
 		}
+	}
+	if fallback := providers.WireShapeFinishReasonFallback(chatWireShape, resp.FinishReason); fallback != "" {
+		return providers.FinishReasonEntry{WireValue: fallback, Canonical: resp.FinishReason}, true
 	}
 	return entry, false
 }
