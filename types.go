@@ -114,7 +114,7 @@ type options struct {
 	httpClient        *http.Client
 	maxToolIterations int
 	caching           bool
-	cacheTTL          time.Duration
+	cacheTTL          *time.Duration // nil: the provider default
 	middleware        []providers.MiddlewareFn
 	raw               bool
 	pollTimeout       time.Duration

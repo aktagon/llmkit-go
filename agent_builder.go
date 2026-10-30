@@ -24,7 +24,9 @@ type agentState struct {
 // new clone with empty state.
 func (b *Agent) Prompt(ctx context.Context, msg string) (Response, error) {
 	if b.state == nil {
-		b.initAgent()
+		if err := b.initAgent(); err != nil {
+			return Response{}, err
+		}
 	}
 	return b.state.agent.chat(ctx, msg)
 }
@@ -108,8 +110,12 @@ func encodeToolInput(input map[string]any) json.RawMessage {
 // config: the Request each turn sends, and the send options.
 // Lazy because the agent is only needed once Prompt is called; chain
 // methods that fork a clone leave state nil so initAgent runs again
-// on the fork.
-func (b *Agent) initAgent() {
+// on the fork. A TTL that is not positive whole seconds is a
+// ValidationError (checkCacheTTL), and leaves state nil.
+func (b *Agent) initAgent() error {
+	if err := checkCacheTTL(b.cacheTTL); err != nil {
+		return err
+	}
 	o := defaultOptions()
 	if b.maxToolIterations != nil {
 		o.maxToolIterations = *b.maxToolIterations
@@ -142,4 +148,5 @@ func (b *Agent) initAgent() {
 	// rather than reconstruct.
 	a.history = copyMessages(b.history)
 	b.state = &agentState{agent: a}
+	return nil
 }

@@ -16,7 +16,10 @@ import (
 func (b *Text) Prompt(ctx context.Context, finalText string) (Response, error) {
 	req := b.request(finalText)
 	p := b.client.provider.toProvider("")
-	o := b.sendOptions()
+	o, err := b.sendOptions()
+	if err != nil {
+		return Response{}, err
+	}
 	o.httpClient = withRequestTimeout(o.httpClient, p.Timeout)
 
 	if err := validateProvider(p); err != nil {
@@ -30,7 +33,7 @@ func (b *Text) Prompt(ctx context.Context, finalText string) (Response, error) {
 
 	// ADR-055: opt into a non-default chat protocol (Responses). Overrides the
 	// endpoint + wire shape on this call's cfg copy; empty keeps the default.
-	cfg, err := resolveChatProtocol(cfg, b.protocol)
+	cfg, err = resolveChatProtocol(cfg, b.protocol)
 	if err != nil {
 		return Response{}, err
 	}
@@ -200,14 +203,18 @@ func (b *Text) finalTurn(finalText string) []Part {
 }
 
 // sendOptions holds the chain settings that do not shape the request
-// (RQC-002): caching and its TTL, middleware and Raw.
-func (b *Text) sendOptions() *options {
+// (RQC-002): caching and its TTL, middleware and Raw. A TTL that is not
+// positive whole seconds is a ValidationError (checkCacheTTL).
+func (b *Text) sendOptions() (*options, error) {
+	if err := checkCacheTTL(b.cacheTTL); err != nil {
+		return nil, err
+	}
 	o := defaultOptions()
 	o.caching = b.caching
 	o.cacheTTL = b.cacheTTL
 	o.middleware = b.middleware
 	o.raw = b.raw
-	return o
+	return o, nil
 }
 
 // decodeResponseRaw is DecodeResponse plus the ADR-014 raw opt-in. Every
