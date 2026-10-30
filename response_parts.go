@@ -149,11 +149,14 @@ func blockArrayPaths(textCfg *providers.ResponseTextConfigDef, toolCfg *provider
 // documents. A block with no tool name, or arguments that are not JSON, is a
 // ValidationError on field "toolCalls": it is not a call the caller can run.
 //
-// Input is the provider's bytes, validated and not re-encoded (HANDOFF-105
-// F5): a decode-and-marshal round trip sorts the keys, escapes "<" and turns
-// integers past 2^53 into floats. json.Compact removes only the whitespace
-// between tokens, so a map-format object reads the same whether the body was
-// indented or not, and EncodeResponse writes back what was read.
+// Input is the provider's text, validated and not re-encoded (HANDOFF-105 F5,
+// F6 owner decision 1): a decode-and-marshal round trip sorts the keys,
+// escapes "<" and turns integers past 2^53 into floats. A json_string argument
+// is kept exactly, spaces included: the string is the text. A map-format
+// argument is a value inside the body, so its text is its tokens: json.Compact
+// removes only the whitespace between them, which is the body's layout, and
+// every encoder writes an embedded value without it. A JSON string "null" is
+// the text null, not absent.
 func readToolCall(block map[string]any, rawArgs []byte, cfg *providers.ToolCallResponseConfigDef, def *providers.ToolCallDef) (ToolCall, error) {
 	call := ToolCall{Name: extractPath(block, cfg.NamePath)}
 	if call.Name == "" {
@@ -169,22 +172,27 @@ func readToolCall(block map[string]any, rawArgs []byte, cfg *providers.ToolCallR
 	if args == nil {
 		return call, nil
 	}
-	input := rawArgs
-	if def.ArgsFormat == "json_string" {
-		s, ok := args.(string)
-		if !ok {
-			return ToolCall{}, malformedToolCall("%q: arguments at %s are not a JSON string", call.Name, cfg.ArgsPath)
+	if def.ArgsFormat != "json_string" {
+		var compact bytes.Buffer
+		if err := json.Compact(&compact, rawArgs); err != nil {
+			return ToolCall{}, malformedToolCall("%q: arguments at %s: %v", call.Name, cfg.ArgsPath, err)
 		}
-		if s == "" {
-			return call, nil
-		}
-		input = []byte(s)
+		call.Input = compact.Bytes()
+		return call, nil
 	}
-	var compact bytes.Buffer
-	if err := json.Compact(&compact, input); err != nil {
+	s, ok := args.(string)
+	if !ok {
+		return ToolCall{}, malformedToolCall("%q: arguments at %s are not a JSON string", call.Name, cfg.ArgsPath)
+	}
+	if s == "" {
+		return call, nil
+	}
+	if !json.Valid([]byte(s)) {
+		var probe any
+		err := json.Unmarshal([]byte(s), &probe)
 		return ToolCall{}, malformedToolCall("%q: arguments at %s: %v", call.Name, cfg.ArgsPath, err)
 	}
-	call.Input = compact.Bytes()
+	call.Input = json.RawMessage(s)
 	return call, nil
 }
 
@@ -247,9 +255,11 @@ func encodeChatParts(raw map[string]any, provider, chatWireShape string, parts [
 // type=function); a presence marker is the key the name path starts with, so
 // writing the name writes it (the generator checks this). No id is written
 // where the shape has no id path (Google): exceptGoogleToolCallID is
-// OneWay (owner decision 3, F4). The input's bytes go out as they are: as the
-// JSON string itself (json_string) or embedded as JSON (map). checkTurnParts
-// has already rejected input that is not JSON.
+// OneWay (owner decision 3, F4). The input's text goes out as it is
+// (HANDOFF-105 F6): as the JSON string itself (json_string), or embedded as
+// JSON (map), where the body's encoder drops the spaces between tokens and
+// keeps every token. checkTurnParts has already rejected input that is not
+// JSON.
 func writeToolCall(call ToolCall, cfg *providers.ToolCallResponseConfigDef, def *providers.ToolCallDef) map[string]any {
 	block := map[string]any{}
 	if cfg.MarkerValue != "" {
