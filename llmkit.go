@@ -146,12 +146,16 @@ func promptStream(ctx context.Context, p Provider, req Request, protocol string,
 		return Response{}, err
 	}
 
+	// The stream reads the same table as the one-shot body (ADR-099 CRF-008).
+	// It keeps no body, so a fused value (CRF-007) cannot be told apart and
+	// decodes to other.
 	return Response{
-		Text:         fullText.String(),
-		Usage:        usage,
-		FinishReason: fields.FinishReason,
-		ID:           fields.ID,
-		Model:        fields.Model,
+		Text:                 fullText.String(),
+		Usage:                usage,
+		FinishReason:         decodeFinishReason(cfg.ChatWireShape, fields.FinishReason, nil),
+		ProviderFinishReason: fields.FinishReason,
+		ID:                   fields.ID,
+		Model:                fields.Model,
 	}, nil
 }
 
@@ -1066,13 +1070,14 @@ func DecodeResponse(provider, chatWireShape string, body []byte) (Response, erro
 	id, model := extractResponseIdentity(raw, provider)
 
 	return Response{
-		Text:          text,
-		Usage:         decodeUsage(raw, provider),
-		FinishReason:  finishReason,
-		FinishMessage: finishMessage,
-		ProviderTurn:  turn,
-		ID:            id,
-		Model:         model,
+		Text:                 text,
+		Usage:                decodeUsage(raw, provider),
+		FinishReason:         decodeFinishReason(chatWireShape, finishReason, raw),
+		ProviderFinishReason: finishReason,
+		FinishMessage:        finishMessage,
+		ProviderTurn:         turn,
+		ID:                   id,
+		Model:                model,
 	}, nil
 }
 
@@ -1160,7 +1165,7 @@ func EncodeResponse(provider, chatWireShape string, resp Response) ([]byte, erro
 		return nil, err
 	}
 	if chatWireShape == providers.ChatResponsesOpenAI {
-		return json.Marshal(encodeResponsesEnvelope(resp))
+		return json.Marshal(encodeResponsesEnvelope(chatWireShape, resp))
 	}
 
 	raw := map[string]any{}
@@ -1176,7 +1181,10 @@ func EncodeResponse(provider, chatWireShape string, resp Response) ([]byte, erro
 	}
 	if cfg, ok := providerSpecs()[provider]; ok {
 		setWirePath(raw, cfg.ReasoningTokensPath, resp.Usage.Reasoning)
-		setWirePath(raw, cfg.FinishReasonPath, resp.FinishReason)
+		if e, ok := encodeFinishReason(chatWireShape, resp); ok {
+			setWirePath(raw, cfg.FinishReasonPath, e.WireValue)
+			setWirePath(raw, e.DetailPath, e.DetailValue)
+		}
 		setWirePath(raw, cfg.FinishMessagePath, resp.FinishMessage)
 		setWirePath(raw, cfg.ResponseIDPath, resp.ID)
 		setWirePath(raw, cfg.ResponseModelPath, resp.Model)
@@ -1185,20 +1193,18 @@ func EncodeResponse(provider, chatWireShape string, resp Response) ([]byte, erro
 }
 
 // guardOneWayFields refuses to encode a canonical field whose mapping is
-// OneWay for this provider — the result set of CQ-WMAP-011 (ADR-076
-// SYM-007). Only one member is in Phase 2's scope; the other,
-// exceptGoogleToolCallID, covers tool calls, which are out (SYM-008).
+// OneWay for this provider — the result set of CQ-WMAP-011 restricted to
+// Response (ADR-076 SYM-007). That set is empty today:
+// exceptGoogleToolCallID covers tool calls, which are out (SYM-008), and
+// exceptVertexFinishReason is on the image response since ADR-099 slice
+// C4 (CRF-006). A Vertex chat Response writes no finish reason anyway: Vertex
+// has no chat wire shape, so encodeFinishReason finds no table.
 //
-// An empty value is not an error: there is nothing to write, so the common path
-// stays usable and only the lying path fails. Field and Message carry the
-// mapping's canonicalPath and invertibilityNote verbatim.
+// The guard stays so a new whole-field exception on Response fails
+// lint_response_codec.py until it is guarded here. An empty value is not an
+// error: there is nothing to write. Field and Message carry the mapping's
+// canonicalPath and invertibilityNote verbatim.
 func guardOneWayFields(provider string, resp Response) error {
-	if provider == string(providers.Vertex) && stringValue(resp.FinishReason) != "" {
-		return &ValidationError{
-			Field:   "response.finish_reason",
-			Message: "Vertex carries no finish-reason field. Its path reads predictions[0].raiFilteredReason — a safety-filter explanation surfaced AS the finish reason. Extraction is a deliberate fusion, so the reverse leg cannot decide whether a given canonical finish_reason originated as a safety verdict, and writing an ordinary stop signal into that field would fabricate one.",
-		}
-	}
 	return nil
 }
 
@@ -1302,7 +1308,7 @@ func derefWireValue(val any) (any, bool) {
 // and cached + reasoning sub-details. Hand-coded per wire shape on both legs,
 // symmetric with the reader, for the same reason the reader is (ADR-028:
 // behavior held by tests, not by declared response paths).
-func encodeResponsesEnvelope(resp Response) map[string]any {
+func encodeResponsesEnvelope(chatWireShape string, resp Response) map[string]any {
 	raw := map[string]any{}
 	if resp.Text != "" {
 		raw["output"] = []any{map[string]any{
@@ -1314,7 +1320,10 @@ func encodeResponsesEnvelope(resp Response) map[string]any {
 	setWirePath(raw, "usage.output_tokens", resp.Usage.Output)
 	setWirePath(raw, "usage.input_tokens_details.cached_tokens", resp.Usage.CacheRead)
 	setWirePath(raw, "usage.output_tokens_details.reasoning_tokens", resp.Usage.Reasoning)
-	setWirePath(raw, "status", resp.FinishReason)
+	if e, ok := encodeFinishReason(chatWireShape, resp); ok {
+		setWirePath(raw, "status", e.WireValue)
+		setWirePath(raw, e.DetailPath, e.DetailValue)
+	}
 	setWirePath(raw, providers.WireShapeResponseIDPath(providers.ChatResponsesOpenAI), resp.ID)
 	setWirePath(raw, providers.WireShapeResponseModelPath(providers.ChatResponsesOpenAI), resp.Model)
 	return raw
@@ -1338,7 +1347,8 @@ func parseResponsesEnvelope(raw map[string]any) Response {
 		},
 	}
 	if pathPresent(raw, "status") {
-		resp.FinishReason = optString(extractPath(raw, "status"))
+		resp.ProviderFinishReason = optString(extractPath(raw, "status"))
+		resp.FinishReason = decodeFinishReason(providers.ChatResponsesOpenAI, resp.ProviderFinishReason, raw)
 	}
 	resp.ID = optStringPath(raw, providers.WireShapeResponseIDPath(providers.ChatResponsesOpenAI))
 	resp.Model = optStringPath(raw, providers.WireShapeResponseModelPath(providers.ChatResponsesOpenAI))

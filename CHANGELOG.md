@@ -9,6 +9,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **BREAKING — `Response.FinishReason` is a canonical `FinishReason`.** It
+  holds one of five values shared by every provider: `FinishStop`,
+  `FinishLength`, `FinishToolCalls`, `FinishContentFilter` or `FinishOther`,
+  and is empty when the provider reported none. Anthropic `end_turn` is
+  `FinishStop`, Google `SAFETY` and `RECITATION` are `FinishContentFilter`, and
+  a Responses `incomplete` is `FinishLength` or `FinishContentFilter` by its
+  `incomplete_details.reason`. A value with no canonical meaning is
+  `FinishOther`. The provider's own string moved to
+  `Response.ProviderFinishReason` (`*string`). Code that compared
+  `*resp.FinishReason` to a provider string no longer compiles; compare
+  `resp.FinishReason == llmkit.FinishLength`, or read
+  `resp.ProviderFinishReason` for the provider's string.
+- **BREAKING — `EncodeResponse` writes the target format's own finish
+  reason.** It keeps `ProviderFinishReason` when the target format has that
+  value with the same meaning, so a same-format round trip is exact, and
+  otherwise writes that format's value for the canonical reason: an Anthropic
+  `end_turn` encoded for OpenAI is `stop`. A reason the target format cannot
+  express (`FinishOther`, or tool calls for Google and Responses) is left out.
+  `EncodeResponse("vertex", ...)` no longer returns a `*ValidationError` for a
+  finish reason; it writes none.
+- **BREAKING — `FinishReason` on `ImageResponse`, `MusicResponse`,
+  `SpeechResponse` and `VideoResponse` is renamed `ProviderFinishReason`.**
+  The value is unchanged: the provider's string, verbatim.
 - **BREAKING — a batch item reports its outcome in `State` and `Cause`.**
   Each `Response` from `BatchHandle.Wait` or `Poll` has `State` `JobSucceeded`
   or `JobFailed`. A failed item has a `Cause` (`*JobFailure`) and no
