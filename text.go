@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/aktagon/llmkit-go/v3/providers"
@@ -197,7 +198,14 @@ func (b *Text) finalTurn(finalText string) []Part {
 		texts = append(texts, Part{Text: finalText})
 	}
 	if len(texts) > 0 {
-		parts = append(parts, Part{Text: joinedText(texts)})
+		// The builder's own join, "\n" (ADR-100 MSG-004, the text-parts-openai
+		// golden): it merges the builder's texts into one part. A turn's parts
+		// join with "" (joinedText).
+		joined := make([]string, 0, len(texts))
+		for _, t := range texts {
+			joined = append(joined, t.Text)
+		}
+		parts = append(parts, Part{Text: strings.Join(joined, "\n")})
 	}
 	return parts
 }
