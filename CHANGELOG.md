@@ -27,9 +27,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   value with the same meaning, so a same-format round trip is exact, and
   otherwise writes that format's value for the canonical reason: an Anthropic
   `end_turn` encoded for OpenAI is `stop`. A reason the target format cannot
-  express (`FinishOther`, or tool calls for Google and Responses) is left out.
-  `EncodeResponse("vertex", ...)` no longer returns a `*ValidationError` for a
-  finish reason; it writes none.
+  express is written as that format's fallback value: `FinishOther` is `stop`
+  for OpenAI, `end_turn` for Anthropic and Bedrock, `OTHER` for Google and
+  `completed` for Responses; `FinishToolCalls` is `STOP` for Google and
+  `completed` for Responses; `FinishContentFilter` is `end_turn` for Bedrock.
+- **BREAKING — `EncodeResponse` rejects a format the provider does not
+  serve.** It returns a `*ValidationError` with `Field` `"shape"`, for
+  example for `EncodeResponse("vertex", "", resp)`, since Vertex serves no
+  chat format. `EncodeResponse("openai", "ChatOpenAI", resp)` is unchanged.
+- **BREAKING — `Response.State` is a `*JobState`.** It is nil on a reply
+  that is not a batch item, and points at `JobSucceeded` or `JobFailed` on a
+  batch item. Compare `resp.State != nil && *resp.State == llmkit.JobFailed`.
+- **`EncodeResponse` for OpenAI Chat Completions writes `object`
+  (`"chat.completion"`), `choices[0].index` (`0`), `choices[0].message.role`
+  (`"assistant"`) and, when the response has one, `created`.**
+- **Bedrock replies now report a finish reason.** `Response.FinishReason`
+  and `ProviderFinishReason` are read from `stopReason`, and `EncodeResponse`
+  writes it.
+- **The Vertex and Gemini music replies read the filtered reason at one
+  declared path.** Vertex reads `predictions[0].raiFilteredReason`.
+
+### Added
+
+- **`Response.Created` (`*int`).** The Unix time the provider reports, read
+  from `created` (Chat Completions) or `created_at` (Responses); nil when the
+  provider reports none.
+- **`Response.ToolCalls`.** `Text.Request` sends `req.Tools` and returns the
+  model's tool calls in `ToolCalls` without running them.
 - **BREAKING — `FinishReason` on `ImageResponse`, `MusicResponse`,
   `SpeechResponse` and `VideoResponse` is renamed `ProviderFinishReason`.**
   The value is unchanged: the provider's string, verbatim.

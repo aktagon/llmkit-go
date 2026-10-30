@@ -1078,7 +1078,30 @@ func DecodeResponse(provider, chatWireShape string, body []byte) (Response, erro
 		ProviderTurn:         turn,
 		ID:                   id,
 		Model:                model,
+		Created:              optIntPath(raw, providers.WireShapeResponseCreatedPath(chatWireShape)),
+		ToolCalls:            decodeToolCalls(raw, provider, chatWireShape),
 	}, nil
+}
+
+// decodeToolCalls reads the tool calls a response asked for, without running
+// them (owner decision 3, HANDOFF-105 section 3b), through the same extractor
+// the Agent's loop selects. A provider that declares no tool-call config has
+// no tool calls to read.
+func decodeToolCalls(raw map[string]any, provider, chatWireShape string) []ToolCall {
+	tcConfig := providers.ToolCallConfig(provider)
+	cfg, ok := withWireShape(providerSpecs()[provider], chatWireShape)
+	if tcConfig == nil || !ok {
+		return nil
+	}
+	calls := selectToolCallExtractor(cfg)(raw, tcConfig)
+	if len(calls) == 0 {
+		return nil
+	}
+	out := make([]ToolCall, 0, len(calls))
+	for _, tc := range calls {
+		out = append(out, ToolCall{ID: tc.id, Name: tc.name, Input: encodeToolInput(tc.input)})
+	}
+	return out
 }
 
 // extractResponseText reads the assistant's text out of a parsed provider body.
@@ -1160,7 +1183,10 @@ func decodeUsage(raw map[string]any, provider string) Usage {
 // The contract is the canonical fixed point, Decode(Encode(Decode(b))) ==
 // Decode(b) (SYM-006).
 func EncodeResponse(provider, chatWireShape string, resp Response) ([]byte, error) {
-	chatWireShape = resolveChatWireShape(provider, chatWireShape)
+	chatWireShape, err := servedChatWireShape(provider, chatWireShape)
+	if err != nil {
+		return nil, err
+	}
 	if err := guardOneWayFields(provider, resp); err != nil {
 		return nil, err
 	}
@@ -1189,7 +1215,39 @@ func EncodeResponse(provider, chatWireShape string, resp Response) ([]byte, erro
 		setWirePath(raw, cfg.ResponseIDPath, resp.ID)
 		setWirePath(raw, cfg.ResponseModelPath, resp.Model)
 	}
+	setWirePath(raw, providers.WireShapeResponseCreatedPath(chatWireShape), resp.Created)
+	encodeFixedValues(raw, chatWireShape)
 	return json.Marshal(raw)
+}
+
+// servedChatWireShape resolves the shape EncodeResponse writes: the named one,
+// or the provider's default when chatWireShape is "". A shape the provider
+// does not serve is a validation error on field "shape" (owner decision 2,
+// HANDOFF-105 section 3b), and so is a provider that serves no chat shape at
+// all: writing provider paths into another family's body produces a body
+// neither family reads.
+func servedChatWireShape(provider, chatWireShape string) (string, error) {
+	cfg, ok := providerSpecs()[provider]
+	if !ok {
+		return "", &ValidationError{Field: "provider", Message: "unknown: " + provider}
+	}
+	shape := resolveChatWireShape(provider, chatWireShape)
+	if _, served := withWireShape(cfg, shape); shape == "" || !served {
+		return "", &ValidationError{
+			Field:   "shape",
+			Message: fmt.Sprintf("provider %q does not serve chat wire shape %q", provider, chatWireShape),
+		}
+	}
+	return shape, nil
+}
+
+// encodeFixedValues writes the fields every body of the shape carries with
+// the same value (shapeFixedValue, owner decision 4): on ChatOpenAI the
+// object type, the choice index and the message role.
+func encodeFixedValues(raw map[string]any, chatWireShape string) {
+	for _, fv := range providers.WireShapeFixedValues(chatWireShape) {
+		setWirePath(raw, fv.Path, fv.Value)
+	}
 }
 
 // guardOneWayFields refuses to encode a canonical field whose mapping is
@@ -1326,6 +1384,8 @@ func encodeResponsesEnvelope(chatWireShape string, resp Response) map[string]any
 	}
 	setWirePath(raw, providers.WireShapeResponseIDPath(providers.ChatResponsesOpenAI), resp.ID)
 	setWirePath(raw, providers.WireShapeResponseModelPath(providers.ChatResponsesOpenAI), resp.Model)
+	setWirePath(raw, providers.WireShapeResponseCreatedPath(providers.ChatResponsesOpenAI), resp.Created)
+	encodeFixedValues(raw, chatWireShape)
 	return raw
 }
 
@@ -1352,6 +1412,7 @@ func parseResponsesEnvelope(raw map[string]any) Response {
 	}
 	resp.ID = optStringPath(raw, providers.WireShapeResponseIDPath(providers.ChatResponsesOpenAI))
 	resp.Model = optStringPath(raw, providers.WireShapeResponseModelPath(providers.ChatResponsesOpenAI))
+	resp.Created = optIntPath(raw, providers.WireShapeResponseCreatedPath(providers.ChatResponsesOpenAI))
 	return resp
 }
 

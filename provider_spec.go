@@ -268,7 +268,7 @@ var providerSpecRegistry = map[string]providerSpec{
 		UsageInputPath:          "usage.inputTokens",
 		UsageOutputPath:         "usage.outputTokens",
 		ReasoningTokensPath:     "",
-		FinishReasonPath:        "",
+		FinishReasonPath:        "stopReason",
 		FinishMessagePath:       "",
 		StreamFinishReasonPath:  "",
 		StreamFinishMessagePath: "",

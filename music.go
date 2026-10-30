@@ -137,7 +137,7 @@ func generateMusic(ctx context.Context, p Provider, req MusicRequest, opts ...Mu
 		return MusicResponse{}, err
 	}
 
-	resp, parseErr := parseMusicResponse(mgCfg.WireShape, model.OutputMime, respBody)
+	resp, parseErr := parseMusicResponse(mgCfg.WireShape, model.OutputMime, cfg, respBody)
 	if o.raw && parseErr == nil {
 		resp.Raw = append(json.RawMessage(nil), respBody...)
 	}
@@ -354,19 +354,21 @@ func findMusicModel(cfg *providers.MusicGenDef, modelID string) *providers.Music
 
 // parseMusicResponse decodes the audio payloads per wire shape. Each shape's
 // response diverges enough (predictions[] vs candidates[] vs data.audio,
-// base64 vs hex) that a switch is clearer than a generic walker.
-func parseMusicResponse(wireShape, fallbackMime string, body []byte) (MusicResponse, error) {
+// base64 vs hex) that a switch is clearer than a generic walker. The stop
+// signal is read at the provider's declared hasFinishReasonPath and
+// hasFinishMessagePath (ADR-099 CRF-003), not at a key named here.
+func parseMusicResponse(wireShape, fallbackMime string, cfg providerSpec, body []byte) (MusicResponse, error) {
 	var raw map[string]any
 	if err := json.Unmarshal(body, &raw); err != nil {
 		return MusicResponse{}, fmt.Errorf("unmarshal music response: %w", err)
 	}
 	switch wireShape {
 	case providers.MusicShapePredict:
-		return parseVertexMusicResponse(raw, fallbackMime), nil
+		return parseVertexMusicResponse(raw, fallbackMime, cfg), nil
 	case providers.MusicShapeMinimax:
 		return parseMinimaxMusicResponse(raw, fallbackMime), nil
 	case providers.MusicShapeGenerateContent:
-		return parseGeminiMusicResponse(raw, fallbackMime), nil
+		return parseGeminiMusicResponse(raw, fallbackMime, cfg), nil
 	default:
 		return MusicResponse{}, fmt.Errorf("music: unsupported wire shape %q", wireShape)
 	}
@@ -374,19 +376,16 @@ func parseMusicResponse(wireShape, fallbackMime string, body []byte) (MusicRespo
 
 // parseVertexMusicResponse decodes Vertex Lyria :predict responses.
 // Shape: {"predictions": [{"audioContent": "<base64>", "mimeType": "audio/wav"}]}.
-func parseVertexMusicResponse(raw map[string]any, fallbackMime string) MusicResponse {
+// A filtered prediction carries raiFilteredReason instead of audio; the reason
+//
+// sends sampleCount 1, so the reply has one prediction.
+func parseVertexMusicResponse(raw map[string]any, fallbackMime string, cfg providerSpec) MusicResponse {
 	preds, _ := raw["predictions"].([]any)
 	var audio []AudioData
-	var finishReason string
 	for _, item := range preds {
 		entry, ok := item.(map[string]any)
 		if !ok {
 			continue
-		}
-		if finishReason == "" {
-			if rai, ok := entry["raiFilteredReason"].(string); ok && rai != "" {
-				finishReason = rai
-			}
 		}
 		b64, _ := entry["audioContent"].(string)
 		if b64 == "" {
@@ -403,13 +402,13 @@ func parseVertexMusicResponse(raw map[string]any, fallbackMime string) MusicResp
 			audio = append(audio, AudioData{MimeType: mime, Bytes: decoded})
 		}
 	}
-	return MusicResponse{Audio: audio, ProviderFinishReason: optString(finishReason)}
+	return MusicResponse{Audio: audio, ProviderFinishReason: optStringPath(raw, cfg.FinishReasonPath)}
 }
 
 // parseGeminiMusicResponse walks candidates[0].content.parts, decoding each
 // inlineData audio part and concatenating text parts (generated lyrics). A
 // filtered call has no content; candidates[0].finishMessage explains why.
-func parseGeminiMusicResponse(raw map[string]any, fallbackMime string) MusicResponse {
+func parseGeminiMusicResponse(raw map[string]any, fallbackMime string, cfg providerSpec) MusicResponse {
 	candidates, _ := raw["candidates"].([]any)
 	if len(candidates) == 0 {
 		return MusicResponse{}
@@ -439,13 +438,11 @@ func parseGeminiMusicResponse(raw map[string]any, fallbackMime string) MusicResp
 			textParts = append(textParts, text)
 		}
 	}
-	finishReason, _ := first["finishReason"].(string)
-	finishMessage, _ := first["finishMessage"].(string)
 	return MusicResponse{
 		Audio:                audio,
 		Text:                 strings.Join(textParts, ""),
-		ProviderFinishReason: optString(finishReason),
-		FinishMessage:        optString(finishMessage),
+		ProviderFinishReason: optStringPath(raw, cfg.FinishReasonPath),
+		FinishMessage:        optStringPath(raw, cfg.FinishMessagePath),
 	}
 }
 

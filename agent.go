@@ -166,35 +166,24 @@ func (a *legacyAgent) runToolLoop(ctx context.Context) (Response, error) {
 		calls := tcExtractor(raw, tcConfig)
 
 		if len(calls) == 0 {
-			// The same reader DecodeResponse uses, and it has to be: this text
-			// is appended to a.history below, so a positional read did not
-			// merely return the wrong value once — it wrote an EMPTY assistant
-			// turn into the loop's own conversation state, and every later
-			// turn was conditioned on that hole (BUG-053 defect 5).
-			text := extractResponseText(raw, a.provider.Name, cfg.ChatWireShape)
-			turn := captureProviderTurn(respBody, cfg, cfg.ChatWireShape)
-			// The terminal turn is captured too: an agent kept alive for
-			// another Chat() replays it like any other, and Response carries
-			// it so a caller running their own loop can thread it forward
-			// without parsing Raw per provider (ADR-085 § 6).
+			// The terminal turn is decoded by DecodeResponse itself, the one
+			// reader (ADR-076 SYM-004). Before HANDOFF-105 F2 the loop rebuilt
+			// the Response from the decoder's helpers, field by field, so a
+			// field added to the decoder (Created) was missing here. The text
+			// is appended to a.history below, so it must be the decoder's
+			// block-matched read (BUG-053 defect 5), and the turn is captured
+			// for an agent kept alive for another Chat() (ADR-085 § 6).
+			resp, err := decodeResponseRaw(a.provider.Name, cfg.ChatWireShape, respBody, a.opts.raw)
+			if err != nil {
+				return Response{Usage: totalUsage}, err
+			}
+			resp.Usage = totalUsage
 			a.history = append(a.history, Message{
 				Role:         "assistant",
-				Parts:        textParts(text),
-				ProviderTurn: turn,
+				Parts:        textParts(resp.Text),
+				ProviderTurn: resp.ProviderTurn,
 			})
-			finishReason, finishMessage := extractFinishSignal(raw, a.provider.Name)
-			id, model := extractResponseIdentity(raw, a.provider.Name)
-			resp := Response{
-				Text:                 text,
-				Usage:                totalUsage,
-				FinishReason:         decodeFinishReason(cfg.ChatWireShape, finishReason, raw),
-				ProviderFinishReason: finishReason,
-				FinishMessage:        finishMessage,
-				ProviderTurn:         turn,
-				ID:                   id,
-				Model:                model,
-			}
-			return attachRaw(resp, respBody, a.opts.raw), nil
+			return resp, nil
 		}
 
 		// Record the assistant turn. toolCalls is the projection the loop runs
