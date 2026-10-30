@@ -31,6 +31,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   for OpenAI, `end_turn` for Anthropic and Bedrock, `OTHER` for Google and
   `completed` for Responses; `FinishToolCalls` is `STOP` for Google and
   `completed` for Responses; `FinishContentFilter` is `end_turn` for Bedrock.
+- **`Response.ChatWireShape` (`*string`) names the format a reply was
+  decoded from,** such as `"ChatAnthropic"`. One-shot, stream, batch and agent
+  replies set it; it is nil on a `Response` you build yourself. When it equals
+  the target format, `EncodeResponse` writes `ProviderFinishReason` verbatim
+  even when the value has no canonical meaning: an Anthropic `pause_turn`
+  decodes as `FinishOther` and encodes back as `pause_turn`.
 - **BREAKING — `EncodeResponse` rejects a format the provider does not
   serve.** It returns a `*ValidationError` with `Field` `"chatWireShape"`, for
   example for `EncodeResponse("vertex", "", resp)`, since Vertex serves no
