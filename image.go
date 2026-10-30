@@ -841,8 +841,8 @@ func parseImageResponse(imgCfg *providers.ImageGenDef, provider string, body []b
 			Output:    optIntPath(raw, imgCfg.UsageOutputPath),
 			Reasoning: optIntPath(raw, imgCfg.UsageReasoningPath),
 		},
-		FinishReason:  finishReason,
-		FinishMessage: finishMessage,
+		ProviderFinishReason: finishReason,
+		FinishMessage:        finishMessage,
 	}, nil
 }
 

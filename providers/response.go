@@ -172,6 +172,84 @@ func WireShapeResponseModelPath(chatWireShape string) string {
 	}
 }
 
+// FinishReason is why a chat response stopped, in one vocabulary shared by
+// every provider (ADR-099 CRF-001). Response.FinishReason holds one; the
+// provider's own string is in Response.ProviderFinishReason.
+type FinishReason string
+
+// Canonical finish reasons.
+const (
+	// FinishContentFilter: The provider withheld or cut the output because its content filter flagged it.
+	FinishContentFilter FinishReason = "content_filter"
+	// FinishLength: The response reached the output-token limit set in the request.
+	FinishLength FinishReason = "length"
+	// FinishOther: Any wire value with no entry in the table (CRF-011). The provider's string is kept verbatim.
+	FinishOther FinishReason = "other"
+	// FinishStop: The model reached a natural stop point or a caller-provided stop sequence.
+	FinishStop FinishReason = "stop"
+	// FinishToolCalls: The model stopped to call one or more tools.
+	FinishToolCalls FinishReason = "tool_calls"
+)
+
+// FinishReasonEntry is one row of a chat wire shape's finish-reason table
+// (ADR-099 CRF-004): a provider wire value and the canonical value it means.
+// DetailPath and DetailValue are set only when the wire value fuses two
+// canonical values; the entry then matches only when the field at DetailPath
+// holds DetailValue (CRF-007). Preferred marks the one entry per canonical
+// value that encoding writes (CRF-005).
+type FinishReasonEntry struct {
+	WireValue   string
+	DetailPath  string
+	DetailValue string
+	Canonical   FinishReason
+	Preferred   bool
+}
+
+// WireShapeFinishReasons returns the finish-reason table of a chat wire
+// shape, or nil when the shape declares none. A wire value with no entry is
+// FinishOther (CRF-011).
+func WireShapeFinishReasons(chatWireShape string) []FinishReasonEntry {
+	switch chatWireShape {
+	case ChatAnthropic:
+		return []FinishReasonEntry{
+			{WireValue: "end_turn", Canonical: FinishStop, Preferred: true},
+			{WireValue: "max_tokens", Canonical: FinishLength, Preferred: true},
+			{WireValue: "stop_sequence", Canonical: FinishStop},
+			{WireValue: "tool_use", Canonical: FinishToolCalls, Preferred: true},
+		}
+	case ChatBedrock:
+		return []FinishReasonEntry{
+			{WireValue: "end_turn", Canonical: FinishStop, Preferred: true},
+			{WireValue: "max_tokens", Canonical: FinishLength, Preferred: true},
+			{WireValue: "stop_sequence", Canonical: FinishStop},
+			{WireValue: "tool_use", Canonical: FinishToolCalls, Preferred: true},
+		}
+	case ChatGoogle:
+		return []FinishReasonEntry{
+			{WireValue: "MAX_TOKENS", Canonical: FinishLength, Preferred: true},
+			{WireValue: "RECITATION", Canonical: FinishContentFilter},
+			{WireValue: "SAFETY", Canonical: FinishContentFilter, Preferred: true},
+			{WireValue: "STOP", Canonical: FinishStop, Preferred: true},
+		}
+	case ChatOpenAI:
+		return []FinishReasonEntry{
+			{WireValue: "content_filter", Canonical: FinishContentFilter, Preferred: true},
+			{WireValue: "function_call", Canonical: FinishToolCalls},
+			{WireValue: "length", Canonical: FinishLength, Preferred: true},
+			{WireValue: "stop", Canonical: FinishStop, Preferred: true},
+			{WireValue: "tool_calls", Canonical: FinishToolCalls, Preferred: true},
+		}
+	case ChatResponsesOpenAI:
+		return []FinishReasonEntry{
+			{WireValue: "completed", Canonical: FinishStop, Preferred: true},
+			{WireValue: "incomplete", DetailPath: "incomplete_details.reason", DetailValue: "content_filter", Canonical: FinishContentFilter, Preferred: true},
+			{WireValue: "incomplete", DetailPath: "incomplete_details.reason", DetailValue: "max_output_tokens", Canonical: FinishLength, Preferred: true},
+		}
+	default:
+		return nil
+	}
+}
+
 // UsagePaths returns the JSON paths for input and output token counts.
 func UsagePaths(provider string) (inputPath, outputPath string) {
 	switch ProviderName(provider) {

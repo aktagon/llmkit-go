@@ -62,8 +62,8 @@ type ImageResponse struct {
 	// Usage holds token consumption metrics for the image-generation call. Google reports image-output tokens in usageMetadata.candidatesTokenCount; the OpenAI Images API does not return token counts, so on that provider no dimension is reported at all — absent, not zero.
 	Usage Usage
 
-	// FinishReason is the provider stop signal. Examples per provider: Google STOP/IMAGE_OTHER/SAFETY/MAX_TOKENS; OpenAI Images API has no equivalent field (always absent); xAI Grok has no equivalent field (always absent).
-	FinishReason *string
+	// ProviderFinishReason is the provider stop signal, passed through verbatim (ADR-099 CRF-003). Examples per provider: Google STOP/IMAGE_OTHER/SAFETY/MAX_TOKENS; OpenAI Images API has no equivalent field (always absent); xAI Grok has no equivalent field (always absent).
+	ProviderFinishReason *string
 
 	// FinishMessage is the free-text provider explanation of the stop signal. Gemini populates this for non-success FinishReason values; other providers leave it empty. Use as the user-facing message when len(Images) == 0.
 	FinishMessage *string
@@ -143,8 +143,8 @@ type MusicResponse struct {
 	// Usage holds token consumption metrics for the music-generation call. None of the three verified providers report audio-output tokens as a distinct dimension; the dimension is unreported unless a provider surfaces counts (ADR-033 OQ-3). Unreported is not zero.
 	Usage Usage
 
-	// FinishReason is the provider stop signal. Gemini surfaces STOP/SAFETY etc.; Vertex Imagen-style providers surface a RAI filter reason when content is blocked; MiniMax carries a base_resp status. Optional.
-	FinishReason *string
+	// ProviderFinishReason is the provider stop signal, passed through verbatim (ADR-099 CRF-003). Gemini surfaces STOP/SAFETY etc.; Vertex Imagen-style providers surface a RAI filter reason when content is blocked; MiniMax carries a base_resp status. Optional.
+	ProviderFinishReason *string
 
 	// FinishMessage is the free-text provider explanation of the stop signal. Use as the user-facing message when len(Audio) == 0.
 	FinishMessage *string
@@ -230,8 +230,8 @@ type Response struct {
 	//
 	Usage Usage
 
-	// FinishReason is the provider stop signal, passed through verbatim. ABSENT (not empty) when the provider response carries no signal or the provider declares no path for it — the two are the same observation, and neither is an empty string (ADR-081). Examples per provider: Google STOP/MAX_TOKENS/SAFETY/RECITATION; OpenAI stop/length/content_filter/tool_calls; Anthropic end_turn/max_tokens/stop_sequence/tool_use; xAI stop/length/content_filter.
-	FinishReason *string
+	// FinishReason is why the response stopped, as one of five canonical values shared by every provider: stop, length, tool_calls, content_filter, other (ADR-099 CRF-001). The provider's own value maps through the finish-reason table of the response's chat wire shape (Anthropic end_turn is stop, Google SAFETY is content_filter); a value with no entry is other (CRF-011). The provider's string is in provider_finish_reason. Absent when the response reports no finish reason; Go leaves the empty value there.
+	FinishReason FinishReason
 
 	// FinishMessage is the provider-supplied free-text explanation of the stop signal. Populated by Google when present; OpenAI / Anthropic / xAI carry no equivalent field, so it is ABSENT for them rather than empty (ADR-081). A failed batch item carries its error message in cause, not here (ADR-099 CRF-015).
 	FinishMessage *string
@@ -253,6 +253,9 @@ type Response struct {
 
 	// Cause is why a batch item failed, set only when its state is failed (ADR-099 CRF-015): the typed code, the provider's failure status verbatim, and the provider's error message. A failed item carries no finish reason and no finish message.
 	Cause *JobFailure
+
+	// ProviderFinishReason is the provider stop signal, passed through verbatim (ADR-099 CRF-002). ABSENT (not empty) when the provider response carries no signal or the provider declares no path for it — the two are the same observation, and neither is an empty string (ADR-081). Examples per provider: Google STOP/MAX_TOKENS/SAFETY/RECITATION; OpenAI stop/length/content_filter/tool_calls; Anthropic end_turn/max_tokens/stop_sequence/tool_use; OpenAI Responses completed/incomplete.
+	ProviderFinishReason *string
 }
 
 // SafetySetting configures one per-category content safety filter for Gemini providers. Category and threshold pass through verbatim to the wire body: use the HARM_CATEGORY_* and HARM_BLOCK_THRESHOLD_* constants or Google's latest string values.
@@ -272,8 +275,8 @@ type SpeechResponse struct {
 	// Usage holds provider-reported usage. Inworld returns usage.processedCharactersCount, but the SDK does not yet surface it: the Usage carrier has no characters axis and OQ-3 declined to overload a token axis, so it is left UNREPORTED pending a typed characters dimension (ADR-049 OQ-3, deferred) — honest absence rather than a zero that would read as a measurement.
 	Usage Usage
 
-	// FinishReason is the provider stop signal, when present. Optional.
-	FinishReason *string
+	// ProviderFinishReason is the provider stop signal, passed through verbatim, when present (ADR-099 CRF-003). Optional.
+	ProviderFinishReason *string
 }
 
 // ToolCall is a single tool invocation issued by the model on an assistant turn. Carries the provider-issued id, the tool name, and the JSON-decoded argument object. ADR-020 promotes this from a private per-SDK type into a public generated struct so *Agent history can carry tool turns end to end.
@@ -383,8 +386,8 @@ type VideoResponse struct {
 	// Usage holds token consumption metrics for the video-generation call. No verified provider reports a video usage axis yet; the dimensions stay unreported unless a provider surfaces counts (ADR-034 OQ-3). Unreported is not zero.
 	Usage Usage
 
-	// FinishReason is the provider terminal status / stop signal (grok: a non-done status such as expired or failed). Empty on success. Optional.
-	FinishReason *string
+	// ProviderFinishReason is the provider terminal status / stop signal, passed through verbatim (ADR-099 CRF-003) (grok: a non-done status such as expired or failed). Empty on success. Optional.
+	ProviderFinishReason *string
 
 	// FinishMessage is the free-text provider explanation of a non-success status (grok: error.message on a failed job). Use as the user-facing message when len(Videos) == 0.
 	FinishMessage *string

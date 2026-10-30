@@ -403,7 +403,7 @@ func parseVertexMusicResponse(raw map[string]any, fallbackMime string) MusicResp
 			audio = append(audio, AudioData{MimeType: mime, Bytes: decoded})
 		}
 	}
-	return MusicResponse{Audio: audio, FinishReason: optString(finishReason)}
+	return MusicResponse{Audio: audio, ProviderFinishReason: optString(finishReason)}
 }
 
 // parseGeminiMusicResponse walks candidates[0].content.parts, decoding each
@@ -442,10 +442,10 @@ func parseGeminiMusicResponse(raw map[string]any, fallbackMime string) MusicResp
 	finishReason, _ := first["finishReason"].(string)
 	finishMessage, _ := first["finishMessage"].(string)
 	return MusicResponse{
-		Audio:         audio,
-		Text:          strings.Join(textParts, ""),
-		FinishReason:  optString(finishReason),
-		FinishMessage: optString(finishMessage),
+		Audio:                audio,
+		Text:                 strings.Join(textParts, ""),
+		ProviderFinishReason: optString(finishReason),
+		FinishMessage:        optString(finishMessage),
 	}
 }
 
