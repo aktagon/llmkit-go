@@ -79,6 +79,19 @@ func (b *Agent) Messages() []Message {
 	return copyMessages(b.state.agent.history)
 }
 
+// UnsavedTurns returns the turns of the last Prompt call when it failed, in
+// order: the user turn, then each assistant turn and tool result the call made
+// (HANDOFF-105 F5, owner decision 2). A failed call leaves the history as it
+// was, so these turns are in no history. Empty after a call that succeeded,
+// after a call rejected before it started, and before the first Prompt call.
+// The copies follow the Messages rules.
+func (b *Agent) UnsavedTurns() []Message {
+	if b.state == nil || b.state.agent == nil {
+		return nil
+	}
+	return copyMessages(b.state.agent.unsaved)
+}
+
 // copyMessages copies the outer slice and each Parts slice.
 func copyMessages(in []Message) []Message {
 	out := make([]Message, 0, len(in))
