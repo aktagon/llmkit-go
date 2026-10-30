@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"slices"
 	"strconv"
@@ -619,28 +618,15 @@ func buildAuthHeaders(p Provider, cfg providerSpec) map[string]string {
 	return headers
 }
 
-// doGet performs an HTTP GET request.
+// doGet performs an HTTP GET request. Transport errors are redacted
+// (VULN-001): Google polls carry the key as ?key=.
 func doGet(ctx context.Context, client *http.Client, url string, headers map[string]string) ([]byte, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	body, statusCode, err := doGetRaw(ctx, client, url, headers)
 	if err != nil {
 		return nil, err
 	}
-	for k, v := range headers {
-		req.Header.Set(k, v)
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	if resp.StatusCode >= 400 {
-		return body, &APIError{StatusCode: resp.StatusCode, Message: string(body)}
+	if statusCode >= 400 {
+		return body, &APIError{StatusCode: statusCode, Message: string(body)}
 	}
 	return body, nil
 }
