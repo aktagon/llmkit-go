@@ -224,8 +224,8 @@ type Request struct {
 
 // Response is the universal response container returned by text-generation terminals (Text.Prompt, Agent.Prompt). Every field is core (no per-capability augmentation).
 type Response struct {
-	// Text is the assistant's response text. Providers that return content as a list of blocks may put other blocks first — reasoning, or an image — and the text is found by matching the block, never by taking the first one. Empty is a normal outcome, not an error: a turn that only called a tool carries no text, and so does a turn cut off before it finished reasoning. Check the finish reason to tell those apart.
-	Text string
+	// Parts are the assistant turn this response carried, as ordered parts: text parts and tool-call parts, in the order the provider sent them (ADR-100 Part; owner decision 1, HANDOFF-105 F4). A block-array wire (Anthropic, Google, Bedrock) keeps text and tool calls in one array, so their order is its order; OpenAI Chat Completions carries the text first and the tool calls after it. An empty text block adds no part. The SDK reads the response text and the tool calls from these parts: the text is the text parts joined with no separator, and is empty when there are none; the tool calls are the tool-call parts in order, not run. Empty on a failed batch item.
+	Parts []Part
 
 	//
 	Usage Usage
@@ -259,9 +259,6 @@ type Response struct {
 
 	// Created is when the provider created this response, in Unix seconds, passed through verbatim (OpenAI created, Responses created_at; owner decision 4, HANDOFF-105 section 3b). ABSENT (not zero) when the body carries none: Anthropic, Google and Bedrock send no creation time (ADR-081).
 	Created *int
-
-	// ToolCalls is the tool calls the model asked for in this response, in the order the provider sent them, not run (owner decision 3, HANDOFF-105 section 3b). Empty when the model called no tool. The Agent runs the calls it reads; Text.Request returns them to the caller.
-	ToolCalls []ToolCall
 
 	// ChatWireShape is the chat wire shape this response was decoded from (ChatOpenAI, ChatResponsesOpenAI, ChatAnthropic, ChatGoogle, ChatBedrock). Every decode path sets it: one-shot, stream, batch item and agent. ABSENT when the response was not decoded from a wire body, such as one the caller built. EncodeResponse writes provider_finish_reason verbatim only when this equals the target shape (owner decision 1, HANDOFF-105 F3).
 	ChatWireShape *string

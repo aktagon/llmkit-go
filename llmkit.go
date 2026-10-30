@@ -150,7 +150,7 @@ func promptStream(ctx context.Context, p Provider, req Request, protocol string,
 	// It keeps no body, so a fused value (CRF-007) cannot be told apart and
 	// decodes to other.
 	return Response{
-		Text:                 fullText.String(),
+		Parts:                textParts(fullText.String()),
 		Usage:                usage,
 		FinishReason:         decodeFinishReason(cfg.ChatWireShape, fields.FinishReason, nil),
 		ProviderFinishReason: fields.FinishReason,
@@ -1067,12 +1067,15 @@ func DecodeResponse(provider, chatWireShape string, body []byte) (Response, erro
 		return resp, nil
 	}
 
-	text := extractResponseText(raw, provider, chatWireShape)
+	parts, err := decodeChatParts(raw, provider, chatWireShape)
+	if err != nil {
+		return Response{}, err
+	}
 	finishReason, finishMessage := extractFinishSignal(raw, provider)
 	id, model := extractResponseIdentity(raw, provider)
 
 	return Response{
-		Text:                 text,
+		Parts:                parts,
 		Usage:                decodeUsage(raw, provider),
 		FinishReason:         decodeFinishReason(chatWireShape, finishReason, raw),
 		ProviderFinishReason: finishReason,
@@ -1081,77 +1084,8 @@ func DecodeResponse(provider, chatWireShape string, body []byte) (Response, erro
 		ID:                   id,
 		Model:                model,
 		Created:              optIntPath(raw, providers.WireShapeResponseCreatedPath(chatWireShape)),
-		ToolCalls:            decodeToolCalls(raw, provider, chatWireShape),
 		ChatWireShape:        optString(chatWireShape),
 	}, nil
-}
-
-// decodeToolCalls reads the tool calls a response asked for, without running
-// them (owner decision 3, HANDOFF-105 section 3b), through the same extractor
-// the Agent's loop selects. A provider that declares no tool-call config has
-// no tool calls to read.
-func decodeToolCalls(raw map[string]any, provider, chatWireShape string) []ToolCall {
-	tcConfig := providers.ToolCallConfig(provider)
-	cfg, ok := withWireShape(providerSpecs()[provider], chatWireShape)
-	if tcConfig == nil || !ok {
-		return nil
-	}
-	calls := selectToolCallExtractor(cfg)(raw, tcConfig)
-	if len(calls) == 0 {
-		return nil
-	}
-	out := make([]ToolCall, 0, len(calls))
-	for _, tc := range calls {
-		out = append(out, ToolCall{ID: tc.id, Name: tc.name, Input: encodeToolInput(tc.input)})
-	}
-	return out
-}
-
-// extractResponseText reads the assistant's text out of a parsed provider body.
-//
-// Two readers, selected by the wire shape, never by provider name (CLAUDE.md
-// forbids switching on provider outside errors.go):
-//
-//   - block-array families declare a ResponseTextConfig and are read by
-//     DISCRIMINATOR, because array position is not stable — Opus 5 and
-//     Sonnet 5 think by default, so content[0] is a thinking block (BUG-053);
-//   - scalar families declare none, and nil SELECTS the fixed-path reader.
-//
-// An empty result is a real answer, not a failure: every tool-use turn carries
-// no text block at all. FinishReason is what says why, which is the reason
-// Response.Text stays a plain string rather than becoming optional in seven
-// SDKs to mark something routine.
-func extractResponseText(raw map[string]any, provider, chatWireShape string) string {
-	cfg := providers.ResponseTextConfig(chatWireShape)
-	if cfg == nil {
-		return extractPath(raw, providers.ResponseTextPath(provider))
-	}
-	blocks := matchingBlocks(raw, cfg.BlocksPath, cfg.MarkerPath, cfg.MarkerValue)
-	if len(blocks) == 0 {
-		return ""
-	}
-	return extractPath(blocks[0], cfg.ValuePath)
-}
-
-// encodeResponseText is extractResponseText's inverse, driven by the SAME
-// config so the two cannot drift apart.
-//
-// The marker is WRITTEN, not just tested. Emitting only the value path would
-// produce {"content":[{"text":"pong"}]} — a body with no type discriminator,
-// which the reader above then finds no matching block in. That is the ADR-076
-// fixed point breaking, and it is why textMarkerValue is documented as a
-// write instruction rather than a read predicate.
-func encodeResponseText(raw map[string]any, provider, chatWireShape, text string) {
-	cfg := providers.ResponseTextConfig(chatWireShape)
-	if cfg == nil {
-		setWirePath(raw, providers.ResponseTextPath(provider), text)
-		return
-	}
-	block := cfg.BlocksPath + "[0]"
-	if cfg.MarkerValue != "" {
-		setWirePath(raw, block+"."+cfg.MarkerPath, cfg.MarkerValue)
-	}
-	setWirePath(raw, block+"."+cfg.ValuePath, text)
 }
 
 // decodeUsage reads all six dimensions out of a parsed provider body. The ONE
@@ -1193,12 +1127,21 @@ func EncodeResponse(provider, chatWireShape string, resp Response) ([]byte, erro
 	if err := guardOneWayFields(provider, resp); err != nil {
 		return nil, err
 	}
+	if err := checkResponseParts(resp.Parts); err != nil {
+		return nil, err
+	}
 	if chatWireShape == providers.ChatResponsesOpenAI {
-		return json.Marshal(encodeResponsesEnvelope(chatWireShape, resp))
+		envelope, err := encodeResponsesEnvelope(provider, chatWireShape, resp)
+		if err != nil {
+			return nil, err
+		}
+		return json.Marshal(envelope)
 	}
 
 	raw := map[string]any{}
-	encodeResponseText(raw, provider, chatWireShape, resp.Text)
+	if err := encodeChatParts(raw, provider, chatWireShape, resp.Parts); err != nil {
+		return nil, err
+	}
 	inputPath, outputPath := providers.UsagePaths(provider)
 	setWirePath(raw, inputPath, resp.Usage.Input)
 	setWirePath(raw, outputPath, resp.Usage.Output)
@@ -1369,12 +1312,18 @@ func derefWireValue(val any) (any, bool) {
 // and cached + reasoning sub-details. Hand-coded per wire shape on both legs,
 // symmetric with the reader, for the same reason the reader is (ADR-028:
 // behavior held by tests, not by declared response paths).
-func encodeResponsesEnvelope(chatWireShape string, resp Response) map[string]any {
+//
+// The shape declares no ToolCallResponseConfig, so a response with tool
+// calls is a ValidationError on field "toolCalls" (HANDOFF-105 F4 decision 2).
+func encodeResponsesEnvelope(provider, chatWireShape string, resp Response) (map[string]any, error) {
+	if len(resp.ToolCalls()) > 0 {
+		return nil, noToolCallConfigError(provider, chatWireShape)
+	}
 	raw := map[string]any{}
-	if resp.Text != "" {
+	if text := resp.Text(); text != "" {
 		raw["output"] = []any{map[string]any{
 			"type":    "message",
-			"content": []any{map[string]any{"type": "output_text", "text": resp.Text}},
+			"content": []any{map[string]any{"type": "output_text", "text": text}},
 		}}
 	}
 	setWirePath(raw, "usage.input_tokens", resp.Usage.Input)
@@ -1389,7 +1338,7 @@ func encodeResponsesEnvelope(chatWireShape string, resp Response) map[string]any
 	setWirePath(raw, providers.WireShapeResponseModelPath(providers.ChatResponsesOpenAI), resp.Model)
 	setWirePath(raw, providers.WireShapeResponseCreatedPath(providers.ChatResponsesOpenAI), resp.Created)
 	encodeFixedValues(raw, chatWireShape)
-	return raw
+	return raw, nil
 }
 
 // parseResponsesEnvelope extracts text + usage from OpenAI's Responses reply
@@ -1401,7 +1350,7 @@ func encodeResponsesEnvelope(chatWireShape string, resp Response) map[string]any
 // not by declared response paths).
 func parseResponsesEnvelope(raw map[string]any) Response {
 	resp := Response{
-		Text: extractResponsesText(raw),
+		Parts: textParts(extractResponsesText(raw)),
 		Usage: Usage{
 			Input:     optIntPath(raw, "usage.input_tokens"),
 			Output:    optIntPath(raw, "usage.output_tokens"),

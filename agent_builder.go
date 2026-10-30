@@ -2,7 +2,6 @@ package llmkit
 
 import (
 	"context"
-	"encoding/json"
 )
 
 // agentState holds the live conversation handle for a *Agent.
@@ -88,22 +87,6 @@ func copyMessages(in []Message) []Message {
 		out = append(out, m)
 	}
 	return out
-}
-
-// encodeToolInput converts the agent's map[string]any tool-call input
-// into the public ToolCall.Input field's json.RawMessage shape. nil
-// surfaces as a nil RawMessage so the wire layer emits JSON null;
-// any marshal error is treated identically (the input shape is
-// caller-controlled but constrained to JSON-able values upstream).
-func encodeToolInput(input map[string]any) json.RawMessage {
-	if input == nil {
-		return nil
-	}
-	b, err := json.Marshal(input)
-	if err != nil {
-		return nil
-	}
-	return b
 }
 
 // initAgent constructs the underlying *Agent from the chained

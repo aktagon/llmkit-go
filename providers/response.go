@@ -135,6 +135,72 @@ func ResponseTextConfig(chatWireShape string) *ResponseTextConfigDef {
 	}
 }
 
+// ToolCallResponseConfigDef locates the tool calls inside a chat response of one
+// wire family. DecodeResponse reads them and EncodeResponse writes them through
+// it, so the two legs cannot disagree (ADR-076 SYM-005, HANDOFF-105 F4).
+//
+// Marker semantics are ResponseTextConfigDef's:
+//
+//	MarkerPath == ""                     every element is a tool call
+//	MarkerPath set, MarkerValue == ""     the element is a tool call if the key is PRESENT
+//	MarkerPath and MarkerValue both set   the element is a tool call if the key EQUALS the value
+//
+// IDPath is empty where the family carries no id on the wire (Google): the id is
+// derived from the tool name on read, and nothing is written.
+type ToolCallResponseConfigDef struct {
+	BlocksPath  string
+	MarkerPath  string
+	MarkerValue string
+	IDPath      string
+	NamePath    string
+	ArgsPath    string
+}
+
+// ToolCallResponseConfig returns the tool-call locator for a chat wire shape, or
+// nil when the shape's tool-call response shape is not modelled.
+func ToolCallResponseConfig(chatWireShape string) *ToolCallResponseConfigDef {
+	switch chatWireShape {
+	case ChatAnthropic:
+		return &ToolCallResponseConfigDef{
+			BlocksPath:  "content",
+			MarkerPath:  "type",
+			MarkerValue: "tool_use",
+			IDPath:      "id",
+			NamePath:    "name",
+			ArgsPath:    "input",
+		}
+	case ChatBedrock:
+		return &ToolCallResponseConfigDef{
+			BlocksPath:  "output.message.content",
+			MarkerPath:  "toolUse",
+			MarkerValue: "",
+			IDPath:      "toolUse.toolUseId",
+			NamePath:    "toolUse.name",
+			ArgsPath:    "toolUse.input",
+		}
+	case ChatGoogle:
+		return &ToolCallResponseConfigDef{
+			BlocksPath:  "candidates[0].content.parts",
+			MarkerPath:  "functionCall",
+			MarkerValue: "",
+			IDPath:      "",
+			NamePath:    "functionCall.name",
+			ArgsPath:    "functionCall.args",
+		}
+	case ChatOpenAI:
+		return &ToolCallResponseConfigDef{
+			BlocksPath:  "choices[0].message.tool_calls",
+			MarkerPath:  "",
+			MarkerValue: "",
+			IDPath:      "id",
+			NamePath:    "function.name",
+			ArgsPath:    "function.arguments",
+		}
+	default:
+		return nil
+	}
+}
+
 // WireShapeResponseIDPath returns where a chat wire shape carries the response
 // id (ADR-099 CRF-013). The runtime reads it for a call on a shape other than
 // the provider's default; the default shape reaches ProviderSpec.ResponseIDPath.

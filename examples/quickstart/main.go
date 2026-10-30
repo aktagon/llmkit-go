@@ -30,7 +30,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println(resp.Text)
+	fmt.Println(resp.Text())
 	fmt.Printf("%d input tokens, %d output tokens\n",
 		resp.Usage.Input, resp.Usage.Output)
 }

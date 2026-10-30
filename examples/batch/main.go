@@ -39,6 +39,6 @@ func main() {
 		log.Fatal(err)
 	}
 	for _, r := range responses {
-		fmt.Println(r.Text)
+		fmt.Println(r.Text())
 	}
 }

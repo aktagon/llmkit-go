@@ -27,12 +27,6 @@ type legacyAgent struct {
 	history  []Message
 }
 
-type toolCall struct {
-	id    string
-	name  string
-	input map[string]any
-}
-
 // newLegacyAgent creates a new agent for multi-turn conversations.
 func newLegacyAgent(p Provider, req Request, tools []Tool, o *options) *legacyAgent {
 	o.httpClient = withRequestTimeout(o.httpClient, p.Timeout)
@@ -69,9 +63,6 @@ func (a *legacyAgent) chat(ctx context.Context, msg string) (Response, error) {
 // max iterations. req is the prepared Request; each turn sends it with the
 // current history.
 func (a *legacyAgent) runToolLoop(ctx context.Context, cfg providerSpec, req Request) (Response, error) {
-	tcConfig := providers.ToolCallConfig(a.provider.Name)
-	tcExtractor := selectToolCallExtractor(cfg)
-
 	// Seeded from the first turn, not from a zero value: absorbing addition's
 	// identity is a REPORTED zero, and an all-unreported seed would absorb every
 	// turn to nothing (ADR-081 AVAIL-005).
@@ -147,18 +138,20 @@ func (a *legacyAgent) runToolLoop(ctx context.Context, cfg providerSpec, req Req
 			return Response{}, err
 		}
 
-		var raw map[string]any
-		if err := json.Unmarshal(respBody, &raw); err != nil {
-			wrapped := fmt.Errorf("unmarshal response: %w", err)
+		// Every turn is decoded by DecodeResponse, the one reader (ADR-076
+		// SYM-004): usage, the parts in wire order and the provider's own turn
+		// all come from it, so the loop reads no field of its own.
+		resp, err := decodeResponseRaw(a.provider.Name, cfg.ChatWireShape, respBody, a.opts.raw)
+		if err != nil {
 			postEv := llmEvent
-			postEv.Err = wrapped
+			postEv.Err = err
 			postEv.Duration = time.Since(llmStart)
 			firePost(ctx, a.opts.middleware, postEv)
-			return Response{}, wrapped
+			return Response{}, err
 		}
 
 		// Accumulate usage through the shared reader, all six dimensions.
-		turnUsage := decodeUsage(raw, a.provider.Name)
+		turnUsage := resp.Usage
 		if usageSeeded {
 			totalUsage = accumulateUsage(totalUsage, turnUsage)
 		} else {
@@ -170,52 +163,30 @@ func (a *legacyAgent) runToolLoop(ctx context.Context, cfg providerSpec, req Req
 		postEv.Duration = time.Since(llmStart)
 		firePost(ctx, a.opts.middleware, postEv)
 
-		// Extract tool calls using selected extractor
-		calls := tcExtractor(raw, tcConfig)
-
+		// Record the assistant turn as the response's parts: its text and its
+		// tool calls, in the order the provider sent them (owner decision 1,
+		// HANDOFF-105 F4). ProviderTurn is the same turn as the provider wrote
+		// it, and is what the NEXT request sends (ADR-085). Before F4 the loop
+		// kept only the tool calls of a tool turn, which dropped the model's
+		// text beside them.
+		a.history = append(a.history, Message{
+			Role:         "assistant",
+			Parts:        resp.Parts,
+			ProviderTurn: resp.ProviderTurn,
+		})
+		calls := resp.ToolCalls()
 		if len(calls) == 0 {
-			// The terminal turn is decoded by DecodeResponse itself, the one
-			// reader (ADR-076 SYM-004). Before HANDOFF-105 F2 the loop rebuilt
-			// the Response from the decoder's helpers, field by field, so a
-			// field added to the decoder (Created) was missing here. The text
-			// is appended to a.history below, so it must be the decoder's
-			// block-matched read (BUG-053 defect 5), and the turn is captured
-			// for an agent kept alive for another Chat() (ADR-085 § 6).
-			resp, err := decodeResponseRaw(a.provider.Name, cfg.ChatWireShape, respBody, a.opts.raw)
-			if err != nil {
-				return Response{Usage: totalUsage}, err
-			}
 			resp.Usage = totalUsage
-			a.history = append(a.history, Message{
-				Role:         "assistant",
-				Parts:        textParts(resp.Text),
-				ProviderTurn: resp.ProviderTurn,
-			})
 			return resp, nil
 		}
 
-		// Record the assistant turn. toolCalls is the projection the loop runs
-		// tools from; providerTurn is the same turn as the provider wrote it,
-		// and is what the NEXT request sends (ADR-085). Before this, the turn
-		// was rebuilt from toolCalls alone, which silently dropped any prose
-		// the model emitted alongside the call — the one confirmed defect the
-		// ADR's probe left standing.
-		callParts := make([]Part, 0, len(calls))
+		// Execute tools and record results.
 		for _, tc := range calls {
-			callParts = append(callParts, Part{ToolCall: &ToolCall{ID: tc.id, Name: tc.name, Input: encodeToolInput(tc.input)}})
-		}
-		a.history = append(a.history, Message{
-			Role:         "assistant",
-			Parts:        callParts,
-			ProviderTurn: captureProviderTurn(respBody, cfg, cfg.ChatWireShape),
-		})
-
-		// Execute tools and record results using selected transform
-		for _, tc := range calls {
-			tool := a.findTool(tc.name)
+			input := toolCallArgs(tc)
+			tool := a.findTool(tc.Name)
 			if tool == nil {
-				result := fmt.Sprintf("error: unknown tool %q", tc.name)
-				a.history = append(a.history, toolResultMessage(tc.id, result))
+				result := fmt.Sprintf("error: unknown tool %q", tc.Name)
+				a.history = append(a.history, toolResultMessage(tc.ID, result))
 				continue
 			}
 
@@ -223,15 +194,15 @@ func (a *legacyAgent) runToolLoop(ctx context.Context, cfg providerSpec, req Req
 				Op:       providers.OpToolCall,
 				Provider: a.provider.Name,
 				Model:    model,
-				Tool:     tc.name,
-				Args:     tc.input,
+				Tool:     tc.Name,
+				Args:     input,
 			}
 			toolStart := time.Now()
 			if err := firePre(ctx, a.opts.middleware, toolEv); err != nil {
 				return Response{Usage: totalUsage}, err
 			}
 
-			output, runErr := tool.Run(tc.input)
+			output, runErr := tool.Run(input)
 			if runErr != nil {
 				output = fmt.Sprintf("error: %v", runErr)
 			}
@@ -242,7 +213,7 @@ func (a *legacyAgent) runToolLoop(ctx context.Context, cfg providerSpec, req Req
 			postEv.Duration = time.Since(toolStart)
 			firePost(ctx, a.opts.middleware, postEv)
 
-			a.history = append(a.history, toolResultMessage(tc.id, output))
+			a.history = append(a.history, toolResultMessage(tc.ID, output))
 		}
 	}
 
@@ -257,6 +228,19 @@ func textParts(text string) []Part {
 		return nil
 	}
 	return []Part{{Text: text}}
+}
+
+// toolCallArgs is the tool call's input as the argument map Tool.Run takes.
+// Input that is absent or not a JSON object is a nil map, as before F4 and as
+// in the TypeScript and Rust agents (ADR-020): the decoder already rejected
+// arguments that are not JSON.
+func toolCallArgs(tc ToolCall) map[string]any {
+	var value any
+	if err := json.Unmarshal(tc.Input, &value); err != nil {
+		return nil
+	}
+	args, _ := value.(map[string]any)
+	return args
 }
 
 // toolResultMessage is the tool turn the loop writes for one result. The
