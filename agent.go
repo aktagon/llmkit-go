@@ -121,7 +121,7 @@ func (a *legacyAgent) runToolLoop(ctx context.Context, cfg providerSpec, req Req
 			return Response{Usage: totalUsage}, turns, err
 		}
 
-		jsonBody, err := json.Marshal(body)
+		jsonBody, err := marshalWire(body)
 		if err != nil {
 			wrapped := fmt.Errorf("marshal request: %w", err)
 			postEv := llmEvent

@@ -90,7 +90,7 @@ func submitBatch(ctx context.Context, p Provider, reqs []Request, o *options) (B
 			"endpoint":          bc.EndpointPath,
 			"completion_window": bc.CompletionWindow,
 		}
-		jsonBody, err = json.Marshal(body)
+		jsonBody, err = marshalWire(body)
 		if err != nil {
 			return BatchHandle{}, postWith(fmt.Errorf("marshal batch request: %w", err))
 		}
@@ -107,7 +107,7 @@ func submitBatch(ctx context.Context, p Provider, reqs []Request, o *options) (B
 		for k, v := range betaHeaders {
 			headers[k] = appendBeta(headers[k], v)
 		}
-		jsonBody, err = json.Marshal(body)
+		jsonBody, err = marshalWire(body)
 		if err != nil {
 			return BatchHandle{}, postWith(fmt.Errorf("marshal batch request: %w", err))
 		}
@@ -330,7 +330,10 @@ func buildBatchJSONL(ctx context.Context, reqs []Request, o *options, p Provider
 			"url":       bc.EndpointPath,
 			"body":      reqBody,
 		}
-		data, _ := json.Marshal(line)
+		data, err := marshalWire(line)
+		if err != nil {
+			return nil, fmt.Errorf("marshal batch line: %w", err)
+		}
 		buf.Write(data)
 		buf.WriteByte('\n')
 	}
