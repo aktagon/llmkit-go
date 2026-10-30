@@ -173,8 +173,9 @@ or other chain state.
 
 A `Prompt` call that fails leaves the history as it was and returns the
 error that stopped it, such as an `*APIError`. `agent.UnsavedTurns()`
-returns the turns that call made, tool results included. It is empty
-after a call that succeeds.
+returns the turns that call made, tool results included. The next
+`Prompt` call clears them when it starts, and so do `agent.Reset()` and
+a chain method, whose clone starts with none.
 
 ```go
 agent := c.Agent.
