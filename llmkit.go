@@ -276,7 +276,7 @@ func uploadFile(ctx context.Context, p Provider, data []byte, name, mime string,
 	// Google needs metadata as a JSON form field
 	if cfg.ChatWireShape == providers.ChatGoogle {
 		metadata := map[string]any{"file": map[string]any{"display_name": name}}
-		metaJSON, _ := json.Marshal(metadata)
+		metaJSON, _ := marshalWire(metadata)
 		extraFields["metadata"] = string(metaJSON)
 		headers["X-Goog-Upload-Protocol"] = "multipart"
 	}
@@ -1180,8 +1180,11 @@ func EncodeResponse(provider, chatWireShape string, resp Response) ([]byte, erro
 
 // marshalWire is the one marshal path for every body llmkit sends or encodes:
 // the chat request on every send path (Text, stream, the Agent, batch and its
-// JSONL), EncodeRequest, EncodeResponse and SaveHistory (HANDOFF-105 F7). It
-// renders JSON without HTML escaping. A tool call's map-format input is
+// JSONL), EncodeRequest, EncodeResponse and SaveHistory (HANDOFF-105 F7), and
+// the image, speech, music, video, transcription and caching bodies, the
+// Google upload metadata and the OTLP payload (F8).
+// TestMarshalWire_IsTheOneMarshalPath fails on any other JSON encoder in the
+// package. It renders JSON without HTML escaping, as TS and Rust do. A tool call's map-format input is
 // embedded as its own bytes (json.RawMessage), and json.Marshal would rewrite
 // a "<" inside it as \u003c, so the body would not carry the tokens the
 // provider sent (HANDOFF-105 F5).

@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
@@ -236,6 +235,6 @@ func buildOTLPTraces(operationName, provider, model string, inputTokens, outputT
 			}},
 		}},
 	}}}
-	b, _ := json.Marshal(payload)
+	b, _ := marshalWire(payload)
 	return b
 }

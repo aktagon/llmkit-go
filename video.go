@@ -380,7 +380,7 @@ func dispatchVideoSubmit(
 	default:
 		return "", fmt.Errorf("video submit: unsupported wire shape %q", vgCfg.WireShape)
 	}
-	jsonBody, err := json.Marshal(body)
+	jsonBody, err := marshalWire(body)
 	if err != nil {
 		return "", fmt.Errorf("marshal video request: %w", err)
 	}
@@ -482,7 +482,7 @@ func (h VideoHandle) Wait(ctx context.Context, opts ...VideoOption) (VideoRespon
 		sessionToken = os.Getenv(cfg.SessionTokenEnvVar)
 	case vertexPoll:
 		pollURL = appendVideoAuth(base+strings.ReplaceAll(vgCfg.PollEndpoint, "{model}", h.Model), p, cfg)
-		body, marshalErr := json.Marshal(map[string]any{"operationName": h.ID})
+		body, marshalErr := marshalWire(map[string]any{"operationName": h.ID})
 		if marshalErr != nil {
 			return VideoResponse{}, fmt.Errorf("marshal vertex poll body: %w", marshalErr)
 		}

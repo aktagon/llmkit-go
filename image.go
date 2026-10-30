@@ -445,7 +445,7 @@ func dispatchImageHTTP(
 	default:
 		return nil, fmt.Errorf("image request shape %q has no body builder", variant.Shape)
 	}
-	jsonBody, err := json.Marshal(body)
+	jsonBody, err := marshalWire(body)
 	if err != nil {
 		return nil, fmt.Errorf("marshal image request: %w", err)
 	}
@@ -548,7 +548,7 @@ func buildOpenAIEditMultipart(parts []Part, model string, o *imageOptions) ([]mu
 		case string:
 			fields = append(fields, multipartField{k, s})
 		default:
-			if encoded, err := json.Marshal(s); err == nil {
+			if encoded, err := marshalWire(s); err == nil {
 				fields = append(fields, multipartField{k, string(encoded)})
 			}
 		}
