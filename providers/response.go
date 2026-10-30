@@ -2,6 +2,8 @@
 
 package providers
 
+import "encoding/json"
+
 // ResponseTextPath returns the JSON path to extract text from a provider response.
 func ResponseTextPath(provider string) string {
 	switch ProviderName(provider) {
@@ -248,6 +250,91 @@ func WireShapeFinishReasons(chatWireShape string) []FinishReasonEntry {
 			{WireValue: "completed", Canonical: FinishStop, Preferred: true},
 			{WireValue: "incomplete", DetailPath: "incomplete_details.reason", DetailValue: "content_filter", Canonical: FinishContentFilter, Preferred: true},
 			{WireValue: "incomplete", DetailPath: "incomplete_details.reason", DetailValue: "max_output_tokens", Canonical: FinishLength, Preferred: true},
+		}
+	default:
+		return nil
+	}
+}
+
+// WireShapeFinishReasonFallback returns the wire value EncodeResponse writes
+// for a canonical finish reason the shape's table has no entry for (owner
+// decision 1, HANDOFF-105 F1), or "" when the shape declares none for it. A
+// fallback is one of the shape's own documented values; decode never reads
+// this table.
+func WireShapeFinishReasonFallback(chatWireShape string, reason FinishReason) string {
+	switch chatWireShape {
+	case ChatAnthropic:
+		switch reason {
+		case FinishOther:
+			return "end_turn"
+		}
+	case ChatBedrock:
+		switch reason {
+		case FinishContentFilter:
+			return "end_turn"
+		case FinishOther:
+			return "end_turn"
+		}
+	case ChatGoogle:
+		switch reason {
+		case FinishOther:
+			return "OTHER"
+		case FinishToolCalls:
+			return "STOP"
+		}
+	case ChatOpenAI:
+		switch reason {
+		case FinishOther:
+			return "stop"
+		}
+	case ChatResponsesOpenAI:
+		switch reason {
+		case FinishOther:
+			return "completed"
+		case FinishToolCalls:
+			return "completed"
+		}
+	}
+	return ""
+}
+
+// WireShapeResponseCreatedPath returns where a one-shot body of a chat wire
+// shape carries its creation time in Unix seconds, or "" when the shape's
+// bodies carry none (owner decision 4, HANDOFF-105 F1).
+func WireShapeResponseCreatedPath(chatWireShape string) string {
+	switch chatWireShape {
+	case ChatAnthropic:
+		return ""
+	case ChatBedrock:
+		return ""
+	case ChatGoogle:
+		return ""
+	case ChatOpenAI:
+		return "created"
+	case ChatResponsesOpenAI:
+		return "created_at"
+	default:
+		return ""
+	}
+}
+
+// FixedValue is a field every response body of a chat wire shape carries with
+// the same value (shapeFixedValue, owner decision 4). Value is the field's
+// JSON: a string or a number.
+type FixedValue struct {
+	Path  string
+	Value json.RawMessage
+}
+
+// WireShapeFixedValues returns the fixed values EncodeResponse writes for a
+// chat wire shape, sorted by path; nil when the shape declares none.
+func WireShapeFixedValues(chatWireShape string) []FixedValue {
+	switch chatWireShape {
+	case ChatOpenAI:
+		return []FixedValue{
+			{Path: "choices[0].index", Value: json.RawMessage(`0`)},
+			{Path: "choices[0].message.role", Value: json.RawMessage(`"assistant"`)},
+			{Path: "object", Value: json.RawMessage(`"chat.completion"`)},
 		}
 	default:
 		return nil

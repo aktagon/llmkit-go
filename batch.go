@@ -505,7 +505,7 @@ func parseBatchResults(provider string, sources [][]byte, bc *providers.BatchDef
 	for _, slot := range slots {
 		if slot == nil {
 			responses = append(responses, Response{
-				State: JobFailed,
+				State: batchItemState(JobFailed),
 				Cause: &JobFailure{Code: providers.BatchSlotMissing},
 			})
 			continue
@@ -514,6 +514,11 @@ func parseBatchResults(provider string, sources [][]byte, bc *providers.BatchDef
 	}
 	return append(responses, unkeyed...)
 }
+
+// batchItemState is a batch item's Response.State. Only batch items carry one;
+// nil on any other Response means it is not a batch item (owner decision 7,
+// HANDOFF-105 section 3b).
+func batchItemState(s JobState) *JobState { return &s }
 
 // parseBatchResultLine decodes one result line. The line succeeded when the
 // value at bc.ResultStatusPath is one of bc.ResultSuccessValues (any value when
@@ -542,7 +547,7 @@ func parseBatchResultLine(provider string, line []byte, wrapper map[string]any, 
 			// Batch is Chat-Completions-only (ADR-055): empty wire shape selects
 			// the provider's declared response paths, not the Responses arm.
 			if resp, err := decodeResponseRaw(provider, "", responseBytes, raw); err == nil {
-				resp.State = JobSucceeded
+				resp.State = batchItemState(JobSucceeded)
 				return batchSlot{resp: resp, succeeded: true}
 			}
 		}
@@ -554,7 +559,7 @@ func parseBatchResultLine(provider string, line []byte, wrapper map[string]any, 
 		code = providers.BatchSlotError
 	}
 	failed := Response{
-		State: JobFailed,
+		State: batchItemState(JobFailed),
 		Cause: &JobFailure{
 			Code:    code,
 			Status:  status,
