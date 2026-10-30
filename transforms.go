@@ -611,10 +611,19 @@ func transformGoogleFunctionDeclarations(body map[string]any, tools []ToolDefini
 // empty object, as in TypeScript and Rust: the providers take an object, not
 // null.
 func requestToolCall(tc ToolCall, cfg providerSpec) map[string]any {
-	if len(tc.Input) == 0 || string(bytes.TrimSpace(tc.Input)) == "null" {
-		tc.Input = json.RawMessage(`{}`)
-	}
+	tc.Input = requestToolInput(tc.Input)
 	return writeToolCall(tc, providers.ToolCallResponseConfig(cfg.ChatWireShape), providers.ToolCallConfig(cfg.Name))
+}
+
+// requestToolInput is the argument text a request sends for a tool call, on
+// every chat shape, Responses included (HANDOFF-105 F6): the caller's or the
+// provider's text as it is, or an empty object when there is no input or the
+// input is null, because the providers take an object.
+func requestToolInput(input json.RawMessage) json.RawMessage {
+	if len(input) == 0 || string(bytes.TrimSpace(input)) == "null" {
+		return json.RawMessage(`{}`)
+	}
+	return input
 }
 
 // checkRequestToolCalls rejects a request whose turns carry a tool call the
@@ -662,12 +671,11 @@ func checkRequestToolCalls(msgs []msg, cfg providerSpec) error {
 // got; the shape below returns 200 "completed" and the model's answer names
 // both tool results, so call_id pairing survives the spread.
 func responsesFunctionCall(tc ToolCall) map[string]any {
-	argsJSON, _ := json.Marshal(tc.Input)
 	return map[string]any{
 		"type":      "function_call",
 		"call_id":   tc.ID,
 		"name":      tc.Name,
-		"arguments": string(argsJSON),
+		"arguments": string(requestToolInput(tc.Input)),
 	}
 }
 

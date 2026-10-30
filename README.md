@@ -459,6 +459,9 @@ resp, err := c.Text.History(
 ).Prompt(ctx, "What color is that pixel?")
 ```
 
+A tool call part's `Input` is the argument JSON as the provider sent it,
+and the request and `EncodeResponse` send that text back as it is.
+
 | Option            | anthropic | openai | google | grok |
 | ----------------- | --------- | ------ | ------ | ---- |
 | temperature       | x         | x      | x      | x    |

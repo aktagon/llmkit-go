@@ -293,7 +293,7 @@ type ToolCall struct {
 	// Name is the tool name the model selected. Matches the name registered via the Tool functional option on the *Agent builder.
 	Name string
 
-	// Input is the JSON-decoded argument object the model passed. Null on absent or empty arg sets; otherwise a provider-specific JSON value (typically an object, but type-erased through OptionalAny because schemas vary per tool).
+	// Input is the argument JSON the model passed, as the exact text the provider sent: key order, spacing and number spelling are kept, and the encoders write it back as it is (HANDOFF-105 F6). Absent when the provider sent no arguments or an empty argument string; JSON null when it sent null. A caller-built input is written as the caller gave it. Typically an object, but type-erased because schemas vary per tool.
 	Input json.RawMessage
 }
 
