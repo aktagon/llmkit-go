@@ -527,9 +527,12 @@ func batchItemState(s JobState) *JobState { return &s }
 // empty text, no finish reason or message, State JobFailed, and a Cause whose
 // Status is the first reason path that resolves, whose Code is that status's
 // entry in bc.ResultFailureCodes (providers.BatchSlotError when it has none),
-// and whose Message is the first message path that resolves.
+// and whose Message is the first message path that resolves. A line that
+// succeeded but whose body does not decode keeps the decode error as its
+// Message (HANDOFF-105 F5).
 func parseBatchResultLine(provider string, line []byte, wrapper map[string]any, bc *providers.BatchDef, raw bool) batchSlot {
 	signalled := bc.ResultStatusPath == "" || slices.Contains(bc.ResultSuccessValues, extractPath(wrapper, bc.ResultStatusPath))
+	message := firstPath(wrapper, bc.ResultMessagePaths)
 	if signalled {
 		responseBytes := line
 		if bc.ResultBodyPath != "" {
@@ -546,10 +549,14 @@ func parseBatchResultLine(provider string, line []byte, wrapper map[string]any, 
 		if len(responseBytes) > 0 && responseBytes[0] == '{' {
 			// Batch is Chat-Completions-only (ADR-055): empty wire shape selects
 			// the provider's declared response paths, not the Responses arm.
-			if resp, err := decodeResponseRaw(provider, "", responseBytes, raw); err == nil {
+			resp, err := decodeResponseRaw(provider, "", responseBytes, raw)
+			if err == nil {
 				resp.State = batchItemState(JobSucceeded)
 				return batchSlot{resp: resp, succeeded: true}
 			}
+			// The provider says the request succeeded, but llmkit cannot read
+			// its body: the item failed here, and the decode error is why.
+			message = err.Error()
 		}
 	}
 
@@ -563,7 +570,7 @@ func parseBatchResultLine(provider string, line []byte, wrapper map[string]any, 
 		Cause: &JobFailure{
 			Code:    code,
 			Status:  status,
-			Message: firstPath(wrapper, bc.ResultMessagePaths),
+			Message: message,
 		},
 	}
 	return batchSlot{resp: attachRaw(failed, line, raw)}
