@@ -136,15 +136,16 @@ for chunk, err := range stream.Chunks() {
 }
 fmt.Println()
 final := stream.Response()
-// Token counts and the finish reason are optional: nil means the provider
-// did not report the value, which is not the same as reporting zero.
+// Token counts are optional: nil means the provider did not report the
+// value, which is not the same as reporting zero. The finish reason is one
+// of five canonical values, empty when the provider reported none.
 if final.Usage.Input != nil && final.Usage.Output != nil {
 	fmt.Printf("input=%d output=%d\n", *final.Usage.Input, *final.Usage.Output)
 } else {
 	fmt.Println("this provider did not report token counts")
 }
-if final.FinishReason != nil {
-	fmt.Println("finish_reason:", *final.FinishReason)
+if final.FinishReason != "" {
+	fmt.Println("finish_reason:", final.FinishReason)
 }
 ```
 
