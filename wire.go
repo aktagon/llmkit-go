@@ -66,7 +66,7 @@ func SaveHistory(msgs []Message) ([]byte, error) {
 		})
 	}
 	doc := wireDoc{V: WireSchemaVersion, Messages: wire}
-	return json.Marshal(doc)
+	return marshalWire(doc)
 }
 
 // LoadHistory parses a wire document and returns the in-memory
@@ -201,7 +201,7 @@ func (w wirePart) MarshalJSON() ([]byte, error) {
 	default:
 		key, value = "text", p.Text
 	}
-	return json.Marshal(map[string]any{key: value})
+	return marshalWire(map[string]any{key: value})
 }
 
 func (w *wirePart) UnmarshalJSON(data []byte) error {

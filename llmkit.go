@@ -116,7 +116,7 @@ func promptStream(ctx context.Context, p Provider, req Request, protocol string,
 		body["stream_options"] = map[string]any{"include_usage": true}
 	}
 
-	jsonBody, err := json.Marshal(body)
+	jsonBody, err := marshalWire(body)
 	if err != nil {
 		postEv := baseEvent
 		postEv.Err = err
@@ -587,7 +587,7 @@ func EncodeRequest(provider, chatWireShape string, req Request) (WireRequest, er
 	if err != nil {
 		return WireRequest{}, err
 	}
-	data, err := json.Marshal(body)
+	data, err := marshalWire(body)
 	if err != nil {
 		return WireRequest{}, fmt.Errorf("marshal request: %w", err)
 	}
@@ -1178,10 +1178,13 @@ func EncodeResponse(provider, chatWireShape string, resp Response) ([]byte, erro
 	return marshalWire(raw)
 }
 
-// marshalWire renders an encoded body as JSON without HTML escaping. A tool
-// call's map-format input is embedded as its own bytes (json.RawMessage), and
-// json.Marshal would rewrite a "<" inside it as \u003c, so a body decoded and
-// encoded again would not carry the bytes it was read from (HANDOFF-105 F5).
+// marshalWire is the one marshal path for every body llmkit sends or encodes:
+// the chat request on every send path (Text, stream, the Agent, batch and its
+// JSONL), EncodeRequest, EncodeResponse and SaveHistory (HANDOFF-105 F7). It
+// renders JSON without HTML escaping. A tool call's map-format input is
+// embedded as its own bytes (json.RawMessage), and json.Marshal would rewrite
+// a "<" inside it as \u003c, so the body would not carry the tokens the
+// provider sent (HANDOFF-105 F5).
 func marshalWire(v any) ([]byte, error) {
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
