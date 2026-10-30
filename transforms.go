@@ -182,16 +182,17 @@ func requestHasFiles(req Request) bool {
 	return false
 }
 
-// joinedText joins a turn's text parts with "\n", the join the Text builder
-// uses for its final turn (ADR-100 MSG-003, MSG-004).
+// joinedText joins a turn's text parts with no separator, the join
+// Response.Text() uses, so an assistant turn sent to Chat Completions carries
+// the text the response did (owner decision 4, HANDOFF-105 F5).
 func joinedText(parts []Part) string {
-	var texts []string
+	var b strings.Builder
 	for _, p := range parts {
 		if p.ToolCall == nil && p.ToolResult == nil && p.Image == nil && p.File == nil {
-			texts = append(texts, p.Text)
+			b.WriteString(p.Text)
 		}
 	}
-	return strings.Join(texts, "\n")
+	return b.String()
 }
 
 // plainText reports whether a turn is at most one text part, which the flat
