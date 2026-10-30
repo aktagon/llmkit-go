@@ -66,15 +66,18 @@ func blockMatches(block map[string]any, markerPath, markerValue string) bool {
 // decodeChatParts reads a Chat Completions-family body's assistant turn as
 // ordered parts. A shape whose text is a scalar (ChatOpenAI) yields its text
 // first, then its tool calls. A block-array shape yields its text and tool-call
-// blocks in array order, because the two configs name the same array. A
-// provider with no tool-call config has no tool calls to read.
+// blocks in array order, because the two configs name the same array.
+//
+// A tool-call block the caller could not run is a ValidationError on
+// "toolCalls", never dropped (HANDOFF-105 F5): a block of a provider with no
+// tool-call config, and, in an array of tool calls only (one no text config
+// names, ChatOpenAI), an element that fails the marker, such as an OpenAI
+// call of type "custom". In an array shared with text the marker selects, so
+// a block that matches neither config (a thinking block) is not a part.
 func decodeChatParts(raw map[string]any, provider, chatWireShape string) ([]Part, error) {
 	textCfg := providers.ResponseTextConfig(chatWireShape)
 	toolCfg := providers.ToolCallResponseConfig(chatWireShape)
 	toolDef := providers.ToolCallConfig(provider)
-	if toolDef == nil {
-		toolCfg = nil
-	}
 
 	var parts []Part
 	if textCfg == nil {
@@ -84,17 +87,20 @@ func decodeChatParts(raw map[string]any, provider, chatWireShape string) ([]Part
 	}
 	for _, path := range blockArrayPaths(textCfg, toolCfg) {
 		arr, _ := walkPath(raw, path).([]any)
-		for _, elem := range arr {
-			block, ok := elem.(map[string]any)
-			if !ok {
-				continue
-			}
+		toolsOnly := toolCfg != nil && path == toolCfg.BlocksPath && (textCfg == nil || textCfg.BlocksPath != path)
+		for i, elem := range arr {
+			block, isObject := elem.(map[string]any)
 			switch {
-			case textCfg != nil && path == textCfg.BlocksPath && blockMatches(block, textCfg.MarkerPath, textCfg.MarkerValue):
+			case textCfg != nil && path == textCfg.BlocksPath && isObject && blockMatches(block, textCfg.MarkerPath, textCfg.MarkerValue):
 				if text := extractPath(block, textCfg.ValuePath); text != "" {
 					parts = append(parts, Part{Text: text})
 				}
-			case toolCfg != nil && path == toolCfg.BlocksPath && blockMatches(block, toolCfg.MarkerPath, toolCfg.MarkerValue):
+			case toolsOnly && !(isObject && blockMatches(block, toolCfg.MarkerPath, toolCfg.MarkerValue)):
+				return nil, otherToolCallType(path, i, elem, toolCfg)
+			case toolCfg != nil && path == toolCfg.BlocksPath && isObject && blockMatches(block, toolCfg.MarkerPath, toolCfg.MarkerValue):
+				if toolDef == nil {
+					return nil, noToolCallConfigError(provider, chatWireShape)
+				}
 				call, err := readToolCall(block, toolCfg, toolDef)
 				if err != nil {
 					return nil, err
@@ -104,6 +110,17 @@ func decodeChatParts(raw map[string]any, provider, chatWireShape string) ([]Part
 		}
 	}
 	return parts, nil
+}
+
+// otherToolCallType is the rejection for an element of a tool-call-only array
+// that is not a tool call of the kind the config marks (owner decision 1,
+// HANDOFF-105 F5): it is a call the caller cannot run, so it is not dropped.
+func otherToolCallType(path string, i int, elem any, cfg *providers.ToolCallResponseConfigDef) error {
+	block, ok := elem.(map[string]any)
+	if !ok {
+		return malformedToolCall("%s[%d] is not an object", path, i)
+	}
+	return malformedToolCall("%s[%d] has %s %v, want %q", path, i, cfg.MarkerPath, walkPath(block, cfg.MarkerPath), cfg.MarkerValue)
 }
 
 // blockArrayPaths lists the arrays the two configs scan, each once, text
