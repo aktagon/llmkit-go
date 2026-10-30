@@ -45,10 +45,11 @@ func newLegacyAgent(p Provider, req Request, tools []Tool, o *options) *legacyAg
 // as it was (HANDOFF-105 F3). Every turn of the loop sends the same Request
 // with a longer history, so one preparation holds for all of them.
 //
-// Chat is all-or-nothing (owner decision 4, HANDOFF-105 F4): on any error
-// after the call starts, the history is restored to what it was before the
-// call, and the *AgentError carries the turns the call made, tool results
-// included.
+// Chat is all-or-nothing (owner decision 4, HANDOFF-105 F4). The call builds
+// its turns in a list of its own and adds them to the history only when it
+// succeeds (HANDOFF-105 F5), so the history never holds a running call's
+// turns: on any error it is what it was before the call, and the *AgentError
+// carries the turns the call made, tool results included.
 func (a *legacyAgent) chat(ctx context.Context, msg string) (Response, error) {
 	cfg, ok := providerSpecs()[a.provider.Name]
 	if !ok {
@@ -60,21 +61,20 @@ func (a *legacyAgent) chat(ctx context.Context, msg string) (Response, error) {
 	if err != nil {
 		return Response{}, err
 	}
-	before := a.history
-	a.history = req.Messages
-	resp, err := a.runToolLoop(ctx, cfg, req)
+	history := slices.Clip(req.Messages[:len(a.history)])
+	turns := slices.Clone(req.Messages[len(a.history):])
+	resp, turns, err := a.runToolLoop(ctx, cfg, req, history, turns)
 	if err != nil {
-		unsaved := slices.Clone(a.history[len(before):])
-		a.history = before
-		return resp, &AgentError{Err: err, UnsavedTurns: unsaved}
+		return resp, &AgentError{Err: err, UnsavedTurns: turns}
 	}
+	a.history = append(history, turns...)
 	return resp, nil
 }
 
 // runToolLoop sends requests and executes tools until no more tool calls or
 // max iterations. req is the prepared Request; each turn sends it with the
-// current history.
-func (a *legacyAgent) runToolLoop(ctx context.Context, cfg providerSpec, req Request) (Response, error) {
+// history and the call's turns so far, and returns those turns.
+func (a *legacyAgent) runToolLoop(ctx context.Context, cfg providerSpec, req Request, history, turns []Message) (Response, []Message, error) {
 	// Seeded from the first turn, not from a zero value: absorbing addition's
 	// identity is a REPORTED zero, and an all-unreported seed would absorb every
 	// turn to nothing (ADR-081 AVAIL-005).
@@ -88,11 +88,11 @@ func (a *legacyAgent) runToolLoop(ctx context.Context, cfg providerSpec, req Req
 		// shared setup, so validation, model resolution, the tool-aware
 		// message transforms and the option/caching/structured-output steps
 		// all run identically to the Text/batch path.
-		req.Messages = a.history
+		req.Messages = append(slices.Clip(history), turns...)
 		model := req.Model
 		body, content, err := encodeRequest(a.provider.Name, cfg, req)
 		if err != nil {
-			return Response{Usage: totalUsage}, err
+			return Response{Usage: totalUsage}, turns, err
 		}
 		headers := sendHeaders(a.provider, cfg, content)
 
@@ -101,7 +101,7 @@ func (a *legacyAgent) runToolLoop(ctx context.Context, cfg providerSpec, req Req
 		// .caching() agent silently paid full input price every turn (BUG-004).
 		if a.opts.caching {
 			if err := applyCaching(ctx, body, a.provider, model, a.opts, cfg); err != nil {
-				return Response{Usage: totalUsage}, err
+				return Response{Usage: totalUsage}, turns, err
 			}
 		}
 
@@ -112,7 +112,7 @@ func (a *legacyAgent) runToolLoop(ctx context.Context, cfg providerSpec, req Req
 		}
 		llmStart := time.Now()
 		if err := firePre(ctx, a.opts.middleware, llmEvent); err != nil {
-			return Response{Usage: totalUsage}, err
+			return Response{Usage: totalUsage}, turns, err
 		}
 
 		jsonBody, err := json.Marshal(body)
@@ -122,7 +122,7 @@ func (a *legacyAgent) runToolLoop(ctx context.Context, cfg providerSpec, req Req
 			postEv.Err = wrapped
 			postEv.Duration = time.Since(llmStart)
 			firePost(ctx, a.opts.middleware, postEv)
-			return Response{}, wrapped
+			return Response{}, turns, wrapped
 		}
 
 		url := sendURL(a.provider, cfg, requestPath(cfg, model))
@@ -145,9 +145,9 @@ func (a *legacyAgent) runToolLoop(ctx context.Context, cfg providerSpec, req Req
 			// `err` is e.g. *url.Error — propagate as-is rather than
 			// panicking on the type assertion.
 			if apiErr, ok := err.(*APIError); ok && respBody != nil {
-				return Response{}, parseError(a.provider.Name, apiErr.StatusCode, respBody, nil)
+				return Response{}, turns, parseError(a.provider.Name, apiErr.StatusCode, respBody, nil)
 			}
-			return Response{}, err
+			return Response{}, turns, err
 		}
 
 		// Every turn is decoded by DecodeResponse, the one reader (ADR-076
@@ -159,7 +159,7 @@ func (a *legacyAgent) runToolLoop(ctx context.Context, cfg providerSpec, req Req
 			postEv.Err = err
 			postEv.Duration = time.Since(llmStart)
 			firePost(ctx, a.opts.middleware, postEv)
-			return Response{}, err
+			return Response{}, turns, err
 		}
 
 		// Accumulate usage through the shared reader, all six dimensions.
@@ -181,7 +181,7 @@ func (a *legacyAgent) runToolLoop(ctx context.Context, cfg providerSpec, req Req
 		// it, and is what the NEXT request sends (ADR-085). Before F4 the loop
 		// kept only the tool calls of a tool turn, which dropped the model's
 		// text beside them.
-		a.history = append(a.history, Message{
+		turns = append(turns, Message{
 			Role:         "assistant",
 			Parts:        resp.Parts,
 			ProviderTurn: resp.ProviderTurn,
@@ -189,7 +189,7 @@ func (a *legacyAgent) runToolLoop(ctx context.Context, cfg providerSpec, req Req
 		calls := resp.ToolCalls()
 		if len(calls) == 0 {
 			resp.Usage = totalUsage
-			return resp, nil
+			return resp, turns, nil
 		}
 
 		// Execute tools and record results.
@@ -198,7 +198,7 @@ func (a *legacyAgent) runToolLoop(ctx context.Context, cfg providerSpec, req Req
 			tool := a.findTool(tc.Name)
 			if tool == nil {
 				result := fmt.Sprintf("error: unknown tool %q", tc.Name)
-				a.history = append(a.history, toolResultMessage(tc.ID, result))
+				turns = append(turns, toolResultMessage(tc.ID, result))
 				continue
 			}
 
@@ -211,7 +211,7 @@ func (a *legacyAgent) runToolLoop(ctx context.Context, cfg providerSpec, req Req
 			}
 			toolStart := time.Now()
 			if err := firePre(ctx, a.opts.middleware, toolEv); err != nil {
-				return Response{Usage: totalUsage}, err
+				return Response{Usage: totalUsage}, turns, err
 			}
 
 			output, runErr := tool.Run(input)
@@ -225,11 +225,11 @@ func (a *legacyAgent) runToolLoop(ctx context.Context, cfg providerSpec, req Req
 			postEv.Duration = time.Since(toolStart)
 			firePost(ctx, a.opts.middleware, postEv)
 
-			a.history = append(a.history, toolResultMessage(tc.ID, output))
+			turns = append(turns, toolResultMessage(tc.ID, output))
 		}
 	}
 
-	return Response{Usage: totalUsage}, fmt.Errorf("max tool iterations (%d) reached", a.opts.maxToolIterations)
+	return Response{Usage: totalUsage}, turns, fmt.Errorf("max tool iterations (%d) reached", a.opts.maxToolIterations)
 }
 
 // textParts is one text part, or none for empty text: Go's Part cannot
