@@ -234,17 +234,9 @@ func generateImage(ctx context.Context, p Provider, req ImageRequest, opts ...Im
 		return ImageResponse{}, &ValidationError{Field: "provider", Message: p.Name + " does not support image generation"}
 	}
 	// ADR-102 MPT-001: an unlisted model (nil) skips the per-model checks.
-	model, listed := lookupModel(imgCfg.Models, req.Model, imageModelID)
-	// Empty whitelist means "no client-side check; pass through" — used by
-	// providers (e.g., OpenAI) that accept arbitrary sizes within documented
-	// bounds. The provider API rejects bad values with a clean 400; trust
-	// the boundary instead of carrying a stale whitelist (plan 020 q1).
-	if listed && o.aspectRatio != "" && len(model.AspectRatios) > 0 && !contains(model.AspectRatios, o.aspectRatio) {
-		return ImageResponse{}, &ValidationError{Field: "aspect_ratio", Message: o.aspectRatio + " not supported by " + req.Model}
-	}
-	if listed && o.imageSize != "" && len(model.ImageSizes) > 0 && !contains(model.ImageSizes, o.imageSize) {
-		return ImageResponse{}, &ValidationError{Field: "image_size", Message: o.imageSize + " not supported by " + req.Model}
-	}
+	model, _ := lookupModel(imgCfg.Models, req.Model, imageModelID)
+	// ADR-102 MPT-006 G5: a listed model's aspect ratios and sizes are hints,
+	// not blocks. The provider answers an off-list value.
 	imageCount := 0
 	for _, part := range parts {
 		if part.Image != nil {
@@ -732,15 +724,6 @@ func normalizeImageParts(req ImageRequest) ([]Part, error) {
 }
 
 func imageModelID(m *providers.ImageModelDef) string { return m.ModelID }
-
-func contains(haystack []string, needle string) bool {
-	for _, v := range haystack {
-		if v == needle {
-			return true
-		}
-	}
-	return false
-}
 
 // buildImageBody constructs the Google generateContent request body for image
 // generation. Walks the normalised []Part in order: text parts emit
