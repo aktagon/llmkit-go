@@ -122,10 +122,8 @@ func generateMusic(ctx context.Context, p Provider, req MusicRequest, opts ...Mu
 	if mgCfg == nil {
 		return MusicResponse{}, &ValidationError{Field: "provider", Message: p.Name + " does not support music generation"}
 	}
-	model := findMusicModel(mgCfg, req.Model)
-	if model == nil {
-		return MusicResponse{}, &ValidationError{Field: "model", Message: req.Model + " is not a known music-generation model for " + p.Name}
-	}
+	// ADR-102 MPT-001: an unlisted model (nil) is sent as given.
+	model, _ := lookupModel(mgCfg.Models, req.Model, musicModelID)
 	// ADR-037 (MUS-008): supportsLyrics is advisory metadata, not a gate.
 	// Lyrics on an instrumental-only model fold into the prompt (for the
 	// single-prompt Predict shape) and the model ignores or honors them.
@@ -155,7 +153,7 @@ func generateMusic(ctx context.Context, p Provider, req MusicRequest, opts ...Mu
 		return MusicResponse{}, err
 	}
 
-	resp, parseErr := parseMusicResponse(mgCfg.WireShape, model.OutputMime, respBody)
+	resp, parseErr := parseMusicResponse(mgCfg.WireShape, fallbackMime(mgCfg.Models, model, musicModelMime), respBody)
 	if o.raw && parseErr == nil {
 		resp.Raw = append(json.RawMessage(nil), respBody...)
 	}
@@ -361,14 +359,8 @@ func normalizeMusicParts(req MusicRequest) ([]Part, error) {
 	}
 }
 
-func findMusicModel(cfg *providers.MusicGenDef, modelID string) *providers.MusicModelDef {
-	for i := range cfg.Models {
-		if cfg.Models[i].ModelID == modelID {
-			return &cfg.Models[i]
-		}
-	}
-	return nil
-}
+func musicModelID(m *providers.MusicModelDef) string   { return m.ModelID }
+func musicModelMime(m *providers.MusicModelDef) string { return m.OutputMime }
 
 // parseMusicResponse decodes the audio payloads per wire shape. Each shape's
 // response diverges enough (predictions[] vs candidates[] vs data.audio,

@@ -155,10 +155,9 @@ func submitVideo(ctx context.Context, p Provider, req VideoRequest, opts ...Vide
 	if vgCfg == nil {
 		return VideoHandle{}, &ValidationError{Field: "provider", Message: p.Name + " does not support video generation"}
 	}
-	model := findVideoModel(vgCfg, req.Model)
-	if model == nil {
-		return VideoHandle{}, &ValidationError{Field: "model", Message: req.Model + " is not a known video-generation model for " + p.Name}
-	}
+	// ADR-102 MPT-001: an unlisted model (nil) skips the per-model checks;
+	// the config checks below still run.
+	model, listed := lookupModel(vgCfg.Models, req.Model, videoModelID)
 	if err := validateGeminiOmniInputs(vgCfg, parts, req); err != nil {
 		return VideoHandle{}, err
 	}
@@ -174,7 +173,7 @@ func submitVideo(ctx context.Context, p Provider, req VideoRequest, opts ...Vide
 			// Image-to-video seed frame (BUG-010): accepted only by models whose
 			// VideoModelDef sets SupportsImageToVideo; text-to-video-only models
 			// reject it pre-flight rather than silently dropping it at wire time.
-			if !model.SupportsImageToVideo {
+			if listed && !model.SupportsImageToVideo {
 				return VideoHandle{}, &ValidationError{
 					Field:   fmt.Sprintf("parts[%d]", i),
 					Message: req.Model + " is a text-to-video-only model and does not accept image parts",
@@ -1222,12 +1221,13 @@ func veoImage(img *MediaRef) map[string]any {
 // validateVideoFrames rejects a last frame or reference images the model or
 // the request cannot carry, before any HTTP call (BUG-089). The rules run in
 // this order in every SDK, so a request that breaks two gets the same error.
+// An unlisted model (nil) skips the two per-model rules (ADR-102 MPT-001).
 func validateVideoFrames(model *providers.VideoModelDef, imageCount int, req VideoRequest) error {
 	refs := len(req.ReferenceImages)
 	switch {
-	case req.LastFrame != nil && !model.SupportsLastFrame:
+	case req.LastFrame != nil && model != nil && !model.SupportsLastFrame:
 		return &ValidationError{Field: "last_frame", Message: model.ModelID + " does not accept a last frame"}
-	case refs > 0 && !model.SupportsReferenceImages:
+	case refs > 0 && model != nil && !model.SupportsReferenceImages:
 		return &ValidationError{Field: "reference_images", Message: model.ModelID + " does not accept reference images"}
 	case refs > maxVideoReferenceImages:
 		return &ValidationError{Field: "reference_images", Message: fmt.Sprintf("at most %d reference images, got %d", maxVideoReferenceImages, refs)}
@@ -1284,6 +1284,8 @@ func videoShapeSendsOptions(shape string) bool {
 //     (ai.google.dev/gemini-api/docs/veo, read 2026-10-19; HANDOFF-100).
 //  5. A resolution the model does not list (empty list = no fixed set).
 //  6. An aspect ratio the model does not list (empty list = no fixed set).
+//
+// An unlisted model (nil) skips rules 3, 5 and 6 (ADR-102 MPT-001).
 func validateVideoOptions(providerName string, vgCfg *providers.VideoGenDef, model *providers.VideoModelDef, req VideoRequest) error {
 	if !videoShapeSendsOptions(vgCfg.WireShape) {
 		for _, opt := range []struct {
@@ -1300,17 +1302,21 @@ func validateVideoOptions(providerName string, vgCfg *providers.VideoGenDef, mod
 		}
 		return nil
 	}
+	var stated providers.VideoModelDef
+	if model != nil {
+		stated = *model
+	}
 	switch {
 	case req.DurationSeconds < 0:
 		return &ValidationError{Field: "duration", Message: "must be positive"}
-	case req.DurationSeconds > 0 && model.MaxDurationSeconds > 0 && req.DurationSeconds > model.MaxDurationSeconds:
-		return &ValidationError{Field: "duration", Message: fmt.Sprintf("%s takes at most %d seconds, got %d", model.ModelID, model.MaxDurationSeconds, req.DurationSeconds)}
+	case req.DurationSeconds > 0 && stated.MaxDurationSeconds > 0 && req.DurationSeconds > stated.MaxDurationSeconds:
+		return &ValidationError{Field: "duration", Message: fmt.Sprintf("%s takes at most %d seconds, got %d", stated.ModelID, stated.MaxDurationSeconds, req.DurationSeconds)}
 	case req.DurationSeconds > 0 && len(req.ReferenceImages) > 0 && req.DurationSeconds != 8:
 		return &ValidationError{Field: "duration", Message: fmt.Sprintf("reference images take 8 seconds, got %d", req.DurationSeconds)}
-	case req.Resolution != "" && len(model.Resolutions) > 0 && !contains(model.Resolutions, req.Resolution):
-		return &ValidationError{Field: "resolution", Message: model.ModelID + " does not support resolution " + req.Resolution}
-	case req.AspectRatio != "" && len(model.AspectRatios) > 0 && !contains(model.AspectRatios, req.AspectRatio):
-		return &ValidationError{Field: "aspect_ratio", Message: model.ModelID + " does not support aspect ratio " + req.AspectRatio}
+	case req.Resolution != "" && len(stated.Resolutions) > 0 && !contains(stated.Resolutions, req.Resolution):
+		return &ValidationError{Field: "resolution", Message: stated.ModelID + " does not support resolution " + req.Resolution}
+	case req.AspectRatio != "" && len(stated.AspectRatios) > 0 && !contains(stated.AspectRatios, req.AspectRatio):
+		return &ValidationError{Field: "aspect_ratio", Message: stated.ModelID + " does not support aspect ratio " + req.AspectRatio}
 	}
 	return nil
 }
@@ -1402,11 +1408,4 @@ func normalizeVideoParts(req VideoRequest) ([]Part, error) {
 	}
 }
 
-func findVideoModel(cfg *providers.VideoGenDef, modelID string) *providers.VideoModelDef {
-	for i := range cfg.Models {
-		if cfg.Models[i].ModelID == modelID {
-			return &cfg.Models[i]
-		}
-	}
-	return nil
-}
+func videoModelID(m *providers.VideoModelDef) string { return m.ModelID }
