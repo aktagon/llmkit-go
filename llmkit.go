@@ -1023,7 +1023,12 @@ func removeAdditionalProperties(schema any) {
 // Keyless, IO-free and pure (ADR-076 SYM-002): no Client, no credential, no
 // network, no clock. The wire shape is required, not derived — one provider can
 // serve two chat protocols, and inferring it silently mis-parses (SYM-003).
-// This is the same function the chat send path calls (SYM-004).
+// This is the same function the chat send path calls (SYM-004). It runs the
+// served-shape check EncodeResponse runs (servedChatWireShape, HANDOFF-105 F4):
+// a shape the provider does not serve, or a provider with no chat shape, is a
+// validation error on field "chatWireShape", and an unknown provider one on
+// "provider".
+//
 // resolveChatWireShape fills in an unspecified wire shape with the provider's
 // DEFAULT chat protocol.
 //
@@ -1048,7 +1053,10 @@ func resolveChatWireShape(provider, chatWireShape string) string {
 }
 
 func DecodeResponse(provider, chatWireShape string, body []byte) (Response, error) {
-	chatWireShape = resolveChatWireShape(provider, chatWireShape)
+	chatWireShape, err := servedChatWireShape(provider, chatWireShape)
+	if err != nil {
+		return Response{}, err
+	}
 
 	var raw map[string]any
 	if err := json.Unmarshal(body, &raw); err != nil {
@@ -1166,7 +1174,8 @@ func EncodeResponse(provider, chatWireShape string, resp Response) ([]byte, erro
 	return json.Marshal(raw)
 }
 
-// servedChatWireShape resolves the shape EncodeResponse writes: the named one,
+// servedChatWireShape resolves the shape DecodeResponse reads and
+// EncodeResponse writes: the named one,
 // or the provider's default when chatWireShape is "". A shape the provider
 // does not serve is a validation error on field "chatWireShape", the name
 // EncodeRequest uses (owner decision 2, HANDOFF-105 section 3b), and so is a provider that serves no chat shape at
@@ -1199,7 +1208,8 @@ func encodeFixedValues(raw map[string]any, chatWireShape string) {
 // guardOneWayFields refuses to encode a canonical field whose mapping is
 // OneWay for this provider — the result set of CQ-WMAP-011 restricted to
 // Response (ADR-076 SYM-007). That set is empty today:
-// exceptGoogleToolCallID covers tool calls, which are out (SYM-008), and
+// exceptGoogleToolCallID is on ToolCall, whose Google id the config
+// never writes (HANDOFF-105 F4), and
 // exceptVertexFinishReason is on the image response since ADR-099 slice
 // C4 (CRF-006). A Vertex chat Response writes no finish reason anyway: Vertex
 // has no chat wire shape, so encodeFinishReason finds no table.
