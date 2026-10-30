@@ -195,7 +195,7 @@ func submitVideo(ctx context.Context, p Provider, req VideoRequest, opts ...Vide
 	if err := validateVideoFrames(model, imageCount, req); err != nil {
 		return VideoHandle{}, err
 	}
-	if err := validateVideoOptions(p.Name, vgCfg, model, req); err != nil {
+	if err := validateVideoOptions(p.Name, vgCfg, req); err != nil {
 		return VideoHandle{}, err
 	}
 	// ADR-096: the carried inputs select the submit request; a config with
@@ -1279,14 +1279,12 @@ func videoShapeSendsOptions(shape string) bool {
 //     first set option is named, in the order duration, aspect_ratio,
 //     resolution.
 //  2. A negative duration.
-//  3. A duration above the model's MaxDurationSeconds (0 = no known limit).
-//  4. A duration other than 8 with reference images: Veo forces 8 seconds
+//  3. A duration other than 8 with reference images: Veo forces 8 seconds
 //     (ai.google.dev/gemini-api/docs/veo, read 2026-10-19; HANDOFF-100).
-//  5. A resolution the model does not list (empty list = no fixed set).
-//  6. An aspect ratio the model does not list (empty list = no fixed set).
 //
-// An unlisted model (nil) skips rules 3, 5 and 6 (ADR-102 MPT-001).
-func validateVideoOptions(providerName string, vgCfg *providers.VideoGenDef, model *providers.VideoModelDef, req VideoRequest) error {
+// A model's maximum duration, resolutions and aspect ratios are hints, not
+// blocks (ADR-102 MPT-006 G5): the provider answers an off-list value.
+func validateVideoOptions(providerName string, vgCfg *providers.VideoGenDef, req VideoRequest) error {
 	if !videoShapeSendsOptions(vgCfg.WireShape) {
 		for _, opt := range []struct {
 			field string
@@ -1302,21 +1300,11 @@ func validateVideoOptions(providerName string, vgCfg *providers.VideoGenDef, mod
 		}
 		return nil
 	}
-	var stated providers.VideoModelDef
-	if model != nil {
-		stated = *model
-	}
 	switch {
 	case req.DurationSeconds < 0:
 		return &ValidationError{Field: "duration", Message: "must be positive"}
-	case req.DurationSeconds > 0 && stated.MaxDurationSeconds > 0 && req.DurationSeconds > stated.MaxDurationSeconds:
-		return &ValidationError{Field: "duration", Message: fmt.Sprintf("%s takes at most %d seconds, got %d", stated.ModelID, stated.MaxDurationSeconds, req.DurationSeconds)}
 	case req.DurationSeconds > 0 && len(req.ReferenceImages) > 0 && req.DurationSeconds != 8:
 		return &ValidationError{Field: "duration", Message: fmt.Sprintf("reference images take 8 seconds, got %d", req.DurationSeconds)}
-	case req.Resolution != "" && len(stated.Resolutions) > 0 && !contains(stated.Resolutions, req.Resolution):
-		return &ValidationError{Field: "resolution", Message: stated.ModelID + " does not support resolution " + req.Resolution}
-	case req.AspectRatio != "" && len(stated.AspectRatios) > 0 && !contains(stated.AspectRatios, req.AspectRatio):
-		return &ValidationError{Field: "aspect_ratio", Message: stated.ModelID + " does not support aspect ratio " + req.AspectRatio}
 	}
 	return nil
 }

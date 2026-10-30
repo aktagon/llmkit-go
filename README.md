@@ -254,9 +254,9 @@ The trailing `Generate(ctx, msg)` argument is desugared into a final
 text Part appended to the chain — pass `""` to omit it when every Part
 is already supplied.
 
-Empty whitelists mean "no client-side check; pass through" — providers
-like OpenAI accept arbitrary sizes within documented bounds, so the SDK
-trusts the API boundary instead of carrying a stale list.
+The table lists the aspect ratios and sizes each model documents. The SDK
+sends any value you set, listed or not, and the provider answers a value it
+does not accept. OpenAI takes any size within its documented bounds.
 
 | Provider | Model                          | Aspect ratios                                                                   | Sizes                               |
 | -------- | ------------------------------ | ------------------------------------------------------------------------------- | ----------------------------------- |
