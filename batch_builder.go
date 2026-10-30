@@ -45,11 +45,13 @@ func (b *Text) batchInputs(prompts []string) []Request {
 }
 
 // Wait polls the provider's batch lifecycle until completion and
-// returns one Response per prompt, at the prompt's index. A failed
-// request keeps its slot: empty Text, FinishReason set to the provider's
-// result status ("errored", "expired", "canceled"; "error" when the
-// provider has none) and FinishMessage set to the provider's error
-// message. A request with no result line reads FinishReason "missing".
+// returns one Response per prompt, at the prompt's index. Each Response
+// has State JobSucceeded or JobFailed (ADR-099 CRF-015). A failed request
+// keeps its slot: empty Text, no FinishReason or FinishMessage, and a Cause
+// with the provider's failure status ("errored", "batch_expired", an error
+// code), its typed Code (FailureExpired, FailureCancelled, FailureError)
+// and the provider's error message. A request with no result line has
+// Cause.Code FailureMissing.
 // Results whose request id is not one this SDK assigned (a batch created
 // elsewhere, resumed by ID) follow the indexed ones in file order.
 // Cross-process resume works by
@@ -71,7 +73,7 @@ func (h BatchHandle) Wait(ctx context.Context, opts ...Option) ([]Response, erro
 // blocking on Wait. When the batch has completed, JobStatus.Result carries the
 // ordered responses (the two-hop result fetch is performed inline); a
 // provider-reported terminal failure (pollingErrorValues) yields State
-// JobFailed with the status on JobStatus.Cause; otherwise Result is nil and
+// JobFailed with the status and its typed Code on JobStatus.Cause; otherwise Result is nil and
 // State is JobRunning. Honors h.Raw like Wait, and is safe to call on a
 // reconstituted handle (ADR-014 cross-process resume; POLL-005).
 func (h BatchHandle) Poll(ctx context.Context, opts ...Option) (JobStatus[[]Response], error) {
