@@ -32,6 +32,20 @@ func (e *ValidationError) Error() string {
 	return fmt.Sprintf("validation: %s - %s", e.Field, e.Message)
 }
 
+// AgentError is the error an Agent call returns once the call has started
+// (owner decision 4, HANDOFF-105 F4). Agent Chat is all-or-nothing: on any
+// error the history is what it was before the call, and UnsavedTurns holds the
+// turns the call made and did not save, in order: the user turn, then each
+// assistant turn and tool result. Err is the cause; errors.As reaches it.
+type AgentError struct {
+	Err          error
+	UnsavedTurns []Message
+}
+
+func (e *AgentError) Error() string { return e.Err.Error() }
+
+func (e *AgentError) Unwrap() error { return e.Err }
+
 // parseError parses provider-specific error responses into APIError.
 //
 func parseError(provider string, statusCode int, body []byte, headers http.Header) *APIError {
