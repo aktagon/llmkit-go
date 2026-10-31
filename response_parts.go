@@ -19,9 +19,18 @@ import (
 // (Anthropic around a citation), so the blocks join as they are. Empty when
 // the response carries no text, such as a turn that only calls a tool; the
 // finish reason tells why.
-func (r Response) Text() string {
+func (r Response) Text() string { return partsText(r.Parts) }
+
+// ToolCalls is the tool calls the model asked for, in the order it sent them,
+// not run. Empty when the model called no tool.
+func (r Response) ToolCalls() []ToolCall { return partsToolCalls(r.Parts) }
+
+// partsText is the text rule of Response.Text over any turn's parts. The
+// request encoder reads an assistant turn with it, so the turn carries the
+// text the response did (owner decision 4, HANDOFF-105 F5, F11).
+func partsText(parts []Part) string {
 	var b strings.Builder
-	for _, p := range r.Parts {
+	for _, p := range parts {
 		if p.isText() {
 			b.WriteString(p.Text)
 		}
@@ -29,11 +38,11 @@ func (r Response) Text() string {
 	return b.String()
 }
 
-// ToolCalls is the tool calls the model asked for, in the order it sent them,
-// not run. Empty when the model called no tool.
-func (r Response) ToolCalls() []ToolCall {
+// partsToolCalls is the tool-call rule of Response.ToolCalls over any turn's
+// parts, in order. The request encoder reads a turn's calls with it.
+func partsToolCalls(parts []Part) []ToolCall {
 	var calls []ToolCall
-	for _, p := range r.Parts {
+	for _, p := range parts {
 		if p.ToolCall != nil {
 			calls = append(calls, *p.ToolCall)
 		}
