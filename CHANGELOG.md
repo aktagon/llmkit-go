@@ -58,13 +58,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   file-upload metadata and the telemetry export write `<`, `>` and `&` as they
   are, the bytes the TS and Rust SDKs send. They used to go out as
   `\u003c`, `\u003e` and `\u0026`.
-- **U+2028 and U+2029 are written as the characters**, in prompt text and in
-  OpenAI's string tool-call arguments, as TS and Rust write them. Go used to
-  write `\u2028` and `\u2029`. An escape inside a provider's own argument
-  text is kept.
 - A tool call with an empty `Input` sends `{}` in every request, as nil and
   `null` do. It used to fail with a `ValidationError`. A provider's
-  `"input": ""` reads as no input, as `null` does.
+  `"input": ""` in an Anthropic, Google or Bedrock reply is an argument
+  value: the call's `Input` is `""`, and the next request sends it. Only
+  `null` reads as no input.
+- **BREAKING — `SaveHistory` rejects a tool call whose `Input` is empty but
+  not nil.** It used to save the call with no input. Set `Input` to nil for a
+  call with no input.
+- **BREAKING — a saved provider turn must be one JSON value of its format's
+  kind.** `LoadHistory` and every request (`Text`, stream, batch, the Agent,
+  `EncodeRequest`) return a `ValidationError` on
+  `messages[i].provider_turn` when the turn's text is not JSON, or is an
+  object where the format replays an array (Anthropic, Responses) or an array
+  where it replays an object (OpenAI Chat Completions, Google). Such a turn
+  used to be sent as it was, or to fail when the body was written.
 
 ### Added
 
