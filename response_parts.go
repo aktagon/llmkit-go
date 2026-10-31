@@ -76,23 +76,35 @@ func blockMatches(block map[string]any, markerPath, markerValue string) bool {
 // call of type "custom". In an array shared with text the marker selects, so
 // a block that matches neither config (a thinking block) is not a part.
 //
-// body is the bytes raw was parsed from: a map-format argument object is read
-// from them, so Input keeps the provider's bytes (readToolCall).
-func decodeChatParts(body []byte, raw map[string]any, provider, chatWireShape string) ([]Part, error) {
+// Each block is decoded once, from its own bytes in body: its marker, name and
+// id come from that decode, and a map-format argument is read from the same
+// bytes, so Input keeps the provider's text (readToolCall). Before F9 the
+// blocks came from a parse of the body and the arguments from a second walk
+// of the body, matched by index, so the two could name different blocks
+// (HANDOFF-105 F9).
+func decodeChatParts(body []byte, provider, chatWireShape string) ([]Part, error) {
 	textCfg := providers.ResponseTextConfig(chatWireShape)
 	toolCfg := providers.ToolCallResponseConfig(chatWireShape)
 	toolDef := providers.ToolCallConfig(provider)
 
 	var parts []Part
 	if textCfg == nil {
+		var raw map[string]any
+		if err := json.Unmarshal(body, &raw); err != nil {
+			return nil, err
+		}
 		if text := extractPath(raw, providers.ResponseTextPath(provider)); text != "" {
 			parts = append(parts, Part{Text: text})
 		}
 	}
 	for _, path := range blockArrayPaths(textCfg, toolCfg) {
-		arr, _ := walkPath(raw, path).([]any)
+		blocks := rawArrayAt(body, path)
 		toolsOnly := toolCfg != nil && path == toolCfg.BlocksPath && (textCfg == nil || textCfg.BlocksPath != path)
-		for i, elem := range arr {
+		for i, blockText := range blocks {
+			var elem any
+			if err := json.Unmarshal(blockText, &elem); err != nil {
+				return nil, err
+			}
 			block, isObject := elem.(map[string]any)
 			switch {
 			case textCfg != nil && path == textCfg.BlocksPath && isObject && blockMatches(block, textCfg.MarkerPath, textCfg.MarkerValue):
@@ -105,7 +117,7 @@ func decodeChatParts(body []byte, raw map[string]any, provider, chatWireShape st
 				if toolDef == nil {
 					return nil, noToolCallConfigError(provider, chatWireShape)
 				}
-				call, err := readToolCall(block, extractRawJSONPath(body, fmt.Sprintf("%s[%d].%s", path, i, toolCfg.ArgsPath)), toolCfg, toolDef)
+				call, err := readToolCall(block, extractRawJSONPath(blockText, toolCfg.ArgsPath), toolCfg, toolDef)
 				if err != nil {
 					return nil, err
 				}
@@ -114,6 +126,17 @@ func decodeChatParts(body []byte, raw map[string]any, provider, chatWireShape st
 		}
 	}
 	return parts, nil
+}
+
+// rawArrayAt is the elements of the JSON array at path in body, each as its
+// own text, or nil when the path does not resolve to an array: a body with no
+// blocks there has no parts from them.
+func rawArrayAt(body []byte, path string) []json.RawMessage {
+	var elems []json.RawMessage
+	if err := json.Unmarshal(extractRawJSONPath(body, path), &elems); err != nil {
+		return nil
+	}
+	return elems
 }
 
 // otherToolCallType is the rejection for an element of a tool-call-only array
