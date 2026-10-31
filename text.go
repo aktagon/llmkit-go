@@ -192,7 +192,7 @@ func (b *Text) finalTurn(finalText string) []Part {
 	if len(texts) > 0 {
 		// The builder's own join, "\n" (ADR-100 MSG-004, the text-parts-openai
 		// golden): it merges the builder's texts into one part. A turn's parts
-		// join with "" (joinedText).
+		// join with "" (partsText).
 		joined := make([]string, 0, len(texts))
 		for _, t := range texts {
 			joined = append(joined, t.Text)
