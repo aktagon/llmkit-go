@@ -29,7 +29,7 @@ type TextStream struct {
 	provider Provider
 	req      Request
 	protocol string
-	opts     []Option
+	opts     *options
 	resp     Response
 	err      error
 	consumed bool
@@ -39,14 +39,16 @@ type TextStream struct {
 // *TextStream is a trailing-handle: chunks are produced lazily via
 // Chunks(); Response() is populated when iteration completes.
 func (b *Text) Stream(ctx context.Context, finalText string) *TextStream {
-	req, opts := b.buildRequest(finalText)
-	provider := b.client.provider.toProvider(b.model)
+	provider := b.client.provider.toProvider("")
+	opts, err := b.sendOptions()
 	ts := &TextStream{
 		ctx:      ctx,
 		provider: provider,
-		req:      req,
+		req:      b.request(finalText),
 		protocol: b.protocol,
 		opts:     opts,
+		// A setup error is the stream's only yield (Chunks).
+		err: err,
 	}
 	return ts
 }
@@ -64,6 +66,10 @@ func (s *TextStream) Chunks() iter.Seq2[string, error] {
 			return
 		}
 		s.consumed = true
+		if s.err != nil {
+			yield("", s.err)
+			return
+		}
 
 		innerCtx, cancel := context.WithCancel(s.ctx)
 		defer cancel()
@@ -82,7 +88,7 @@ func (s *TextStream) Chunks() iter.Seq2[string, error] {
 				case chunks <- chunk:
 				case <-innerCtx.Done():
 				}
-			}, s.opts...)
+			}, s.opts)
 			streamResp = &r
 			streamErr = err
 			close(chunks)

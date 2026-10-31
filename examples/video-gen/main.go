@@ -48,8 +48,8 @@ func main() {
 		// Both finish signals are optional: nil means the provider reported
 		// nothing, which is not the same as reporting an empty string.
 		reason, msg := "unreported", "unreported"
-		if resp.FinishReason != nil {
-			reason = *resp.FinishReason
+		if resp.ProviderFinishReason != nil {
+			reason = *resp.ProviderFinishReason
 		}
 		if resp.FinishMessage != nil {
 			msg = *resp.FinishMessage

@@ -2,10 +2,10 @@ package llmkit
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/aktagon/llmkit-go/v3/providers"
@@ -15,23 +15,15 @@ import (
 // client's provider. Body absorbed from legacy free function in
 // plan-018 D1.3a.
 func (b *Text) Prompt(ctx context.Context, finalText string) (Response, error) {
-	req, opts := b.buildRequest(finalText)
-	p := b.client.provider.toProvider(b.model)
-	o := resolveOptions(opts)
+	req := b.request(finalText)
+	p := b.client.provider.toProvider("")
+	o, err := b.sendOptions()
+	if err != nil {
+		return Response{}, err
+	}
 	o.httpClient = withRequestTimeout(o.httpClient, p.Timeout)
 
 	if err := validateProvider(p); err != nil {
-		return Response{}, err
-	}
-	if err := validateRequest(req); err != nil {
-		return Response{}, err
-	}
-	if err := validateOptions(p, o); err != nil {
-		return Response{}, err
-	}
-
-	msgs, err := requestMsgs(req)
-	if err != nil {
 		return Response{}, err
 	}
 
@@ -47,10 +39,13 @@ func (b *Text) Prompt(ctx context.Context, finalText string) (Response, error) {
 		return Response{}, err
 	}
 
-	model, err := resolveModel(p, cfg)
+	chat, err := encodeChat(p, cfg, req)
 	if err != nil {
 		return Response{}, err
 	}
+	model, body := chat.req.Model, chat.body
+	headers := sendHeaders(p, cfg, chat.content)
+
 	baseEvent := providers.Event{
 		Op:       providers.OpLLMRequest,
 		Provider: p.Name,
@@ -61,10 +56,8 @@ func (b *Text) Prompt(ctx context.Context, finalText string) (Response, error) {
 		return Response{}, err
 	}
 
-	body, headers := buildRequest(p, req, msgs, o, cfg, nil)
-
 	if o.caching {
-		if err := applyCaching(ctx, body, p, o, cfg); err != nil {
+		if err := applyCaching(ctx, body, p, model, o, cfg); err != nil {
 			postEv := baseEvent
 			postEv.Err = err
 			postEv.Duration = time.Since(start)
@@ -73,7 +66,7 @@ func (b *Text) Prompt(ctx context.Context, finalText string) (Response, error) {
 		}
 	}
 
-	jsonBody, err := json.Marshal(body)
+	jsonBody, err := marshalWire(body)
 	if err != nil {
 		postEv := baseEvent
 		postEv.Err = err
@@ -82,7 +75,7 @@ func (b *Text) Prompt(ctx context.Context, finalText string) (Response, error) {
 		return Response{}, fmt.Errorf("marshal request: %w", err)
 	}
 
-	url := buildURL(p, cfg)
+	url := sendURL(p, cfg, requestPath(cfg, model))
 
 	var respBody []byte
 	if cfg.AuthScheme == providers.AuthSigV4 {
@@ -117,111 +110,111 @@ func (b *Text) Prompt(ctx context.Context, finalText string) (Response, error) {
 	return resp, parseErr
 }
 
-// buildRequest converts the chained config into the legacy
-// Request + functional-option pair. Exported via lowercase so
-// (*Text).Prompt / Stream / Batch reuse the one builder.
+// request builds the chained config into the one Request form (ADR-098).
+// (*Text).Prompt, Stream and Batch all encode what it returns.
 //
-// The Request mapping:
+//   - Model   -> req.Model; empty leaves the provider's default (RQC-004)
 //   - System  -> req.System
-//   - History -> req.Messages
-//   - Schema  -> req.Schema
-//   - parts   -> req.User (Text parts, joined by newlines)
-//   - image Parts -> req.Images (base64 data URIs; ADR-060). A future
-//     slice may collapse User+Images onto a single Part-based request shape.
-//   - files   -> req.Files
-//
-// Any chain method whose option maps to a functional option (MaxTokens,
-// Temperature, Caching, Middleware) becomes the matching With* call.
-func (b *Text) buildRequest(finalText string) (Request, []Option) {
-	parts := b.parts
-	if finalText != "" {
-		parts = append(parts, Part{Text: finalText})
+//   - History, then the final user turn -> req.Messages
+//   - the tools a Request(req) call set -> req.Tools
+//   - each request-shaping chain option -> its Request field
+func (b *Text) request(finalText string) Request {
+	messages := b.history
+	if turn := b.finalTurn(finalText); len(turn) > 0 {
+		messages = append(append([]Message{}, b.history...), Message{Role: "user", Parts: turn})
 	}
-
-	user, images := splitTextAndImages(parts)
-
-	req := Request{
-		System:   b.system,
-		User:     user,
-		Messages: b.history,
-		Schema:   b.schema,
-		Files:    b.files,
-		Images:   images,
+	return Request{
+		Model:            b.model,
+		System:           b.system,
+		Messages:         messages,
+		Tools:            b.tools,
+		Schema:           b.schema,
+		MaxTokens:        b.maxTokens,
+		Temperature:      b.temperature,
+		TopP:             b.topP,
+		TopK:             b.topK,
+		Stop:             b.stopSequences,
+		Seed:             b.seed,
+		FrequencyPenalty: b.frequencyPenalty,
+		PresencePenalty:  b.presencePenalty,
+		ReasoningEffort:  b.reasoningEffort,
+		ThinkingBudget:   b.thinkingBudget,
+		SafetySettings:   b.safetySettings,
 	}
-
-	var opts []Option
-	if b.maxTokens != nil {
-		opts = append(opts, WithMaxTokens(*b.maxTokens))
-	}
-	if b.temperature != nil {
-		opts = append(opts, WithTemperature(*b.temperature))
-	}
-	if b.caching {
-		opts = append(opts, WithCaching())
-	}
-	if len(b.middleware) > 0 {
-		opts = append(opts, WithMiddleware(b.middleware...))
-	}
-	if b.seed != nil {
-		opts = append(opts, WithSeed(*b.seed))
-	}
-	if b.topP != nil {
-		opts = append(opts, WithTopP(*b.topP))
-	}
-	if b.topK != nil {
-		opts = append(opts, WithTopK(*b.topK))
-	}
-	if b.frequencyPenalty != nil {
-		opts = append(opts, WithFrequencyPenalty(*b.frequencyPenalty))
-	}
-	if b.presencePenalty != nil {
-		opts = append(opts, WithPresencePenalty(*b.presencePenalty))
-	}
-	if len(b.stopSequences) > 0 {
-		opts = append(opts, WithStopSequences(b.stopSequences...))
-	}
-	if b.thinkingBudget != nil {
-		opts = append(opts, WithThinkingBudget(*b.thinkingBudget))
-	}
-	if b.reasoningEffort != "" {
-		opts = append(opts, WithReasoningEffort(b.reasoningEffort))
-	}
-	if len(b.safetySettings) > 0 {
-		opts = append(opts, WithSafetySettings(b.safetySettings...))
-	}
-	if b.raw {
-		opts = append(opts, withRaw())
-	}
-	return req, opts
 }
 
-// splitTextAndImages separates a Parts slice into the legacy Request
-// shape: Text parts join into a single User string (newline-separated,
-// the join every SDK holds via the text-parts-openai request-wire golden),
-// Image parts become InputImage entries via base64 data URIs.
-//
-// This is a phase-3 bridge — it lets the typed-builder front end ride
-// on the existing Request runtime without touching transforms.go.
-// Phase 4 will replace req.User+req.Images with req.Parts and delete
-// this helper.
-func splitTextAndImages(parts []Part) (string, []InputImage) {
-	var text string
-	var images []InputImage
-	for _, p := range parts {
-		switch {
-		case p.Image != nil:
-			images = append(images, InputImage{
-				URL:      "data:" + p.Image.MimeType + ";base64," + base64.StdEncoding.EncodeToString(p.Image.Bytes),
-				MimeType: p.Image.MimeType,
-			})
-		case p.Text != "":
-			if text != "" {
-				text += "\n"
-			}
-			text += p.Text
+// setRequest is the body of the generated Text.Request chain method (ADR-098
+// RQC-005), the inverse of request: every request-shaping field takes req's
+// value. req.Messages become the history, and the text, image and file parts
+// are dropped, because req.Messages already holds every turn. The send
+// settings (sendOptions) and the protocol are not request fields, so they stay.
+func (b *Text) setRequest(req Request) {
+	b.model = req.Model
+	b.system = req.System
+	b.history = append([]Message(nil), req.Messages...)
+	b.parts = nil
+	b.files = nil
+	b.tools = append([]ToolDefinition(nil), req.Tools...)
+	b.schema = req.Schema
+	b.maxTokens = req.MaxTokens
+	b.temperature = req.Temperature
+	b.topP = req.TopP
+	b.topK = req.TopK
+	b.stopSequences = append([]string(nil), req.Stop...)
+	b.seed = req.Seed
+	b.frequencyPenalty = req.FrequencyPenalty
+	b.presencePenalty = req.PresencePenalty
+	b.reasoningEffort = req.ReasoningEffort
+	b.thinkingBudget = req.ThinkingBudget
+	b.safetySettings = append([]SafetySetting(nil), req.SafetySettings...)
+}
+
+// finalTurn builds the parts of the final user turn so that every request
+// golden keeps its bytes (ADR-100 MSG-004): the files, then the image
+// parts, then one text part joining the text parts and finalText with
+// newlines (the join the text-parts-openai golden holds every SDK to). The
+// text part is left out when there is no text.
+func (b *Text) finalTurn(finalText string) []Part {
+	var parts, texts []Part
+	for _, f := range b.files {
+		parts = append(parts, Part{File: &f})
+	}
+	for _, p := range b.parts {
+		if p.Image != nil {
+			parts = append(parts, p)
+		} else if p.Text != "" {
+			texts = append(texts, p)
 		}
 	}
-	return text, images
+	if finalText != "" {
+		texts = append(texts, Part{Text: finalText})
+	}
+	if len(texts) > 0 {
+		// The builder's own join, "\n" (ADR-100 MSG-004, the text-parts-openai
+		// golden): it merges the builder's texts into one part. A turn's parts
+		// join with "" (partsText).
+		joined := make([]string, 0, len(texts))
+		for _, t := range texts {
+			joined = append(joined, t.Text)
+		}
+		parts = append(parts, Part{Text: strings.Join(joined, "\n")})
+	}
+	return parts
+}
+
+// sendOptions holds the chain settings that do not shape the request
+// (RQC-002): caching and its TTL, middleware and Raw. A TTL that is not
+// positive whole seconds is a ValidationError (checkCacheTTL).
+func (b *Text) sendOptions() (*options, error) {
+	if err := checkCacheTTL(b.cacheTTL); err != nil {
+		return nil, err
+	}
+	o := defaultOptions()
+	o.caching = b.caching
+	o.cacheTTL = b.cacheTTL
+	o.middleware = b.middleware
+	o.raw = b.raw
+	return o, nil
 }
 
 // decodeResponseRaw is DecodeResponse plus the ADR-014 raw opt-in. Every
