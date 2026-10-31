@@ -1,6 +1,7 @@
 package llmkit
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -1175,6 +1176,31 @@ func EncodeResponse(provider, chatWireShape string, resp Response) ([]byte, erro
 	setWirePath(raw, providers.WireShapeResponseCreatedPath(chatWireShape), resp.Created)
 	encodeFixedValues(raw, chatWireShape)
 	return marshalWire(raw)
+}
+
+// marshalWire is the one marshal path for every body llmkit sends or encodes:
+// the chat request on every send path (Text, stream, the Agent, batch and its
+// JSONL), EncodeRequest, EncodeResponse and SaveHistory (HANDOFF-105 F7), and
+// the image, speech, music, video, transcription and caching bodies, the
+// Google upload metadata and the OTLP payload (F8).
+// TestMarshalWire_IsTheOneMarshalPath fails on any other JSON encoder in the
+// package. It renders JSON without HTML escaping, as TS and Rust do. A tool
+// call's map-format input is embedded as its own bytes (json.RawMessage), and
+// json.Marshal would rewrite a "<" inside it as \u003c, so the body would not
+// carry the tokens the provider sent (HANDOFF-105 F5).
+//
+// encoding/json writes U+2028 and U+2029 in a Go string as \u2028 and \u2029,
+// even with HTML escaping off, and TS and Rust write them so too (HANDOFF-105
+// F9, owner decision 1). A json.RawMessage is compacted as it is, so a
+// provider's own text keeps its spelling.
+func marshalWire(v any) ([]byte, error) {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(v); err != nil {
+		return nil, err
+	}
+	return bytes.TrimSuffix(buf.Bytes(), []byte("\n")), nil
 }
 
 // servedChatWireShape resolves the shape DecodeResponse reads and
