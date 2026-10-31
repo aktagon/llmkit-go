@@ -88,28 +88,17 @@ func (a *legacyAgent) runToolLoop(ctx context.Context, cfg providerSpec, req Req
 	usageSeeded := false
 
 	for i := 0; i < a.opts.maxToolIterations; i++ {
-		// Build the request through the shared setup and encoder (ADR-026
-		// PIPE-001, ADR-098 RQC-001, RQC-017): the agent constructs no body of
-		// its own. Its history becomes the Request's Messages; chat ran the
-		// shared setup, so validation, model resolution, the tool-aware
-		// message transforms and the option/caching/structured-output steps
-		// all run identically to the Text/batch path.
+		// Build the request through the shared encoder (ADR-026 PIPE-001,
+		// ADR-098 RQC-001, RQC-017): the agent constructs no body of its own.
+		// Its history becomes the Request's Messages, and encodeChat checks
+		// every turn before the pre hook fires, as on the Text/batch path.
 		req.Messages = append(slices.Clip(history), turns...)
-		model := req.Model
-		body, content, err := encodeRequest(a.provider.Name, cfg, req)
+		chat, err := encodeChat(a.provider, cfg, req)
 		if err != nil {
 			return Response{Usage: totalUsage}, turns, err
 		}
-		headers := sendHeaders(a.provider, cfg, content)
-
-		// Caching is a shared request-construction step (ADR-026): applied on
-		// every send path by construction, not just Text. Before this, a
-		// .caching() agent silently paid full input price every turn (BUG-004).
-		if a.opts.caching {
-			if err := applyCaching(ctx, body, a.provider, model, a.opts, cfg); err != nil {
-				return Response{Usage: totalUsage}, turns, err
-			}
-		}
+		model, body := chat.req.Model, chat.body
+		headers := sendHeaders(a.provider, cfg, chat.content)
 
 		llmEvent := providers.Event{
 			Op:       providers.OpLLMRequest,
@@ -119,6 +108,20 @@ func (a *legacyAgent) runToolLoop(ctx context.Context, cfg providerSpec, req Req
 		llmStart := time.Now()
 		if err := firePre(ctx, a.opts.middleware, llmEvent); err != nil {
 			return Response{Usage: totalUsage}, turns, err
+		}
+
+		// Caching is a shared request-construction step (ADR-026): applied on
+		// every send path by construction, not just Text. Before this, a
+		// .caching() agent silently paid full input price every turn (BUG-004).
+		// It runs after the pre hook, as on Text and stream.
+		if a.opts.caching {
+			if err := applyCaching(ctx, body, a.provider, model, a.opts, cfg); err != nil {
+				postEv := llmEvent
+				postEv.Err = err
+				postEv.Duration = time.Since(llmStart)
+				firePost(ctx, a.opts.middleware, postEv)
+				return Response{Usage: totalUsage}, turns, err
+			}
 		}
 
 		jsonBody, err := marshalWire(body)

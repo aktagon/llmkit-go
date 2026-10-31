@@ -65,16 +65,17 @@ func promptStream(ctx context.Context, p Provider, req Request, protocol string,
 		return Response{}, err
 	}
 
-	req, err = prepareRequest(p, cfg, req)
-	if err != nil {
-		return Response{}, err
-	}
-	model := req.Model
-
 	streamCfg, locs := streamSettings(p.Name, cfg)
 	if streamCfg == nil {
 		return Response{}, &ValidationError{Field: "provider", Message: "streaming not supported: " + p.Name}
 	}
+
+	chat, err := encodeChat(p, cfg, req)
+	if err != nil {
+		return Response{}, err
+	}
+	model, body := chat.req.Model, chat.body
+	headers := sendHeaders(p, cfg, chat.content)
 
 	baseEvent := providers.Event{
 		Op:       providers.OpLLMRequest,
@@ -85,16 +86,6 @@ func promptStream(ctx context.Context, p Provider, req Request, protocol string,
 	if err := firePre(ctx, o.middleware, baseEvent); err != nil {
 		return Response{}, err
 	}
-
-	body, content, err := encodeRequest(p.Name, cfg, req)
-	if err != nil {
-		postEv := baseEvent
-		postEv.Err = err
-		postEv.Duration = time.Since(start)
-		firePost(ctx, o.middleware, postEv)
-		return Response{}, err
-	}
-	headers := sendHeaders(p, cfg, content)
 
 	// Apply caching mutations if enabled
 	if o.caching {
@@ -579,19 +570,40 @@ func EncodeRequest(provider, chatWireShape string, req Request) (WireRequest, er
 			}
 		}
 	}
-	req, err := prepareRequest(Provider{Name: provider}, cfg, req)
+	chat, err := encodeChat(Provider{Name: provider}, cfg, req)
 	if err != nil {
 		return WireRequest{}, err
 	}
-	body, headers, err := encodeRequest(provider, cfg, req)
-	if err != nil {
-		return WireRequest{}, err
-	}
-	data, err := marshalWire(body)
+	data, err := marshalWire(chat.body)
 	if err != nil {
 		return WireRequest{}, fmt.Errorf("marshal request: %w", err)
 	}
-	return WireRequest{Path: requestPath(cfg, req.Model), Headers: headers, Body: data}, nil
+	return WireRequest{Path: requestPath(cfg, chat.req.Model), Headers: chat.content, Body: data}, nil
+}
+
+// chatRequest is a chat request that passed every check: the prepared
+// Request, its body and its content headers.
+type chatRequest struct {
+	req     Request
+	body    map[string]any
+	content map[string]string
+}
+
+// encodeChat is the one validation step of a chat call: prepareRequest, then
+// encodeRequest, which checks every part. Text, stream, the Agent (each turn),
+// batch (each item) and EncodeRequest all run it before anything else, so a
+// request that fails a check never reaches middleware (HANDOFF-105 F11, owner
+// decision 1).
+func encodeChat(p Provider, cfg providerSpec, req Request) (chatRequest, error) {
+	req, err := prepareRequest(p, cfg, req)
+	if err != nil {
+		return chatRequest{}, err
+	}
+	body, content, err := encodeRequest(p.Name, cfg, req)
+	if err != nil {
+		return chatRequest{}, err
+	}
+	return chatRequest{req: req, body: body, content: content}, nil
 }
 
 // prepareRequest is the one setup step of a chat call (RQC-017): Text,
