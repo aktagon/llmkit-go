@@ -304,7 +304,8 @@ func (b *Image) AddMiddleware(fns ...MiddlewareFn) *Image {
 }
 
 // AspectRatio sets the output aspect ratio, such as "16:9". A ratio the model does
-// not list is rejected before send. On a video, OpenRouter, Grok and Veo send it.
+// not list is rejected before send. On a video, OpenRouter, Grok, Veo and
+// Gemini Omni send it.
 func (b *Image) AspectRatio(r string) *Image { out := *b; out.aspectRatio = r; return &out }
 func (b *Image) Background(s string) *Image  { out := *b; out.background = s; return &out }
 func (b *Image) Count(n int) *Image          { out := *b; v := n; out.count = &v; return &out }
@@ -452,6 +453,7 @@ type Video struct {
 	aspectRatio     string
 	duration        int
 	parts           []Part
+	keepStored      bool
 	lastFrame       *MediaRef
 	model           string
 	outputURI       string
@@ -473,7 +475,8 @@ func (b *Video) AddReferenceImage(mime string, data []byte) *Video {
 	return &out
 } // ordered
 // AspectRatio sets the output aspect ratio, such as "16:9". A ratio the model does
-// not list is rejected before send. On a video, OpenRouter, Grok and Veo send it.
+// not list is rejected before send. On a video, OpenRouter, Grok, Veo and
+// Gemini Omni send it.
 func (b *Video) AspectRatio(r string) *Video { out := *b; out.aspectRatio = r; return &out }
 
 // Duration sets the video length in whole seconds; 0 means the provider default.
@@ -485,6 +488,11 @@ func (b *Video) Image(mime string, data []byte) *Video {
 	out.parts = append(append([]Part{}, b.parts...), Part{Image: &MediaRef{MimeType: mime, Bytes: data}})
 	return &out
 } // ordered
+// KeepStored keeps the stored video job after Wait has the video. By default Wait
+// deletes it on providers that store jobs (Gemini Omni). The handle records
+// the choice, so a resumed Wait applies it.
+func (b *Video) KeepStored() *Video { out := *b; out.keepStored = true; return &out }
+
 // LastFrame sets the final frame a video ends on. Send it with a first frame (Image)
 // on a model that takes a last frame; otherwise it is rejected before send.
 func (b *Video) LastFrame(mime string, data []byte) *Video {
@@ -496,7 +504,8 @@ func (b *Video) Model(name string) *Video    { out := *b; out.model = name; retu
 func (b *Video) OutputURI(uri string) *Video { out := *b; out.outputURI = uri; return &out }
 func (b *Video) Raw() *Video                 { out := *b; out.raw = true; return &out }
 
-// Resolution sets the video resolution, such as "720p". OpenRouter, Grok and Veo send it.
+// Resolution sets the video resolution, such as "720p". OpenRouter, Grok, Veo and
+// Gemini Omni send it.
 // A resolution the model does not list is rejected before send.
 func (b *Video) Resolution(r string) *Video { out := *b; out.resolution = r; return &out }
 func (b *Video) Text(s string) *Video {

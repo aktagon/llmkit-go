@@ -53,7 +53,26 @@ func doPost(ctx context.Context, client *http.Client, url string, body []byte, h
 // the runtime can read provider error envelopes for scope-vs-unavailable
 // classification before deciding which sentinel to surface.
 func doGetRaw(ctx context.Context, client *http.Client, url string, headers map[string]string) ([]byte, int, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	return doBodylessRaw(ctx, client, "GET", url, headers)
+}
+
+// doDelete sends a DELETE request and returns the response body. A 4xx/5xx
+// returns the body and an APIError, like doGet.
+func doDelete(ctx context.Context, client *http.Client, url string, headers map[string]string) ([]byte, error) {
+	data, statusCode, err := doBodylessRaw(ctx, client, "DELETE", url, headers)
+	if err != nil {
+		return nil, err
+	}
+	if statusCode >= 400 {
+		return data, &APIError{StatusCode: statusCode, Message: string(data)}
+	}
+	return data, nil
+}
+
+// doBodylessRaw sends a request without a body (GET, DELETE) and returns the
+// body and status code. Transport errors are redacted (VULN-001).
+func doBodylessRaw(ctx context.Context, client *http.Client, method, url string, headers map[string]string) ([]byte, int, error) {
+	req, err := http.NewRequestWithContext(ctx, method, url, nil)
 	if err != nil {
 		return nil, 0, redactURLError(err)
 	}
