@@ -126,6 +126,10 @@ func toInternal(messages []Message) ([]msg, error) {
 			}
 			return nil, err
 		}
+		if err := checkProviderTurn(m.ProviderTurn); err != nil {
+			err.(*ValidationError).Field = fmt.Sprintf("messages[%d].%s", i, err.(*ValidationError).Field)
+			return nil, err
+		}
 		projected := msgParts{Role: m.Role, Parts: m.Parts}
 		// ProviderTurn is the same turn in the provider's own serialization.
 		// When present it supersedes the parts on the wire while the parts
@@ -402,8 +406,9 @@ func anthropicContent(parts []Part, cfg providerSpec) any {
 }
 
 // appendFlatReplayedTurn appends a captured assistant turn to a flat-envelope
-// array in whatever container that wire family expects, reporting false when
-// the payload cannot be placed so the caller reconstructs instead.
+// array in whatever container that wire family expects. toInternal has
+// checked the turn is one JSON value of its shape's kind (checkProviderTurn),
+// so every turn is placed; none is rebuilt from its parts (HANDOFF-105 F9).
 //
 // The three families disagree on what assistantTurnPath even points at,
 // which is why this cannot be one append:
@@ -414,27 +419,26 @@ func anthropicContent(parts []Part, cfg providerSpec) any {
 //     provider's
 //   - ChatResponses  "output"              -> an ITEM LIST that spreads across
 //     N input entries rather than becoming one (ADR-085 OQ-1)
-func appendFlatReplayedTurn(out []any, turn msgTurn, cfg providerSpec) ([]any, bool) {
+func appendFlatReplayedTurn(out []any, turn msgTurn, cfg providerSpec) []any {
 	raw := json.RawMessage(turn.wire)
 	switch turn.shape {
 	case providers.ChatAnthropic:
 		return append(out, map[string]any{
 			"role":    mapRole("assistant", cfg.RoleMappings),
 			"content": raw,
-		}), true
+		})
 	case providers.ChatResponsesOpenAI:
 		// Only the array container is decoded. Each item keeps its own bytes,
 		// so the reasoning item and its encrypted_content cross unaltered.
+		// checkProviderTurn has rejected a wire that is not a JSON array.
 		var items []json.RawMessage
-		if err := json.Unmarshal(raw, &items); err != nil {
-			return out, false
-		}
+		_ = json.Unmarshal(raw, &items)
 		for _, item := range items {
 			out = append(out, item)
 		}
-		return out, true
+		return out
 	default:
-		return append(out, raw), true
+		return append(out, raw)
 	}
 }
 
@@ -455,18 +459,11 @@ func buildFlatMessageArray(msgs []msg, req Request, cfg providerSpec) []any {
 	}
 
 	for _, m := range msgs {
-		turn, ok := m.(msgTurn)
-		if ok {
-			if next, ok := appendFlatReplayedTurn(out, turn, cfg); ok {
-				out = next
-				continue
-			}
+		if turn, ok := m.(msgTurn); ok {
+			out = appendFlatReplayedTurn(out, turn, cfg)
+			continue
 		}
-		parts := m
-		if ok {
-			parts = turn.fallback
-		}
-		for _, e := range flatProjectedEntries(parts.(msgParts), cfg) {
+		for _, e := range flatProjectedEntries(m.(msgParts), cfg) {
 			out = append(out, e)
 		}
 	}
