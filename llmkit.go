@@ -1079,7 +1079,7 @@ func DecodeResponse(provider, chatWireShape string, body []byte) (Response, erro
 		return resp, nil
 	}
 
-	parts, err := decodeChatParts(body, raw, provider, chatWireShape)
+	parts, err := decodeChatParts(body, provider, chatWireShape)
 	if err != nil {
 		return Response{}, err
 	}
