@@ -58,6 +58,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   file-upload metadata and the telemetry export write `<`, `>` and `&` as they
   are, the bytes the TS and Rust SDKs send. They used to go out as
   `\u003c`, `\u003e` and `\u0026`.
+- **U+2028 and U+2029 are written as `\u2028` and `\u2029` everywhere**,
+  a provider's own text included, such as a tool call's arguments or a
+  replayed turn. The escape keeps the same JSON value. Built with a Go older
+  than 1.27, or with `GOEXPERIMENT=nojsonv2`, the SDK used to send the
+  characters inside that text.
 - A tool call with an empty `Input` sends `{}` in every request, as nil and
   `null` do. It used to fail with a `ValidationError`. A provider's
   `"input": ""` in an Anthropic, Google or Bedrock reply is an argument

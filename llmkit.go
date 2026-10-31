@@ -1189,10 +1189,13 @@ func EncodeResponse(provider, chatWireShape string, resp Response) ([]byte, erro
 // json.Marshal would rewrite a "<" inside it as \u003c, so the body would not
 // carry the tokens the provider sent (HANDOFF-105 F5).
 //
-// encoding/json writes U+2028 and U+2029 in a Go string as \u2028 and \u2029,
-// even with HTML escaping off, and TS and Rust write them so too (HANDOFF-105
-// F9, owner decision 1). A json.RawMessage is compacted as it is, so a
-// provider's own text keeps its spelling.
+// U+2028 and U+2029 go out as the escapes \u2028 and \u2029 everywhere, in a
+// Go string and in a json.RawMessage (a provider's or a caller's text), as TS
+// and Rust write them (HANDOFF-105 F10, owner decision 1). The escape keeps
+// the JSON value. encoding/json escapes them in a Go string, but inside a
+// json.RawMessage Go 1.27 (json v2) escapes them and GOEXPERIMENT=nojsonv2
+// keeps them, so marshalWire escapes after encoding, for every toolchain. In
+// valid JSON either character can stand only inside a string.
 func marshalWire(v any) ([]byte, error) {
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
@@ -1200,7 +1203,9 @@ func marshalWire(v any) ([]byte, error) {
 	if err := enc.Encode(v); err != nil {
 		return nil, err
 	}
-	return bytes.TrimSuffix(buf.Bytes(), []byte("\n")), nil
+	out := bytes.TrimSuffix(buf.Bytes(), []byte("\n"))
+	out = bytes.ReplaceAll(out, []byte("\u2028"), []byte(`\u2028`))
+	return bytes.ReplaceAll(out, []byte("\u2029"), []byte(`\u2029`)), nil
 }
 
 // servedChatWireShape resolves the shape DecodeResponse reads and
