@@ -145,8 +145,9 @@ func blockArrayPaths(textCfg *providers.ResponseTextConfigDef, toolCfg *provider
 // toolCallIDSource says so (Google). The arguments are read per the
 // provider's ArgsFormat: a JSON string (json_string) or a JSON value (map),
 // whose bytes in the body are rawArgs. Absent or null arguments, and an empty
-// JSON string, leave Input nil: an empty argument set is no input, as
-// ToolCall.Input documents (HANDOFF-105 F8, owner decision 2). A block with no
+// json_string argument, leave Input nil: an empty argument set is no input, as
+// ToolCall.Input documents. A map-format JSON string "" is an argument value,
+// the text "" (HANDOFF-105 F9, owner decision 2). A block with no
 // tool name, or arguments that are not JSON, is a ValidationError on field
 // "toolCalls": it is not a call the caller can run.
 //
@@ -181,7 +182,7 @@ func readToolCall(block map[string]any, rawArgs []byte, cfg *providers.ToolCallR
 		if err := json.Compact(&compact, rawArgs); err != nil {
 			return ToolCall{}, malformedToolCall("%q: arguments at %s: %v", call.Name, cfg.ArgsPath, err)
 		}
-		if text := compact.String(); text != "null" && text != `""` {
+		if compact.String() != "null" {
 			call.Input = compact.Bytes()
 		}
 		return call, nil
