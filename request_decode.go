@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math"
 	"sort"
 	"strings"
@@ -46,10 +47,15 @@ func DecodeRequest(provider, chatWireShape string, wire WireRequest) (Request, e
 		}
 	}
 
+	// A json.Decoder reads one value and stops, so the body is one object
+	// only when the next token is the end of the input (HANDOFF-105 F11).
 	dec := json.NewDecoder(bytes.NewReader(wire.Body))
 	dec.UseNumber()
 	var body map[string]any
 	if err := dec.Decode(&body); err != nil || body == nil {
+		return Request{}, &ValidationError{Field: "body", Message: "must be a JSON object"}
+	}
+	if _, err := dec.Token(); err != io.EOF {
 		return Request{}, &ValidationError{Field: "body", Message: "must be a JSON object"}
 	}
 
