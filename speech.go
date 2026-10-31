@@ -97,10 +97,7 @@ func generateSpeech(ctx context.Context, p Provider, req SpeechRequest, opts ...
 	if sgCfg == nil {
 		return SpeechResponse{}, &ValidationError{Field: "provider", Message: p.Name + " does not support speech generation"}
 	}
-	model := findSpeechModel(sgCfg, req.Model)
-	if model == nil {
-		return SpeechResponse{}, &ValidationError{Field: "model", Message: req.Model + " is not a known speech-generation model for " + p.Name}
-	}
+	model, _ := lookupModel(sgCfg.Models, req.Model, speechModelID)
 	if err := validateSpeechModel(req, sgCfg, model); err != nil {
 		return SpeechResponse{}, err
 	}
@@ -130,7 +127,7 @@ func generateSpeech(ctx context.Context, p Provider, req SpeechRequest, opts ...
 		return SpeechResponse{}, err
 	}
 
-	resp, parseErr := parseSpeechResponse(p.Name, sgCfg.AudioEncoding, model.OutputMime, respBody)
+	resp, parseErr := parseSpeechResponse(p.Name, sgCfg.AudioEncoding, fallbackMime(sgCfg.Models, model, speechModelMime), respBody)
 	postEv := baseEvent
 	postEv.Usage = resp.Usage
 	postEv.Err = parseErr
@@ -334,18 +331,23 @@ func validateSpeechInputs(req SpeechRequest) error {
 // validateSpeechModel checks the request against what the config's body can
 // carry and the model's stated speaker and style facts (BUG-091). An unknown
 // model fact sends the request; only a stated false or a stated speaker count
-// that does not match blocks it (decision 009, HANDOFF-099).
+// that does not match blocks it (decision 009, HANDOFF-099). An unlisted
+// model (nil) has no facts, so only the config checks run (ADR-102 MPT-001).
 func validateSpeechModel(req SpeechRequest, cfg *providers.SpeechGenDef, model *providers.SpeechModelDef) error {
+	name, maxSpeakers, style := req.Model, 0, providers.SupportUnknown
+	if model != nil {
+		name, maxSpeakers, style = model.ModelID, model.MaxSpeakers, model.SupportsSpeechStyle
+	}
 	if len(req.Speakers) > 0 {
-		if !cfg.MultiSpeaker || model.MaxSpeakers == 1 {
-			return &ValidationError{Field: "speakers", Message: model.ModelID + " does not support multiple speakers"}
+		if !cfg.MultiSpeaker || maxSpeakers == 1 {
+			return &ValidationError{Field: "speakers", Message: name + " does not support multiple speakers"}
 		}
-		if model.MaxSpeakers != 0 && len(req.Speakers) != model.MaxSpeakers {
-			return &ValidationError{Field: "speakers", Message: fmt.Sprintf("exactly %d speakers are required, got %d", model.MaxSpeakers, len(req.Speakers))}
+		if maxSpeakers != 0 && len(req.Speakers) != maxSpeakers {
+			return &ValidationError{Field: "speakers", Message: fmt.Sprintf("exactly %d speakers are required, got %d", maxSpeakers, len(req.Speakers))}
 		}
 	}
-	if speechHasStyle(req) && (!cfg.CarriesSpeechStyle || model.SupportsSpeechStyle == providers.SupportNo) {
-		return &ValidationError{Field: "style", Message: model.ModelID + " does not support a speech style"}
+	if speechHasStyle(req) && (!cfg.CarriesSpeechStyle || style == providers.SupportNo) {
+		return &ValidationError{Field: "style", Message: name + " does not support a speech style"}
 	}
 	return nil
 }
@@ -371,14 +373,8 @@ func speechHasStyle(req SpeechRequest) bool {
 	return false
 }
 
-func findSpeechModel(cfg *providers.SpeechGenDef, modelID string) *providers.SpeechModelDef {
-	for i := range cfg.Models {
-		if cfg.Models[i].ModelID == modelID {
-			return &cfg.Models[i]
-		}
-	}
-	return nil
-}
+func speechModelID(m *providers.SpeechModelDef) string   { return m.ModelID }
+func speechModelMime(m *providers.SpeechModelDef) string { return m.OutputMime }
 
 // parseSpeechResponse decodes the synthesized audio per the wire shape's audio
 // response encoding (ADR-051 OAA-002). "rawBody" (OpenAI, xAI) takes the response
@@ -437,20 +433,7 @@ func parseInworldSpeechResponse(providerName string, raw map[string]any, fallbac
 // is used when present, else the model's outputMime. No audio item, or invalid
 // base64, is a decoding error (HANDOFF-036 A5).
 func parseInteractionStepsSpeechResponse(providerName string, raw map[string]any, fallbackMime string) (SpeechResponse, error) {
-	var last map[string]any
-	steps, _ := raw["steps"].([]any)
-	for _, s := range steps {
-		step, _ := s.(map[string]any)
-		if step == nil || step["type"] != "model_output" {
-			continue
-		}
-		content, _ := step["content"].([]any)
-		for _, c := range content {
-			if item, _ := c.(map[string]any); item != nil && item["type"] == "audio" {
-				last = item
-			}
-		}
-	}
+	last := lastInteractionOutputItem(raw, "audio")
 	b64, _ := last["data"].(string)
 	if b64 == "" {
 		return SpeechResponse{}, fmt.Errorf("%s speech response: no audio item in steps[model_output].content", providerName)
@@ -464,6 +447,29 @@ func parseInteractionStepsSpeechResponse(providerName string, raw map[string]any
 		mime = m
 	}
 	return SpeechResponse{Audio: AudioData{MimeType: mime, Bytes: decoded}}, nil
+}
+
+// lastInteractionOutputItem returns the last content item of type itemType
+// across the model_output steps of a Gemini Interactions API reply, or nil.
+// Steps are matched by type, never by position: a reply may hold user_input
+// and thought steps before the model_output step (speech, BUG-091; Omni video,
+// HANDOFF-109).
+func lastInteractionOutputItem(raw map[string]any, itemType string) map[string]any {
+	var last map[string]any
+	steps, _ := raw["steps"].([]any)
+	for _, s := range steps {
+		step, _ := s.(map[string]any)
+		if step == nil || step["type"] != "model_output" {
+			continue
+		}
+		content, _ := step["content"].([]any)
+		for _, c := range content {
+			if item, _ := c.(map[string]any); item != nil && item["type"] == itemType {
+				last = item
+			}
+		}
+	}
+	return last
 }
 
 // parseHexEnvelopeSpeechResponse decodes a MiniMax t2a_v2 reply (HANDOFF-094).
