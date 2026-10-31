@@ -192,19 +192,6 @@ func requestHasFiles(req Request) bool {
 	return false
 }
 
-// joinedText joins a turn's text parts with no separator, the join
-// Response.Text() uses, so an assistant turn sent to Chat Completions carries
-// the text the response did (owner decision 4, HANDOFF-105 F5).
-func joinedText(parts []Part) string {
-	var b strings.Builder
-	for _, p := range parts {
-		if p.ToolCall == nil && p.ToolResult == nil && p.Image == nil && p.File == nil {
-			b.WriteString(p.Text)
-		}
-	}
-	return b.String()
-}
-
 // plainText reports whether a turn is at most one text part, which the flat
 // envelopes send as a content string rather than a block list. A turn with
 // no parts sends "" as before ADR-100.
@@ -216,17 +203,6 @@ func plainText(parts []Part) (string, bool) {
 		return parts[0].Text, true
 	}
 	return "", false
-}
-
-// toolCalls returns a turn's tool call parts, in order.
-func toolCalls(parts []Part) []ToolCall {
-	var calls []ToolCall
-	for _, p := range parts {
-		if p.ToolCall != nil {
-			calls = append(calls, *p.ToolCall)
-		}
-	}
-	return calls
 }
 
 // dataURI renders inline image bytes as the base64 data URI OpenAI takes.
@@ -314,7 +290,7 @@ func flatToolTurn(parts []Part, cfg providerSpec) []map[string]any {
 // only tool calls carries no content key, as before ADR-100.
 func openAIAssistantTurn(parts []Part, cfg providerSpec) map[string]any {
 	entry := map[string]any{"role": mapRole("assistant", cfg.RoleMappings)}
-	calls := toolCalls(parts)
+	calls := partsToolCalls(parts)
 	if len(calls) > 0 {
 		blocks := make([]map[string]any, 0, len(calls))
 		for _, tc := range calls {
@@ -323,7 +299,7 @@ func openAIAssistantTurn(parts []Part, cfg providerSpec) map[string]any {
 		entry["tool_calls"] = blocks
 	}
 	if len(calls) == 0 || len(calls) < len(parts) {
-		entry["content"] = joinedText(parts)
+		entry["content"] = partsText(parts)
 	}
 	return entry
 }
@@ -492,7 +468,7 @@ func transformGoogleParts(body map[string]any, msgs []msg, req Request, cfg prov
 		} else {
 			parts = m.(msgParts)
 		}
-		for _, c := range toolCalls(parts.Parts) {
+		for _, c := range partsToolCalls(parts.Parts) {
 			idToName[c.ID] = c.Name
 		}
 		// A replayed Google turn is candidates[0].content verbatim — the
