@@ -39,11 +39,13 @@ func (b *Text) Prompt(ctx context.Context, finalText string) (Response, error) {
 		return Response{}, err
 	}
 
-	req, err = prepareRequest(p, cfg, req)
+	chat, err := encodeChat(p, cfg, req)
 	if err != nil {
 		return Response{}, err
 	}
-	model := req.Model
+	model, body := chat.req.Model, chat.body
+	headers := sendHeaders(p, cfg, chat.content)
+
 	baseEvent := providers.Event{
 		Op:       providers.OpLLMRequest,
 		Provider: p.Name,
@@ -53,16 +55,6 @@ func (b *Text) Prompt(ctx context.Context, finalText string) (Response, error) {
 	if err := firePre(ctx, o.middleware, baseEvent); err != nil {
 		return Response{}, err
 	}
-
-	body, content, err := encodeRequest(p.Name, cfg, req)
-	if err != nil {
-		postEv := baseEvent
-		postEv.Err = err
-		postEv.Duration = time.Since(start)
-		firePost(ctx, o.middleware, postEv)
-		return Response{}, err
-	}
-	headers := sendHeaders(p, cfg, content)
 
 	if o.caching {
 		if err := applyCaching(ctx, body, p, model, o, cfg); err != nil {
