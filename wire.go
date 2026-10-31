@@ -169,14 +169,31 @@ type wireFile struct {
 	Name     string `json:"name"`
 }
 
-// wireToolCall.Input is omitted when nil, matching the absent-input
-// semantic. A caller-built json.RawMessage("null") has len 4 and is
-// emitted as the literal null, so round-trip is lossless for every
-// non-nil RawMessage input.
+// wireToolCall is a saved tool call as Load reads it. An absent input key
+// loads as a nil Input.
 type wireToolCall struct {
 	ID    string          `json:"id"`
 	Name  string          `json:"name"`
 	Input json.RawMessage `json:"input,omitempty"`
+}
+
+// savedToolCall is a tool call as Save writes it. Only a nil Input is
+// absent. Any other Input is written as its text, so text that is not JSON,
+// the empty text included, is an error, as in TS and Rust (HANDOFF-105 F9).
+// omitempty on a json.RawMessage would also drop a non-nil empty text, so
+// the field is a pointer, which omitempty drops only when nil.
+type savedToolCall struct {
+	ID    string           `json:"id"`
+	Name  string           `json:"name"`
+	Input *json.RawMessage `json:"input,omitempty"`
+}
+
+func toSavedToolCall(tc ToolCall) savedToolCall {
+	out := savedToolCall{ID: tc.ID, Name: tc.Name}
+	if tc.Input != nil {
+		out.Input = &tc.Input
+	}
+	return out
 }
 
 type wireToolRes struct {
@@ -194,7 +211,7 @@ func (w wirePart) MarshalJSON() ([]byte, error) {
 	case p.File != nil:
 		key, value = "file", wireFile(*p.File)
 	case p.ToolCall != nil:
-		key, value = "tool_call", wireToolCall(*p.ToolCall)
+		key, value = "tool_call", toSavedToolCall(*p.ToolCall)
 	case p.ToolResult != nil:
 		key, value = "tool_result", wireToolRes(*p.ToolResult)
 	case p.Lyrics != "":
