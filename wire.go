@@ -116,8 +116,13 @@ func LoadHistory(data []byte) ([]Message, error) {
 		return nil, fmt.Errorf("%w: messages is not an array of message objects: %v", ErrMalformedWire, err)
 	}
 	out := make([]Message, 0, len(wire))
-	for _, w := range wire {
-		out = append(out, w.toPublic())
+	for i, w := range wire {
+		m := w.toPublic()
+		if err := checkProviderTurn(m.ProviderTurn); err != nil {
+			err.(*ValidationError).Field = fmt.Sprintf("messages[%d].%s", i, err.(*ValidationError).Field)
+			return nil, err
+		}
+		out = append(out, m)
 	}
 	return out, nil
 }
