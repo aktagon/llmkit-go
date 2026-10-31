@@ -558,17 +558,9 @@ func resolveOptionKey(provider, model, chatWireShape string, param providers.Opt
 // provider's default. The model is Request.Model, else the provider's
 // default.
 func EncodeRequest(provider, chatWireShape string, req Request) (WireRequest, error) {
-	cfg, ok := providerSpecs()[provider]
-	if !ok {
-		return WireRequest{}, &ValidationError{Field: "provider", Message: "unknown: " + provider}
-	}
-	if chatWireShape != "" {
-		if cfg, ok = withWireShape(cfg, chatWireShape); !ok {
-			return WireRequest{}, &ValidationError{
-				Field:   "chatWireShape",
-				Message: fmt.Sprintf("provider %q does not support wire shape %q", provider, chatWireShape),
-			}
-		}
+	cfg, err := servedChatSpec(provider, chatWireShape)
+	if err != nil {
+		return WireRequest{}, err
 	}
 	chat, err := encodeChat(Provider{Name: provider}, cfg, req)
 	if err != nil {
@@ -1228,18 +1220,28 @@ func marshalWire(v any) ([]byte, error) {
 // all: writing provider paths into another family's body produces a body
 // neither family reads.
 func servedChatWireShape(provider, chatWireShape string) (string, error) {
+	cfg, err := servedChatSpec(provider, chatWireShape)
+	return cfg.ChatWireShape, err
+}
+
+// servedChatSpec is the one served-shape check (servedChatWireShape):
+// EncodeRequest, DecodeResponse and EncodeResponse all run it (HANDOFF-105
+// F11). It returns the provider's spec with the shape's endpoint and wire
+// shape.
+func servedChatSpec(provider, chatWireShape string) (providerSpec, error) {
 	cfg, ok := providerSpecs()[provider]
 	if !ok {
-		return "", &ValidationError{Field: "provider", Message: "unknown: " + provider}
+		return providerSpec{}, &ValidationError{Field: "provider", Message: "unknown: " + provider}
 	}
 	shape := resolveChatWireShape(provider, chatWireShape)
-	if _, served := withWireShape(cfg, shape); shape == "" || !served {
-		return "", &ValidationError{
+	served, ok := withWireShape(cfg, shape)
+	if shape == "" || !ok {
+		return providerSpec{}, &ValidationError{
 			Field:   "chatWireShape",
 			Message: fmt.Sprintf("provider %q does not serve chat wire shape %q", provider, chatWireShape),
 		}
 	}
-	return shape, nil
+	return served, nil
 }
 
 // encodeFixedValues writes the fields every body of the shape carries with
