@@ -44,20 +44,18 @@ var ErrMalformedWire = errors.New("llmkit: malformed wire document")
 // MSG-012). The output carries a `_v` key (uint32 matching
 // WireSchemaVersion) and a `messages` array of {role, parts}. Each part
 // is a JSON object with exactly one key, its variant name; media bytes
-// are inline standard base64 (MSG-013). A part that sets no kind or
-// two is a ValidationError, and so is a tool call whose non-nil Input is not
-// JSON, the empty text included (HANDOFF-105 F10, as in TS and Rust).
+// are inline standard base64 (MSG-013). A part that sets no kind, an empty
+// text part included, or two is the ValidationError a request gives it
+// (partKindOf, HANDOFF-105 F11), and so is a tool call whose non-nil Input is
+// not JSON, the empty text included (HANDOFF-105 F10, as in TS and Rust).
 func SaveHistory(msgs []Message) ([]byte, error) {
 	wire := make([]wireMessage, 0, len(msgs))
 	for i, m := range msgs {
 		parts := make([]wirePart, 0, len(m.Parts))
 		for j, p := range m.Parts {
 			field := fmt.Sprintf("messages[%d].parts[%d]", i, j)
-			if kinds := p.partKinds(); len(kinds) != 1 {
-				return nil, &ValidationError{
-					Field:   field,
-					Message: fmt.Sprintf("sets %d kinds; a part sets exactly one", len(kinds)),
-				}
+			if _, err := partKindOf(p, field); err != nil {
+				return nil, err
 			}
 			if tc := p.ToolCall; tc != nil && tc.Input != nil && !json.Valid(tc.Input) {
 				return nil, &ValidationError{
