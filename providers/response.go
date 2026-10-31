@@ -2,6 +2,8 @@
 
 package providers
 
+import "encoding/json"
+
 // ResponseTextPath returns the JSON path to extract text from a provider response.
 func ResponseTextPath(provider string) string {
 	switch ProviderName(provider) {
@@ -127,6 +129,278 @@ func ResponseTextConfig(chatWireShape string) *ResponseTextConfigDef {
 			MarkerPath:  "text",
 			MarkerValue: "",
 			ValuePath:   "text",
+		}
+	default:
+		return nil
+	}
+}
+
+// ToolCallResponseConfigDef locates the tool calls inside a chat response of one
+// wire family. DecodeResponse reads them and EncodeResponse writes them through
+// it, so the two legs cannot disagree (ADR-076 SYM-005, HANDOFF-105 F4).
+//
+// Marker semantics are ResponseTextConfigDef's:
+//
+//	MarkerPath == ""                     every element is a tool call
+//	MarkerPath set, MarkerValue == ""     the element is a tool call if the key is PRESENT
+//	MarkerPath and MarkerValue both set   the element is a tool call if the key EQUALS the value
+//
+// IDPath is empty where the family carries no id on the wire (Google): the id is
+// derived from the tool name on read, and nothing is written.
+type ToolCallResponseConfigDef struct {
+	BlocksPath  string
+	MarkerPath  string
+	MarkerValue string
+	IDPath      string
+	NamePath    string
+	ArgsPath    string
+}
+
+// ToolCallResponseConfig returns the tool-call locator for a chat wire shape, or
+// nil when the shape's tool-call response shape is not modelled.
+func ToolCallResponseConfig(chatWireShape string) *ToolCallResponseConfigDef {
+	switch chatWireShape {
+	case ChatAnthropic:
+		return &ToolCallResponseConfigDef{
+			BlocksPath:  "content",
+			MarkerPath:  "type",
+			MarkerValue: "tool_use",
+			IDPath:      "id",
+			NamePath:    "name",
+			ArgsPath:    "input",
+		}
+	case ChatBedrock:
+		return &ToolCallResponseConfigDef{
+			BlocksPath:  "output.message.content",
+			MarkerPath:  "toolUse",
+			MarkerValue: "",
+			IDPath:      "toolUse.toolUseId",
+			NamePath:    "toolUse.name",
+			ArgsPath:    "toolUse.input",
+		}
+	case ChatGoogle:
+		return &ToolCallResponseConfigDef{
+			BlocksPath:  "candidates[0].content.parts",
+			MarkerPath:  "functionCall",
+			MarkerValue: "",
+			IDPath:      "",
+			NamePath:    "functionCall.name",
+			ArgsPath:    "functionCall.args",
+		}
+	case ChatOpenAI:
+		return &ToolCallResponseConfigDef{
+			BlocksPath:  "choices[0].message.tool_calls",
+			MarkerPath:  "type",
+			MarkerValue: "function",
+			IDPath:      "id",
+			NamePath:    "function.name",
+			ArgsPath:    "function.arguments",
+		}
+	default:
+		return nil
+	}
+}
+
+// WireShapeResponseIDPath returns where a chat wire shape carries the response
+// id (ADR-099 CRF-013). The runtime reads it for a call on a shape other than
+// the provider's default; the default shape reaches ProviderSpec.ResponseIDPath.
+func WireShapeResponseIDPath(chatWireShape string) string {
+	switch chatWireShape {
+	case ChatAnthropic:
+		return "id"
+	case ChatBedrock:
+		return ""
+	case ChatGoogle:
+		return "responseId"
+	case ChatOpenAI:
+		return "id"
+	case ChatResponsesOpenAI:
+		return "id"
+	default:
+		return ""
+	}
+}
+
+// WireShapeResponseModelPath returns where a chat wire shape carries the
+// reported model, read like WireShapeResponseIDPath.
+func WireShapeResponseModelPath(chatWireShape string) string {
+	switch chatWireShape {
+	case ChatAnthropic:
+		return "model"
+	case ChatBedrock:
+		return ""
+	case ChatGoogle:
+		return "modelVersion"
+	case ChatOpenAI:
+		return "model"
+	case ChatResponsesOpenAI:
+		return "model"
+	default:
+		return ""
+	}
+}
+
+// FinishReason is why a chat response stopped, in one vocabulary shared by
+// every provider (ADR-099 CRF-001). Response.FinishReason holds one; the
+// provider's own string is in Response.ProviderFinishReason.
+type FinishReason string
+
+// Canonical finish reasons.
+const (
+	// FinishContentFilter: The provider withheld or cut the output because its content filter flagged it.
+	FinishContentFilter FinishReason = "content_filter"
+	// FinishLength: The response reached the output-token limit set in the request.
+	FinishLength FinishReason = "length"
+	// FinishOther: Any wire value with no entry in the table (CRF-011). The provider's string is kept verbatim.
+	FinishOther FinishReason = "other"
+	// FinishStop: The model reached a natural stop point or a caller-provided stop sequence.
+	FinishStop FinishReason = "stop"
+	// FinishToolCalls: The model stopped to call one or more tools.
+	FinishToolCalls FinishReason = "tool_calls"
+)
+
+// FinishReasonEntry is one row of a chat wire shape's finish-reason table
+// (ADR-099 CRF-004): a provider wire value and the canonical value it means.
+// DetailPath and DetailValue are set only when the wire value fuses two
+// canonical values; the entry then matches only when the field at DetailPath
+// holds DetailValue (CRF-007). Preferred marks the one entry per canonical
+// value that encoding writes (CRF-005).
+type FinishReasonEntry struct {
+	WireValue   string
+	DetailPath  string
+	DetailValue string
+	Canonical   FinishReason
+	Preferred   bool
+}
+
+// WireShapeFinishReasons returns the finish-reason table of a chat wire
+// shape, or nil when the shape declares none. A wire value with no entry is
+// FinishOther (CRF-011).
+func WireShapeFinishReasons(chatWireShape string) []FinishReasonEntry {
+	switch chatWireShape {
+	case ChatAnthropic:
+		return []FinishReasonEntry{
+			{WireValue: "end_turn", Canonical: FinishStop, Preferred: true},
+			{WireValue: "max_tokens", Canonical: FinishLength, Preferred: true},
+			{WireValue: "refusal", Canonical: FinishContentFilter, Preferred: true},
+			{WireValue: "stop_sequence", Canonical: FinishStop},
+			{WireValue: "tool_use", Canonical: FinishToolCalls, Preferred: true},
+		}
+	case ChatBedrock:
+		return []FinishReasonEntry{
+			{WireValue: "end_turn", Canonical: FinishStop, Preferred: true},
+			{WireValue: "max_tokens", Canonical: FinishLength, Preferred: true},
+			{WireValue: "stop_sequence", Canonical: FinishStop},
+			{WireValue: "tool_use", Canonical: FinishToolCalls, Preferred: true},
+		}
+	case ChatGoogle:
+		return []FinishReasonEntry{
+			{WireValue: "BLOCKLIST", Canonical: FinishContentFilter},
+			{WireValue: "MAX_TOKENS", Canonical: FinishLength, Preferred: true},
+			{WireValue: "PROHIBITED_CONTENT", Canonical: FinishContentFilter},
+			{WireValue: "RECITATION", Canonical: FinishContentFilter},
+			{WireValue: "SAFETY", Canonical: FinishContentFilter, Preferred: true},
+			{WireValue: "SPII", Canonical: FinishContentFilter},
+			{WireValue: "STOP", Canonical: FinishStop, Preferred: true},
+		}
+	case ChatOpenAI:
+		return []FinishReasonEntry{
+			{WireValue: "content_filter", Canonical: FinishContentFilter, Preferred: true},
+			{WireValue: "function_call", Canonical: FinishToolCalls},
+			{WireValue: "length", Canonical: FinishLength, Preferred: true},
+			{WireValue: "stop", Canonical: FinishStop, Preferred: true},
+			{WireValue: "tool_calls", Canonical: FinishToolCalls, Preferred: true},
+		}
+	case ChatResponsesOpenAI:
+		return []FinishReasonEntry{
+			{WireValue: "completed", Canonical: FinishStop, Preferred: true},
+			{WireValue: "incomplete", DetailPath: "incomplete_details.reason", DetailValue: "content_filter", Canonical: FinishContentFilter, Preferred: true},
+			{WireValue: "incomplete", DetailPath: "incomplete_details.reason", DetailValue: "max_output_tokens", Canonical: FinishLength, Preferred: true},
+		}
+	default:
+		return nil
+	}
+}
+
+// WireShapeFinishReasonFallback returns the wire value EncodeResponse writes
+// for a canonical finish reason the shape's table has no entry for (owner
+// decision 1, HANDOFF-105 F1), or "" when the shape declares none for it. A
+// fallback is one of the shape's own documented values; decode never reads
+// this table.
+func WireShapeFinishReasonFallback(chatWireShape string, reason FinishReason) string {
+	switch chatWireShape {
+	case ChatAnthropic:
+		switch reason {
+		case FinishOther:
+			return "end_turn"
+		}
+	case ChatBedrock:
+		switch reason {
+		case FinishContentFilter:
+			return "end_turn"
+		case FinishOther:
+			return "end_turn"
+		}
+	case ChatGoogle:
+		switch reason {
+		case FinishOther:
+			return "OTHER"
+		case FinishToolCalls:
+			return "STOP"
+		}
+	case ChatOpenAI:
+		switch reason {
+		case FinishOther:
+			return "stop"
+		}
+	case ChatResponsesOpenAI:
+		switch reason {
+		case FinishOther:
+			return "completed"
+		case FinishToolCalls:
+			return "completed"
+		}
+	}
+	return ""
+}
+
+// WireShapeResponseCreatedPath returns where a one-shot body of a chat wire
+// shape carries its creation time in Unix seconds, or "" when the shape's
+// bodies carry none (owner decision 4, HANDOFF-105 F1).
+func WireShapeResponseCreatedPath(chatWireShape string) string {
+	switch chatWireShape {
+	case ChatAnthropic:
+		return ""
+	case ChatBedrock:
+		return ""
+	case ChatGoogle:
+		return ""
+	case ChatOpenAI:
+		return "created"
+	case ChatResponsesOpenAI:
+		return "created_at"
+	default:
+		return ""
+	}
+}
+
+// FixedValue is a field every response body of a chat wire shape carries with
+// the same value (shapeFixedValue, owner decision 4). Value is the field's
+// JSON: a string or a number.
+type FixedValue struct {
+	Path  string
+	Value json.RawMessage
+}
+
+// WireShapeFixedValues returns the fixed values EncodeResponse writes for a
+// chat wire shape, sorted by path; nil when the shape declares none.
+func WireShapeFixedValues(chatWireShape string) []FixedValue {
+	switch chatWireShape {
+	case ChatOpenAI:
+		return []FixedValue{
+			{Path: "choices[0].index", Value: json.RawMessage(`0`)},
+			{Path: "choices[0].message.role", Value: json.RawMessage(`"assistant"`)},
+			{Path: "object", Value: json.RawMessage(`"chat.completion"`)},
 		}
 	default:
 		return nil

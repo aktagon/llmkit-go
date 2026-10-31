@@ -55,7 +55,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println(resp.Text)
+	fmt.Println(resp.Text())
 	fmt.Println("cache read:", resp.Usage.CacheRead)
 	fmt.Println("cache write:", resp.Usage.CacheWrite)
 }

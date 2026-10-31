@@ -159,6 +159,7 @@ func (c *Client) Timeout(d time.Duration) *Client {
 type Text struct {
 	client           *Client
 	middleware       []MiddlewareFn
+	cacheTTL         *time.Duration
 	caching          bool
 	files            []File
 	frequencyPenalty *float64
@@ -169,7 +170,8 @@ type Text struct {
 	presencePenalty  *float64
 	protocol         string
 	raw              bool
-	reasoningEffort  string
+	reasoningEffort  *string
+	tools            []ToolDefinition
 	safetySettings   []SafetySetting
 	schema           string
 	seed             *int64
@@ -186,7 +188,14 @@ func (b *Text) AddMiddleware(fns ...MiddlewareFn) *Text {
 	out.middleware = append(append([]MiddlewareFn{}, b.middleware...), fns...)
 	return &out
 }
-func (b *Text) Caching() *Text { out := *b; out.caching = true; return &out }
+
+// CacheTTL sets how long the cache that Caching creates for this call lives.
+// Only resource caching (Google) creates a cache and reads it; without it
+// the provider's default TTL applies. Other providers ignore it. The TTL
+// is a positive whole number of seconds; any other value fails the call
+// with a validation error on the TTL.
+func (b *Text) CacheTTL(d time.Duration) *Text { out := *b; v := d; out.cacheTTL = &v; return &out }
+func (b *Text) Caching() *Text                 { out := *b; out.caching = true; return &out }
 func (b *Text) File(id string) *Text {
 	out := *b
 	out.files = append(append([]File{}, b.files...), File{ID: id})
@@ -229,9 +238,18 @@ func (b *Text) Protocol(name string) *Text { out := *b; out.protocol = name; ret
 func (b *Text) Raw() *Text                 { out := *b; out.raw = true; return &out }
 func (b *Text) ReasoningEffort(level string) *Text {
 	out := *b
-	out.reasoningEffort = level
+	v := level
+	out.reasoningEffort = &v
 	return &out
 }
+
+// Request replaces this call's request with req: its model, system prompt,
+// messages, tools, schema and options. It drops what the chain set
+// before it, the text, image and file parts included; a chain method
+// after it changes its own field. The prompt text, when not empty, is
+// a final user turn after req's messages. The send settings (caching
+// and its TTL, middleware, raw) and the protocol are kept.
+func (b *Text) Request(req Request) *Text { out := *b; out.setRequest(req); return &out }
 func (b *Text) SafetySettings(s []SafetySetting) *Text {
 	out := *b
 	out.safetySettings = s
@@ -505,6 +523,7 @@ type Agent struct {
 	client            *Client
 	middleware        []MiddlewareFn
 	tools             []Tool
+	cacheTTL          *time.Duration
 	caching           bool
 	frequencyPenalty  *float64
 	history           []Message
@@ -513,7 +532,7 @@ type Agent struct {
 	model             string
 	presencePenalty   *float64
 	raw               bool
-	reasoningEffort   string
+	reasoningEffort   *string
 	safetySettings    []SafetySetting
 	seed              *int64
 	stopSequences     []string
@@ -534,6 +553,19 @@ func (b *Agent) AddMiddleware(fns ...MiddlewareFn) *Agent {
 func (b *Agent) AddTool(t Tool) *Agent {
 	out := *b
 	out.tools = append(append([]Tool{}, b.tools...), t)
+	out.state = nil
+	return &out
+}
+
+// CacheTTL sets how long the cache that Caching creates for this call lives.
+// Only resource caching (Google) creates a cache and reads it; without it
+// the provider's default TTL applies. Other providers ignore it. The TTL
+// is a positive whole number of seconds; any other value fails the call
+// with a validation error on the TTL.
+func (b *Agent) CacheTTL(d time.Duration) *Agent {
+	out := *b
+	v := d
+	out.cacheTTL = &v
 	out.state = nil
 	return &out
 }
@@ -585,7 +617,8 @@ func (b *Agent) PresencePenalty(v float64) *Agent {
 func (b *Agent) Raw() *Agent { out := *b; out.raw = true; out.state = nil; return &out }
 func (b *Agent) ReasoningEffort(level string) *Agent {
 	out := *b
-	out.reasoningEffort = level
+	v := level
+	out.reasoningEffort = &v
 	out.state = nil
 	return &out
 }

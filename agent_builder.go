@@ -2,12 +2,11 @@ package llmkit
 
 import (
 	"context"
-	"encoding/json"
 )
 
 // agentState holds the live conversation handle for a *Agent.
-// Agent owns the history (private internalMessage slice that
-// includes tool-call/result bookkeeping); the only way to preserve
+// Agent owns the history (a private []Message that includes the
+// tool-call and tool-result turns); the only way to preserve
 // state across typed-builder Prompt calls is to keep the same
 // *Agent instance. Chain methods on *Agent nullify this field
 //
@@ -24,7 +23,9 @@ type agentState struct {
 // new clone with empty state.
 func (b *Agent) Prompt(ctx context.Context, msg string) (Response, error) {
 	if b.state == nil {
-		b.initAgent()
+		if err := b.initAgent(); err != nil {
+			return Response{}, err
+		}
 	}
 	return b.state.agent.chat(ctx, msg)
 }
@@ -66,181 +67,82 @@ func (b *Agent) Load(data []byte) (*Agent, error) {
 // []Message slice (ADR-020 HIST-004). Empty when the builder has no
 // runtime state — i.e. before the first Prompt call.
 //
-// Both the outer slice and each Message.ToolCalls slice are fresh
+// Both the outer slice and each Message.Parts slice are fresh
 // allocations; mutating them does NOT affect the agent's runtime
-// state. The narrow aliasing risk is ToolCall.Input, which is a
-// json.RawMessage carrying a reference to the JSON bytes from the
-// internal map[string]any encoding — replacing it on a returned
-// Message is safe, but in-place byte mutation would corrupt the
-// agent. Treat the inner Input bytes as read-only per llmkit's
+// state. The parts' payloads (a ToolCall's Input bytes, a MediaRef)
+// are shared: treat them as read-only per llmkit's
 // user-misuse-not-library's-problem posture.
 func (b *Agent) Messages() []Message {
 	if b.state == nil || b.state.agent == nil {
 		return nil
 	}
-	hist := b.state.agent.history
-	out := make([]Message, 0, len(hist))
-	for _, m := range hist {
-		out = append(out, toPublicMessage(m))
-	}
-	return out
+	return copyMessages(b.state.agent.history)
 }
 
-// toPublicMessage projects an internalMessage into the public Message
-// shape (ADR-020 HIST-004). The internal `tool_result` role is
-// flattened back to `tool` on the public side so the wire shape
-//
-func toPublicMessage(m internalMessage) Message {
-	role := m.role
-	if role == "tool_result" {
-		role = "tool"
+// UnsavedTurns returns the turns of the last Prompt call when it failed, in
+// order: the user turn, then each assistant turn and tool result the call made
+// (HANDOFF-105 F5, owner decision 2). A failed call leaves the history as it
+// was, so these turns are in no history. Empty after a call that succeeded,
+// after a call rejected before it started, and before the first Prompt call.
+// The copies follow the Messages rules.
+func (b *Agent) UnsavedTurns() []Message {
+	if b.state == nil || b.state.agent == nil {
+		return nil
 	}
-	out := Message{
-		Role:      role,
-		Content:   m.content,
-		ToolCalls: make([]ToolCall, 0, len(m.toolCalls)),
-	}
-	for _, tc := range m.toolCalls {
-		out.ToolCalls = append(out.ToolCalls, ToolCall{
-			ID:    tc.id,
-			Name:  tc.name,
-			Input: encodeToolInput(tc.input),
-		})
-	}
-	if m.toolResult != nil {
-		out.ToolResult = &ToolResult{
-			ToolUseID: m.toolResult.toolUseID,
-			Content:   m.toolResult.content,
-		}
-	}
-	// ADR-085: the captured turn crosses to the public shape too. Without
-	// this, Messages() hands back a turn the SDK still holds internally but
-	// the caller cannot see, and Save() then serializes that blind copy —
-	// retention would work only for the lifetime of one live *Agent.
-	out.ProviderTurn = m.providerTurn
-	return out
+	return copyMessages(b.state.agent.unsaved)
 }
 
-// encodeToolInput converts the agent's map[string]any tool-call input
-// into the public ToolCall.Input field's json.RawMessage shape. nil
-// surfaces as a nil RawMessage so the wire layer emits JSON null;
-// any marshal error is treated identically (the input shape is
-// caller-controlled but constrained to JSON-able values upstream).
-func encodeToolInput(input map[string]any) json.RawMessage {
-	if input == nil {
-		return nil
+// copyMessages copies the outer slice and each Parts slice.
+func copyMessages(in []Message) []Message {
+	out := make([]Message, 0, len(in))
+	for _, m := range in {
+		m.Parts = append([]Part(nil), m.Parts...)
+		out = append(out, m)
 	}
-	b, err := json.Marshal(input)
-	if err != nil {
-		return nil
-	}
-	return b
+	return out
 }
 
 // initAgent constructs the underlying *Agent from the chained
-// config. Mirrors the legacy newLegacyAgent + SetSystem + AddTool sequence.
+// config: the Request each turn sends, and the send options.
 // Lazy because the agent is only needed once Prompt is called; chain
 // methods that fork a clone leave state nil so initAgent runs again
-// on the fork.
-func (b *Agent) initAgent() {
-	var opts []Option
-	if b.maxTokens != nil {
-		opts = append(opts, WithMaxTokens(*b.maxTokens))
+// on the fork. A TTL that is not positive whole seconds is a
+// ValidationError (checkCacheTTL), and leaves state nil.
+func (b *Agent) initAgent() error {
+	if err := checkCacheTTL(b.cacheTTL); err != nil {
+		return err
 	}
-	if b.temperature != nil {
-		opts = append(opts, WithTemperature(*b.temperature))
-	}
-	if b.topP != nil {
-		opts = append(opts, WithTopP(*b.topP))
-	}
-	if b.topK != nil {
-		opts = append(opts, WithTopK(*b.topK))
-	}
-	if b.frequencyPenalty != nil {
-		opts = append(opts, WithFrequencyPenalty(*b.frequencyPenalty))
-	}
-	if b.presencePenalty != nil {
-		opts = append(opts, WithPresencePenalty(*b.presencePenalty))
-	}
-	if b.seed != nil {
-		opts = append(opts, WithSeed(*b.seed))
-	}
-	if len(b.stopSequences) > 0 {
-		opts = append(opts, WithStopSequences(b.stopSequences...))
-	}
-	if b.thinkingBudget != nil {
-		opts = append(opts, WithThinkingBudget(*b.thinkingBudget))
-	}
-	if b.reasoningEffort != "" {
-		opts = append(opts, WithReasoningEffort(b.reasoningEffort))
-	}
+	o := defaultOptions()
 	if b.maxToolIterations != nil {
-		opts = append(opts, WithMaxToolIterations(*b.maxToolIterations))
+		o.maxToolIterations = *b.maxToolIterations
 	}
-	if b.caching {
-		opts = append(opts, WithCaching())
-	}
-	if len(b.middleware) > 0 {
-		opts = append(opts, WithMiddleware(b.middleware...))
-	}
-	if len(b.safetySettings) > 0 {
-		opts = append(opts, WithSafetySettings(b.safetySettings...))
-	}
-	if b.raw {
-		opts = append(opts, withRaw())
-	}
+	o.caching = b.caching
+	o.cacheTTL = b.cacheTTL
+	o.middleware = b.middleware
+	o.raw = b.raw
 
-	provider := b.client.provider.toProvider(b.model)
-	a := newLegacyAgent(provider, opts...)
-	if b.system != "" {
-		a.setSystem(b.system)
+	req := Request{
+		Model:            b.model,
+		System:           b.system,
+		Tools:            toolDefinitions(b.tools),
+		MaxTokens:        b.maxTokens,
+		Temperature:      b.temperature,
+		TopP:             b.topP,
+		TopK:             b.topK,
+		Stop:             b.stopSequences,
+		Seed:             b.seed,
+		FrequencyPenalty: b.frequencyPenalty,
+		PresencePenalty:  b.presencePenalty,
+		ReasoningEffort:  b.reasoningEffort,
+		ThinkingBudget:   b.thinkingBudget,
+		SafetySettings:   b.safetySettings,
 	}
-	for _, t := range b.tools {
-		a.addTool(t)
-	}
-	// ADR-020 HIST-007: seed the legacy agent's internal history from the
-	// chain's typed Message list. Mechanical field copy with role
-	// normalization ("tool" → "tool_result" matching the internal
-	// discriminator) and a json.Marshal pass-through for tool inputs.
-	for _, m := range b.history {
-		role := m.Role
-		if role == "tool" {
-			role = "tool_result"
-		}
-		im := internalMessage{role: role, content: m.Content}
-		for _, tc := range m.ToolCalls {
-			im.toolCalls = append(im.toolCalls, toolCall{
-				id:    tc.ID,
-				name:  tc.Name,
-				input: decodeToolInput(tc.Input),
-			})
-		}
-		if m.ToolResult != nil {
-			im.toolResult = &toolResult{
-				toolUseID: m.ToolResult.ToolUseID,
-				content:   m.ToolResult.Content,
-			}
-		}
-		// The return leg of toPublicMessage. A turn restored from Load()
-		// carries its payload back into the loop, which is what makes
-		// cross-process resume (ADR-023) replay rather than reconstruct.
-		im.providerTurn = m.ProviderTurn
-		a.history = append(a.history, im)
-	}
+	a := newLegacyAgent(b.client.provider.toProvider(""), req, b.tools, o)
+	// ADR-020 HIST-007: seed the agent's history from the chain's Message
+	// list. A turn restored from Load() carries its ProviderTurn back into
+	// the loop, which is what makes cross-process resume (ADR-023) replay
+	// rather than reconstruct.
+	a.history = copyMessages(b.history)
 	b.state = &agentState{agent: a}
-}
-
-// decodeToolInput is the inverse of encodeToolInput: parse a public
-// json.RawMessage back into the internal map[string]any shape the
-// agent's wire transforms expect. Returns nil for empty/null/missing
-// inputs (the internal shape uses nil as the absent sentinel).
-func decodeToolInput(raw json.RawMessage) map[string]any {
-	if len(raw) == 0 || string(raw) == "null" {
-		return nil
-	}
-	out := map[string]any{}
-	if err := json.Unmarshal(raw, &out); err != nil {
-		return nil
-	}
-	return out
+	return nil
 }

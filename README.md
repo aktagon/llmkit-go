@@ -24,7 +24,7 @@ go get github.com/aktagon/llmkit-go/v3
 ```go
 c := llmkit.New("anthropic", os.Getenv("ANTHROPIC_API_KEY"))
 resp, err := c.Text.System("You are helpful").Prompt(ctx, "Hello")
-fmt.Println(resp.Text)
+fmt.Println(resp.Text())
 ```
 
 `c.Text`, `c.Image`, `c.Music`, `c.Video`, `c.Agent`, and `c.Upload` are
@@ -99,7 +99,7 @@ resp, err := c.Text.
     Temperature(0.7).
     Prompt(ctx, "What is 2+2?")
 
-fmt.Println(resp.Text) // "4"
+fmt.Println(resp.Text()) // "4"
 
 // Every Usage dimension is optional. nil means the provider did not report
 // the value, which is NOT the same as reporting zero: a provider that says it
@@ -136,15 +136,16 @@ for chunk, err := range stream.Chunks() {
 }
 fmt.Println()
 final := stream.Response()
-// Token counts and the finish reason are optional: nil means the provider
-// did not report the value, which is not the same as reporting zero.
+// Token counts are optional: nil means the provider did not report the
+// value, which is not the same as reporting zero. The finish reason is one
+// of five canonical values, empty when the provider reported none.
 if final.Usage.Input != nil && final.Usage.Output != nil {
 	fmt.Printf("input=%d output=%d\n", *final.Usage.Input, *final.Usage.Output)
 } else {
 	fmt.Println("this provider did not report token counts")
 }
-if final.FinishReason != nil {
-	fmt.Println("finish_reason:", *final.FinishReason)
+if final.FinishReason != "" {
+	fmt.Println("finish_reason:", final.FinishReason)
 }
 ```
 
@@ -158,7 +159,7 @@ Pass a JSON schema to get typed responses:
 resp, err := c.Text.
     Schema(`{"type":"object","properties":{"color":{"type":"string"}}}`).
     Prompt(ctx, "The sky is blue")
-// resp.Text == `{"color":"blue"}`
+// resp.Text() == `{"color":"blue"}`
 ```
 
 ### Agent — tool loop
@@ -169,6 +170,12 @@ accumulate conversation history. Any chain method (`System`, `AddTool`,
 `Temperature`, ...) returns a forked clone with empty state.
 `agent.Reset()` clears history without dropping the configured tools
 or other chain state.
+
+A `Prompt` call that fails leaves the history as it was and returns the
+error that stopped it, such as an `*APIError`. `agent.UnsavedTurns()`
+returns the turns that call made, tool results included. The next
+`Prompt` call clears them when it starts, and so do `agent.Reset()` and
+a chain method, whose clone starts with none.
 
 ```go
 agent := c.Agent.
@@ -439,6 +446,23 @@ c.Text.
 exposes `History(...Message)` for multi-turn replay; `*Agent` retains
 history internally across `Prompt` calls instead.
 
+A `Message` is a role plus an ordered list of parts. A user turn takes
+text, image and file parts; an assistant turn takes text and tool call
+parts; a tool turn takes tool result parts. Any turn can carry an image:
+
+```go
+resp, err := c.Text.History(
+    llmkit.Message{Role: "user", Parts: []llmkit.Part{
+        {Text: "What is in this image?"},
+        {Image: &llmkit.MediaRef{MimeType: "image/png", Bytes: png}},
+    }},
+    llmkit.Message{Role: "assistant", Parts: []llmkit.Part{{Text: "A single white pixel."}}},
+).Prompt(ctx, "What color is that pixel?")
+```
+
+A tool call part's `Input` is the argument JSON as the provider sent it,
+and the request and `EncodeResponse` send that text back as it is.
+
 | Option            | anthropic | openai | google | grok |
 | ----------------- | --------- | ------ | ------ | ---- |
 | temperature       | x         | x      | x      | x    |
@@ -594,10 +618,13 @@ msgs, _ := llmkit.LoadHistory(data)   // []llmkit.Message
 ```
 
 The output is a JSON document with a `_v` integer envelope plus a
-`messages` array. The version is tracked through `llmkit.WireSchemaVersion`;
-the same in-memory `Message` schema may evolve additively under one
-version (new optional fields work on older readers), but a renamed,
-removed, or retyped field requires a `_v` bump and a migrator.
+`messages` array. Each message is a role plus its parts, and image bytes
+are inline base64. The version is tracked through
+`llmkit.WireSchemaVersion`, currently 2. New optional fields may arrive
+under one version and still load on older readers. A renamed, removed,
+or retyped field requires a `_v` bump. `LoadHistory` rejects a version 1
+document with `ErrUnsupportedWireVersion`. There is no migrator, so
+rebuild such a history from your own records.
 
 `SaveHistory` / `LoadHistory` are the ONLY guaranteed-stable
 serialization path. Direct `json.Marshal` on a `Message` value

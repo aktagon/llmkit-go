@@ -191,7 +191,7 @@ func dispatchSpeechHTTP(
 	default:
 		return nil, fmt.Errorf("speech: unsupported wire shape %q", sgCfg.WireShape)
 	}
-	jsonBody, err := json.Marshal(body)
+	jsonBody, err := marshalWire(body)
 	if err != nil {
 		return nil, fmt.Errorf("marshal speech request: %w", err)
 	}

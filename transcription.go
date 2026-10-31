@@ -162,7 +162,7 @@ func dispatchTranscriptionSubmit(
 		}
 	}
 
-	jsonBody, err := json.Marshal(map[string]any{"audio_url": audioURL})
+	jsonBody, err := marshalWire(map[string]any{"audio_url": audioURL})
 	if err != nil {
 		return "", fmt.Errorf("marshal transcription request: %w", err)
 	}
@@ -271,6 +271,7 @@ func newTranscriptionAdapter(h TranscriptionHandle, o *transcriptionOptions) (tr
 		StatusPath:       tcCfg.StatusPath,
 		DoneValues:       nonEmptyValues(tcCfg.DoneStatus),
 		ErrorValues:      nonEmptyValues(tcCfg.ErrorStatus),
+		FailureCodes:     tcCfg.FailureCodes,
 		ErrorMessagePath: cfg.ErrorMessagePath,
 		PollInterval:     transcriptionPollInterval,
 		PollTimeout:      transcriptionPollTimeout,
@@ -461,25 +462,18 @@ func transcriptionResultFromOpenAI(raw map[string]any) TranscriptionResponse {
 // audio URL is rejected (OpenAI ingests no URL — the inverse of AssemblyAI), as
 // is any non-audio part.
 func normalizeAudioBytesPart(parts []Part) (*MediaRef, error) {
-	audioCount := 0
-	var ref *MediaRef
+	if err := checkPartKinds("transcription", parts); err != nil {
+		return nil, err
+	}
 	for i, part := range parts {
-		switch {
-		case part.Audio != nil:
-			audioCount++
-			ref = part.Audio
-		case part.AudioURL != "":
+		if part.AudioURL != "" {
 			return nil, &ValidationError{Field: fmt.Sprintf("parts[%d]", i), Message: "synchronous transcription accepts inline audio bytes only (parts.AudioBytes); a remote audio URL is not supported"}
-		case part.Text != "" || part.Image != nil || part.Lyrics != "":
-			return nil, &ValidationError{Field: fmt.Sprintf("parts[%d]", i), Message: "transcription accepts only audio parts (parts.AudioBytes)"}
-		default:
-			return nil, &ValidationError{Field: fmt.Sprintf("parts[%d]", i), Message: "empty part"}
 		}
 	}
-	if audioCount != 1 {
+	if len(parts) != 1 {
 		return nil, &ValidationError{Field: "parts", Message: "transcription requires exactly one audio part"}
 	}
-	return ref, nil
+	return parts[0].Audio, nil
 }
 
 // transcriptionResult extracts the finished transcript per wire shape. Only the
@@ -526,25 +520,16 @@ func transcriptionResultFromAssemblyAI(raw map[string]any) TranscriptionResponse
 // request with a non-audio part, or with anything other than exactly one audio
 // part, is rejected pre-flight.
 func normalizeAudioPart(parts []Part) (url string, raw []byte, err error) {
-	audioCount := 0
-	for i, part := range parts {
-		switch {
-		case part.AudioURL != "":
-			audioCount++
-			url = part.AudioURL
-		case part.Audio != nil:
-			audioCount++
-			raw = part.Audio.Bytes
-		case part.Text != "" || part.Image != nil || part.Lyrics != "":
-			return "", nil, &ValidationError{Field: fmt.Sprintf("parts[%d]", i), Message: "transcription accepts only audio parts (parts.Audio / parts.AudioBytes)"}
-		default:
-			return "", nil, &ValidationError{Field: fmt.Sprintf("parts[%d]", i), Message: "empty part"}
-		}
+	if err := checkPartKinds("transcription", parts); err != nil {
+		return "", nil, err
 	}
-	if audioCount != 1 {
+	if len(parts) != 1 {
 		return "", nil, &ValidationError{Field: "parts", Message: "transcription requires exactly one audio part"}
 	}
-	return url, raw, nil
+	if parts[0].AudioURL != "" {
+		return parts[0].AudioURL, nil, nil
+	}
+	return "", parts[0].Audio.Bytes, nil
 }
 
 // transcriptionBaseURL resolves the base for the transcription API: an explicit

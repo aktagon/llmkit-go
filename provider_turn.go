@@ -1,9 +1,13 @@
 package llmkit
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/aktagon/llmkit-go/v3/providers"
 )
 
 // Verbatim assistant-turn capture (ADR-085).
@@ -16,9 +20,10 @@ import (
 // but a second representation alongside it: keep the provider's own bytes for
 // the turn and send those back unchanged.
 //
-// Nothing here parses the payload. The only structure this file reads is the
-// path down to the turn — everything at and below it is carried as the
-// provider wrote it.
+// Nothing here parses the payload into a value. The only structure this file
+// reads is the path down to the turn, and checkProviderTurn's check that the
+// turn is one JSON value of its shape's kind — everything at and below it is
+// carried as the provider wrote it.
 
 // splitPathSegment splits one dot-notation path segment into a field name and
 // an array index: "choices[0]" -> ("choices", 0), "message" -> ("message", -1).
@@ -79,6 +84,44 @@ func extractRawJSONPath(body []byte, path string) []byte {
 		}
 	}
 	return current
+}
+
+// providerTurnKinds is the JSON kind of a captured assistant turn for each
+// shape that replays one: the container assistantTurnPath points at.
+// Anthropic's content is a block array, OpenAI's message an object, Google's
+// content an object, and Responses' output an item list. ChatBedrock declares
+// no turn position, so resolveTurns rebuilds its turns and none is checked.
+var providerTurnKinds = map[string]byte{
+	providers.ChatAnthropic:       '[',
+	providers.ChatOpenAI:          '{',
+	providers.ChatGoogle:          '{',
+	providers.ChatResponsesOpenAI: '[',
+}
+
+// checkProviderTurn rejects a saved provider turn whose text is not one JSON
+// value of its shape's kind, with a ValidationError on field
+// "provider_turn". LoadHistory and the request encoder (toInternal) both run
+// it, so a bad turn fails where it enters, never by a silent rebuild from its
+// parts (HANDOFF-105 F9, owner decision 3; ADR-076). A shape that does not
+// replay is not checked: resolveTurns rebuilds that turn from its parts, as
+// it does for a turn captured under another shape (ADR-085 RSN-006).
+func checkProviderTurn(turn *ProviderTurn) error {
+	if turn == nil {
+		return nil
+	}
+	kind, replays := providerTurnKinds[turn.WireShape]
+	if !replays {
+		return nil
+	}
+	want := map[byte]string{'[': "array", '{': "object"}[kind]
+	wire := bytes.TrimLeft([]byte(turn.Wire), " \t\n\r")
+	if !json.Valid(wire) || wire[0] != kind {
+		return &ValidationError{
+			Field:   "provider_turn",
+			Message: fmt.Sprintf("a %s turn's wire is not one JSON %s", turn.WireShape, want),
+		}
+	}
+	return nil
 }
 
 // assistantTurnPath returns where one replayable assistant turn sits in a

@@ -1,10 +1,12 @@
 package llmkit
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -44,22 +46,10 @@ func (c *Client) Supports(cap Capability) bool {
 // promptStream is the internal streaming implementation. The
 // public surface is (*Text).Stream in stream.go (plan-018 D1.3b).
 // protocol is the Text.Protocol token (ADR-055); "" keeps the default.
-func promptStream(ctx context.Context, p Provider, req Request, protocol string, callback StreamCallback, opts ...Option) (Response, error) {
-	o := resolveOptions(opts)
+func promptStream(ctx context.Context, p Provider, req Request, protocol string, callback StreamCallback, o *options) (Response, error) {
 	o.httpClient = withRequestTimeout(o.httpClient, p.Timeout)
 
 	if err := validateProvider(p); err != nil {
-		return Response{}, err
-	}
-	if err := validateRequest(req); err != nil {
-		return Response{}, err
-	}
-	if err := validateOptions(p, o); err != nil {
-		return Response{}, err
-	}
-
-	msgs, err := requestMsgs(req)
-	if err != nil {
 		return Response{}, err
 	}
 
@@ -70,20 +60,23 @@ func promptStream(ctx context.Context, p Provider, req Request, protocol string,
 
 	// ADR-055: a non-default protocol (Responses) overrides the endpoint and
 	// wire shape, and the wire shape selects the stream facts (HANDOFF-087).
-	cfg, err = resolveChatProtocol(cfg, protocol)
+	cfg, err := resolveChatProtocol(cfg, protocol)
 	if err != nil {
 		return Response{}, err
 	}
 
-	streamCfg, finishReasonPath := streamSettings(p.Name, cfg)
+	streamCfg, locs := streamSettings(p.Name, cfg)
 	if streamCfg == nil {
 		return Response{}, &ValidationError{Field: "provider", Message: "streaming not supported: " + p.Name}
 	}
 
-	model, err := resolveModel(p, cfg)
+	chat, err := encodeChat(p, cfg, req)
 	if err != nil {
 		return Response{}, err
 	}
+	model, body := chat.req.Model, chat.body
+	headers := sendHeaders(p, cfg, chat.content)
+
 	baseEvent := providers.Event{
 		Op:       providers.OpLLMRequest,
 		Provider: p.Name,
@@ -94,11 +87,9 @@ func promptStream(ctx context.Context, p Provider, req Request, protocol string,
 		return Response{}, err
 	}
 
-	body, headers := buildRequest(p, req, msgs, o, cfg, nil)
-
 	// Apply caching mutations if enabled
 	if o.caching {
-		if err := applyCaching(ctx, body, p, o, cfg); err != nil {
+		if err := applyCaching(ctx, body, p, model, o, cfg); err != nil {
 			postEv := baseEvent
 			postEv.Err = err
 			postEv.Duration = time.Since(start)
@@ -116,7 +107,7 @@ func promptStream(ctx context.Context, p Provider, req Request, protocol string,
 		body["stream_options"] = map[string]any{"include_usage": true}
 	}
 
-	jsonBody, err := json.Marshal(body)
+	jsonBody, err := marshalWire(body)
 	if err != nil {
 		postEv := baseEvent
 		postEv.Err = err
@@ -126,9 +117,9 @@ func promptStream(ctx context.Context, p Provider, req Request, protocol string,
 	}
 
 	// Use stream endpoint if different
-	url := buildURL(p, cfg)
+	url := sendURL(p, cfg, requestPath(cfg, model))
 	if streamCfg.Endpoint != "" {
-		url = buildStreamURL(p, cfg, streamCfg)
+		url = buildStreamURL(p, cfg, streamCfg, model)
 	}
 
 	var fullText strings.Builder
@@ -137,7 +128,7 @@ func promptStream(ctx context.Context, p Provider, req Request, protocol string,
 		callback(chunk)
 	}
 
-	usage, finishReason, err := doStreamPost(ctx, o.httpClient, url, jsonBody, headers, streamCfg, finishReasonPath, wrappedCallback)
+	usage, fields, err := doStreamPost(ctx, o.httpClient, url, jsonBody, headers, streamCfg, locs, wrappedCallback)
 	postEv := baseEvent
 	postEv.Usage = usage
 	postEv.Err = err
@@ -147,35 +138,46 @@ func promptStream(ctx context.Context, p Provider, req Request, protocol string,
 		return Response{}, err
 	}
 
+	// The stream reads the same table as the one-shot body (ADR-099 CRF-008).
+	// It keeps no body, so a fused value (CRF-007) cannot be told apart and
+	// decodes to other.
 	return Response{
-		Text:         fullText.String(),
-		Usage:        usage,
-		FinishReason: finishReason,
+		Parts:                textParts(fullText.String()),
+		Usage:                usage,
+		FinishReason:         decodeFinishReason(cfg.ChatWireShape, fields.FinishReason, nil),
+		ProviderFinishReason: fields.FinishReason,
+		ID:                   fields.ID,
+		Model:                fields.Model,
+		ChatWireShape:        optString(cfg.ChatWireShape),
 	}, nil
 }
 
-// streamSettings selects the stream facts and the stream finish locator for
-// the call's effective wire shape. A shape that declares its own (OpenAI
+// streamSettings selects the stream facts and the stream locators for the
+// call's effective wire shape. A shape that declares its own (OpenAI
 // Responses: event-typed SSE) outranks the provider's, which describe the
 // provider's default protocol (HANDOFF-087).
-func streamSettings(provider string, cfg providerSpec) (*providers.StreamDef, string) {
+func streamSettings(provider string, cfg providerSpec) (*providers.StreamDef, streamLocators) {
 	if sd := providers.WireShapeStreamConfig(cfg.ChatWireShape); sd != nil {
-		return sd, providers.WireShapeStreamFinishReasonPath(cfg.ChatWireShape)
+		return sd, streamLocators{
+			FinishReason: providers.WireShapeStreamFinishReasonPath(cfg.ChatWireShape),
+			ID:           providers.WireShapeStreamResponseIDPath(cfg.ChatWireShape),
+			Model:        providers.WireShapeStreamResponseModelPath(cfg.ChatWireShape),
+		}
 	}
-	return providers.StreamConfig(provider), cfg.StreamFinishReasonPath
+	return providers.StreamConfig(provider), streamLocators{
+		FinishReason: cfg.StreamFinishReasonPath,
+		ID:           cfg.StreamResponseIDPath,
+		Model:        cfg.StreamResponseModelPath,
+	}
 }
 
 // buildStreamURL constructs the streaming endpoint URL.
-func buildStreamURL(p Provider, cfg providerSpec, streamCfg *providers.StreamDef) string {
+func buildStreamURL(p Provider, cfg providerSpec, streamCfg *providers.StreamDef, model string) string {
 	base := p.BaseURL
 	if base == "" {
 		base = cfg.BaseURL
 	}
 	endpoint := streamCfg.Endpoint
-
-	// Both-empty is rejected by resolveModel at every entry point before
-	// URL building runs, so the error is unreachable here.
-	model, _ := resolveModel(p, cfg)
 	endpoint = strings.ReplaceAll(endpoint, "{model}", model)
 	endpoint = strings.ReplaceAll(endpoint, "{apiKey}", p.APIKey)
 
@@ -196,7 +198,7 @@ func buildStreamURL(p Provider, cfg providerSpec, streamCfg *providers.StreamDef
 // directly along with the filename used in the multipart form and
 // (optionally) the explicit MIME type. If mime is empty,
 // Content-Type is derived from the filename extension.
-func uploadFile(ctx context.Context, p Provider, data []byte, name, mime string, opts ...Option) (File, error) {
+func uploadFile(ctx context.Context, p Provider, data []byte, name, mime string, o *options) (File, error) {
 	if err := validateProvider(p); err != nil {
 		return File{}, err
 	}
@@ -211,7 +213,6 @@ func uploadFile(ctx context.Context, p Provider, data []byte, name, mime string,
 		return File{}, &ValidationError{Field: "provider", Message: "file upload not supported: " + p.Name}
 	}
 
-	o := resolveOptions(opts)
 	o.httpClient = withRequestTimeout(o.httpClient, p.Timeout)
 
 	model, err := resolveModel(p, cfg)
@@ -266,7 +267,7 @@ func uploadFile(ctx context.Context, p Provider, data []byte, name, mime string,
 	// Google needs metadata as a JSON form field
 	if cfg.ChatWireShape == providers.ChatGoogle {
 		metadata := map[string]any{"file": map[string]any{"display_name": name}}
-		metaJSON, _ := json.Marshal(metadata)
+		metaJSON, _ := marshalWire(metadata)
 		extraFields["metadata"] = string(metaJSON)
 		headers["X-Goog-Upload-Protocol"] = "multipart"
 	}
@@ -332,69 +333,67 @@ func validateProvider(p Provider) error {
 	return nil
 }
 
-// validateRequest checks that required fields are present. Accepts
-// any of: a User string, a Messages history, or at least one Image
-// part — image-only multimodal calls are valid even when no text is
-// supplied.
+// validateRequest checks that the request carries a turn. The final prompt is
+// a turn like any other (ADR-098), so an empty Messages means nothing to send.
 func validateRequest(req Request) error {
-	if req.User == "" && len(req.Messages) == 0 && len(req.Images) == 0 {
+	if len(req.Messages) == 0 {
 		return &ValidationError{
-			Field:   "user",
+			Field:   "messages",
 			Message: "set Text(), Parts, History, or Image() before calling Prompt",
 		}
 	}
-	// The carrier invariant (ADR-026: each message holds at most one of
-	// {text content, tool calls, tool result}) is enforced at the single
-	// toInternal boundary (PIPE-008), not here.
+	// The part invariants (ADR-100: one kind per part, a kind the role may
+	// carry) are enforced at the single toInternal boundary (PIPE-008), not
+	// here.
 	return nil
 }
 
 // validateOptions checks that requested options are supported by the provider.
-func validateOptions(p Provider, o *options) error {
-	supported := providers.SupportedOptions(p.Name)
+func validateOptions(provider string, req Request) error {
+	supported := providers.SupportedOptions(provider)
 	if supported == nil {
 		return nil
 	}
 
-	if o.topK != nil {
+	if req.TopK != nil {
 		if _, ok := supported[providers.OptionTopK]; !ok {
-			return &ValidationError{Field: "top_k", Message: "not supported by " + p.Name}
+			return &ValidationError{Field: "top_k", Message: "not supported by " + provider}
 		}
 	}
-	if o.seed != nil {
+	if req.Seed != nil {
 		if _, ok := supported[providers.OptionSeed]; !ok {
-			return &ValidationError{Field: "seed", Message: "not supported by " + p.Name}
+			return &ValidationError{Field: "seed", Message: "not supported by " + provider}
 		}
 	}
-	if o.frequencyPenalty != nil {
+	if req.FrequencyPenalty != nil {
 		if _, ok := supported[providers.OptionFrequencyPenalty]; !ok {
-			return &ValidationError{Field: "frequency_penalty", Message: "not supported by " + p.Name}
+			return &ValidationError{Field: "frequency_penalty", Message: "not supported by " + provider}
 		}
 	}
-	if o.presencePenalty != nil {
+	if req.PresencePenalty != nil {
 		if _, ok := supported[providers.OptionPresencePenalty]; !ok {
-			return &ValidationError{Field: "presence_penalty", Message: "not supported by " + p.Name}
+			return &ValidationError{Field: "presence_penalty", Message: "not supported by " + provider}
 		}
 	}
-	if o.thinkingBudget != nil {
+	if req.ThinkingBudget != nil {
 		if _, ok := supported[providers.OptionThinkingBudget]; !ok {
-			return &ValidationError{Field: "thinking_budget", Message: "not supported by " + p.Name}
+			return &ValidationError{Field: "thinking_budget", Message: "not supported by " + provider}
 		}
 	}
-	if o.reasoningEffort != "" {
+	if req.ReasoningEffort != nil {
 		if _, ok := supported[providers.OptionReasoningEffort]; !ok {
-			return &ValidationError{Field: "reasoning_effort", Message: "not supported by " + p.Name}
+			return &ValidationError{Field: "reasoning_effort", Message: "not supported by " + provider}
 		}
 	}
 
 	//
-	overrides := providers.OptionOverrides(p.Name)
-	if o.reasoningEffort != "" && overrides != nil {
+	overrides := providers.OptionOverrides(provider)
+	if req.ReasoningEffort != nil && overrides != nil {
 		if ov, ok := overrides[providers.OptionReasoningEffort]; ok && ov.AllowedValues != "" {
-			if !containsValue(ov.AllowedValues, o.reasoningEffort) {
+			if !containsValue(ov.AllowedValues, *req.ReasoningEffort) {
 				return &ValidationError{
 					Field:   "reasoning_effort",
-					Message: fmt.Sprintf("invalid value %q, must be one of: %s", o.reasoningEffort, ov.AllowedValues),
+					Message: fmt.Sprintf("invalid value %q, must be one of: %s", *req.ReasoningEffort, ov.AllowedValues),
 				}
 			}
 		}
@@ -458,12 +457,8 @@ func resolveChatProtocol(cfg providerSpec, token string) (providerSpec, error) {
 	if want == "" {
 		return cfg, &ValidationError{Field: "protocol", Message: "unknown protocol: " + token}
 	}
-	for _, cp := range cfg.ChatProtocols {
-		if cp.WireShape == want {
-			cfg.Endpoint = cp.Endpoint
-			cfg.ChatWireShape = cp.WireShape
-			return cfg, nil
-		}
+	if out, ok := withWireShape(cfg, want); ok {
+		return out, nil
 	}
 	return cfg, &ValidationError{
 		Field:   "protocol",
@@ -471,24 +466,42 @@ func resolveChatProtocol(cfg providerSpec, token string) (providerSpec, error) {
 	}
 }
 
-// buildURL constructs the full API URL for a provider.
-func buildURL(p Provider, cfg providerSpec) string {
+// withWireShape returns cfg with the endpoint and wire shape of one of the
+// provider's chat protocols. The default shape is cfg itself.
+func withWireShape(cfg providerSpec, shape string) (providerSpec, bool) {
+	if shape == cfg.ChatWireShape {
+		return cfg, true
+	}
+	for _, cp := range cfg.ChatProtocols {
+		if cp.WireShape == shape {
+			cfg.Endpoint = cp.Endpoint
+			cfg.ChatWireShape = cp.WireShape
+			return cfg, true
+		}
+	}
+	return cfg, false
+}
+
+// requestPath is the endpoint with the model filled in where the wire shape
+// puts it (WireRequest.Path, RQC-006). It holds no key.
+func requestPath(cfg providerSpec, model string) string {
+	return strings.ReplaceAll(cfg.Endpoint, "{model}", model)
+}
+
+// sendURL turns a keyless request path into the URL the send path posts to:
+// the client's base URL, the region, and the key where the provider takes it
+// in the URL (Google's query parameter, an {apiKey} template).
+func sendURL(p Provider, cfg providerSpec, path string) string {
 	base := p.BaseURL
 	if base == "" {
 		base = cfg.BaseURL
 	}
-	endpoint := cfg.Endpoint
 
 	// Handle query param auth (Google)
 	if cfg.AuthScheme == providers.AuthQueryParamKey {
-		endpoint = endpoint + "?" + cfg.AuthQueryParam + "=" + p.APIKey
+		path = path + "?" + cfg.AuthQueryParam + "=" + p.APIKey
 	}
-
-	// Handle endpoint template placeholders. Both-empty is rejected by
-	// resolveModel at every entry point before URL building runs.
-	model, _ := resolveModel(p, cfg)
-	endpoint = strings.ReplaceAll(endpoint, "{model}", model)
-	endpoint = strings.ReplaceAll(endpoint, "{apiKey}", p.APIKey)
+	path = strings.ReplaceAll(path, "{apiKey}", p.APIKey)
 
 	// Handle {region} placeholder (Bedrock)
 	if cfg.RegionEnvVar != "" {
@@ -496,7 +509,7 @@ func buildURL(p Provider, cfg providerSpec) string {
 		base = strings.ReplaceAll(base, "{region}", region)
 	}
 
-	return base + endpoint
+	return base + path
 }
 
 // resolveOptionKey returns the wire (JSON) key for param on (provider, model)
@@ -538,39 +551,109 @@ func resolveOptionKey(provider, model, chatWireShape string, param providers.Opt
 	return key, ok
 }
 
-// buildRequest constructs the provider-specific request body and headers.
+// EncodeRequest encodes a chat request for a provider's wire shape (ADR-098).
+// It is keyless and makes no network call: WireRequest carries the path and
+// the content headers, and the caller's send path adds the base URL, the key
+// and its own headers (RQC-006). An empty chatWireShape selects the
+// provider's default. The model is Request.Model, else the provider's
+// default.
+func EncodeRequest(provider, chatWireShape string, req Request) (WireRequest, error) {
+	cfg, err := servedChatSpec(provider, chatWireShape)
+	if err != nil {
+		return WireRequest{}, err
+	}
+	chat, err := encodeChat(Provider{Name: provider}, cfg, req)
+	if err != nil {
+		return WireRequest{}, err
+	}
+	data, err := marshalWire(chat.body)
+	if err != nil {
+		return WireRequest{}, fmt.Errorf("marshal request: %w", err)
+	}
+	return WireRequest{Path: requestPath(cfg, chat.req.Model), Headers: chat.content, Body: data}, nil
+}
+
+// chatRequest is a chat request that passed every check: the prepared
+// Request, its body and its content headers.
+type chatRequest struct {
+	req     Request
+	body    map[string]any
+	content map[string]string
+}
+
+// encodeChat is the one validation step of a chat call: prepareRequest, then
+// encodeRequest, which checks every part. Text, stream, the Agent (each turn),
+// batch (each item) and EncodeRequest all run it before anything else, so a
+// request that fails a check never reaches middleware (HANDOFF-105 F11, owner
+// decision 1).
+func encodeChat(p Provider, cfg providerSpec, req Request) (chatRequest, error) {
+	req, err := prepareRequest(p, cfg, req)
+	if err != nil {
+		return chatRequest{}, err
+	}
+	body, content, err := encodeRequest(p.Name, cfg, req)
+	if err != nil {
+		return chatRequest{}, err
+	}
+	return chatRequest{req: req, body: body, content: content}, nil
+}
+
+// prepareRequest is the one setup step of a chat call (RQC-017): Text,
+// stream, the Agent, batch and EncodeRequest all run it before they encode.
+// It checks that the request has a turn and that the provider takes each
+// option, then resolves the model: Request.Model, which carries the
+// builder's model, wins over p.Model and the provider's default (RQC-004).
+// The returned Request carries the resolved model.
+func prepareRequest(p Provider, cfg providerSpec, req Request) (Request, error) {
+	if err := validateRequest(req); err != nil {
+		return req, err
+	}
+	if err := validateOptions(p.Name, req); err != nil {
+		return req, err
+	}
+	if req.Model == "" {
+		model, err := resolveModel(p, cfg)
+		if err != nil {
+			return req, err
+		}
+		req.Model = model
+	}
+	return req, nil
+}
+
+// encodeRequest is the one chat body builder (RQC-001): EncodeRequest, Text,
+// stream, batch and the Agent loop all encode through it. It returns the body
+// as a map, because caching, streaming and the batch envelope change it after
+// encoding, and the content headers. req.Model must be resolved.
 //
-// msgs is the internal message sum (ADR-026 PIPE-007) and the only conversation
-// input the message transforms read. The Text/batch/stream paths build it with
-// requestMsgs: the history, validated at the carrier boundary (PIPE-008), then
-// the prompt and its media as a final msgPrompt (BUG-108). The Agent builds it
-// directly from its trusted history (agentHistoryToMsgs), with no lossy
-// public-Message hop.
-//
-// tools is the Agent's tool set; the Text/batch paths pass nil, so the
-// tool-def step is a no-op there and their wire body stays byte-identical
-// (ADR-026 PIPE-005).
-func buildRequest(p Provider, req Request, msgs []msg, o *options, cfg providerSpec, tools []Tool) (map[string]any, map[string]string) {
+// The message transforms read one ordered list built by requestMsgs: every
+// turn, validated at the part boundary (PIPE-008, ADR-100 MSG-002).
+func encodeRequest(provider string, cfg providerSpec, req Request) (map[string]any, map[string]string, error) {
+	msgs, err := requestMsgs(req)
+	if err != nil {
+		return nil, nil, err
+	}
 	body := map[string]any{}
 	headers := map[string]string{}
 
-	// Model. Both-empty is rejected by resolveModel at every entry point
-	// before the shared builder runs (ADR-031 honest no-default contract).
-	model, _ := resolveModel(p, cfg)
+	model := req.Model
 	if cfg.ModelInBody {
 		body["model"] = model
 	}
 
-	// Max tokens
-	maxTokens := cfg.DefaultMaxTokens
-	if o.maxTokens != nil {
-		maxTokens = *o.maxTokens
+	// Max tokens: the caller's value, else the provider's default where the
+	// wire shape requires the param, else none (ADR-098 RQC-015).
+	maxTokens := req.MaxTokens
+	if maxTokens == nil && slices.Contains(providers.WireShapeRequiredParams(cfg.ChatWireShape), providers.OptionMaxTokens) {
+		maxTokens = &cfg.DefaultMaxTokens
 	}
 
 	// Provider-specific max tokens key (per-model override aware, ADR-024)
-	supported := providers.SupportedOptions(p.Name)
-	if key, ok := resolveOptionKey(p.Name, model, cfg.ChatWireShape, providers.OptionMaxTokens, supported); ok {
-		body[key] = maxTokens
+	supported := providers.SupportedOptions(provider)
+	if maxTokens != nil {
+		if key, ok := resolveOptionKey(provider, model, cfg.ChatWireShape, providers.OptionMaxTokens, supported); ok {
+			body[key] = *maxTokens
+		}
 	}
 
 	// System message placement
@@ -593,35 +676,38 @@ func buildRequest(p Provider, req Request, msgs []msg, o *options, cfg providerS
 	// resolveTurns runs first and only here: it is the one place cfg and the
 	// message list meet, so the ADR-085 RSN-006 shape check is made once rather
 	// than remembered in each transform.
+	if err := checkRequestToolCalls(msgs, cfg); err != nil {
+		return nil, nil, err
+	}
 	msgTransform := selectMessageTransform(cfg)
 	msgTransform(body, resolveTurns(msgs, cfg), req, cfg)
 
-	// Tool definitions (Agent path). nil tools on Text/batch is a no-op.
-	if len(tools) > 0 {
-		selectToolDefTransform(cfg)(body, tools)
+	// Tool definitions. Text and batch set none, so this is a no-op there.
+	if len(req.Tools) > 0 {
+		selectToolDefTransform(cfg)(body, req.Tools)
 	}
 
 	// Generation options — may be nested under a wrapper key (e.g., generationConfig for Google)
 	if cfg.WrapsOptionsIn != "" {
 		optBody := map[string]any{}
-		addOptions(body, optBody, o, p.Name, model, cfg.ChatWireShape)
+		addOptions(body, optBody, req, provider, model, cfg.ChatWireShape)
 		// Also move max tokens into the wrapper
-		if key, ok := resolveOptionKey(p.Name, model, cfg.ChatWireShape, providers.OptionMaxTokens, supported); ok {
-			setNestedField(optBody, key, maxTokens)
+		if key, ok := resolveOptionKey(provider, model, cfg.ChatWireShape, providers.OptionMaxTokens, supported); ok && maxTokens != nil {
+			setNestedField(optBody, key, *maxTokens)
 			delete(body, strings.SplitN(key, ".", 2)[0])
 		}
 		if len(optBody) > 0 {
 			body[cfg.WrapsOptionsIn] = optBody
 		}
 	} else {
-		addOptions(body, body, o, p.Name, model, cfg.ChatWireShape)
+		addOptions(body, body, req, provider, model, cfg.ChatWireShape)
 	}
 
 	// Safety settings — top-level field for Gemini (safetySettings array).
 	// cfg.SafetySettingsWirePath is empty for every other provider.
-	if cfg.SafetySettingsWirePath != "" && len(o.safetySettings) > 0 {
-		ss := make([]map[string]any, len(o.safetySettings))
-		for i, s := range o.safetySettings {
+	if cfg.SafetySettingsWirePath != "" && len(req.SafetySettings) > 0 {
+		ss := make([]map[string]any, len(req.SafetySettings))
+		for i, s := range req.SafetySettings {
 			ss[i] = map[string]any{"category": s.Category, "threshold": s.Threshold}
 		}
 		body[cfg.SafetySettingsWirePath] = ss
@@ -629,39 +715,46 @@ func buildRequest(p Provider, req Request, msgs []msg, o *options, cfg providerS
 
 	// Structured output
 	if req.Schema != "" {
-		addStructuredOutput(body, headers, req.Schema, p.Name, cfg)
+		addStructuredOutput(body, headers, req.Schema, provider, cfg)
 	}
 
 	// Upload beta (BUG-017): a request that references an uploaded file carries
 	// the beta the provider's upload declares (uploadBetaHeader). Compose
 	// with any existing value (e.g. structured output) rather than overwrite.
 	// Anthropic declares none since its Files API left beta (BUG-078).
-	if len(req.Files) > 0 {
-		if fu := providers.FileUploadConfig(p.Name); fu != nil && fu.BetaHeader != "" {
+	if requestHasFiles(req) {
+		if fu := providers.FileUploadConfig(provider); fu != nil && fu.BetaHeader != "" {
 			headers["anthropic-beta"] = appendBeta(headers["anthropic-beta"], fu.BetaHeader)
 		}
 	}
 
-	// Auth headers
+	// Required protocol header (e.g. anthropic-version): keyless, so it
+	// belongs to the content headers.
+	if cfg.RequiredHeader != "" {
+		headers[cfg.RequiredHeader] = cfg.RequiredHeaderValue
+	}
+
+	return body, headers, nil
+}
+
+// sendHeaders adds the send path's headers to the content headers: the
+// provider auth header, then the caller's headers (Client.AddHeader, ADR-052),
+// which never clobber the auth or protocol headers (HTTP header names are
+// case-insensitive). A gateway header (cf-aig-authorization) still rides
+// alongside the provider key.
+func sendHeaders(p Provider, cfg providerSpec, content map[string]string) map[string]string {
+	headers := make(map[string]string, len(content)+2)
+	for k, v := range content {
+		headers[k] = v
+	}
 	switch cfg.AuthScheme {
 	case providers.AuthBearerToken:
 		headers[cfg.AuthHeader] = cfg.AuthPrefix + " " + p.APIKey
 	case providers.AuthHeaderAPIKey:
 		headers[cfg.AuthHeader] = p.APIKey
 	}
-
-	// Required headers
-	if cfg.RequiredHeader != "" {
-		headers[cfg.RequiredHeader] = cfg.RequiredHeaderValue
-	}
-
-	// Caller custom headers (Client.AddHeader, ADR-052) — added AFTER the
-	// provider auth + required header so those can never be clobbered (HTTP
-	// header names are case-insensitive); a gateway header (cf-aig-authorization)
-	// still rides alongside the provider key.
 	mergeCallerHeaders(headers, p)
-
-	return body, headers
+	return headers
 }
 
 // mapRole translates a canonical role to a provider-specific role.
@@ -683,7 +776,7 @@ func mapRole(role string, mappings map[string]string) string {
 // (e.g. {"thinking":{"type":"adaptive"}} alongside Anthropic's
 // output_config.effort). root is the true body root; for providers that wrap
 // options (WrapsOptionsIn), target is the wrapper object and root differs.
-func addOptions(root, target map[string]any, o *options, provider, model, chatWireShape string) {
+func addOptions(root, target map[string]any, req Request, provider, model, chatWireShape string) {
 	supported := providers.SupportedOptions(provider)
 	overrides := providers.OptionOverrides(provider)
 
@@ -709,32 +802,32 @@ func addOptions(root, target map[string]any, o *options, provider, model, chatWi
 		}
 	}
 
-	if o.temperature != nil {
-		apply(providers.OptionTemperature, *o.temperature)
+	if req.Temperature != nil {
+		apply(providers.OptionTemperature, *req.Temperature)
 	}
-	if o.topP != nil {
-		apply(providers.OptionTopP, *o.topP)
+	if req.TopP != nil {
+		apply(providers.OptionTopP, *req.TopP)
 	}
-	if o.topK != nil {
-		apply(providers.OptionTopK, *o.topK)
+	if req.TopK != nil {
+		apply(providers.OptionTopK, *req.TopK)
 	}
-	if len(o.stopSequences) > 0 {
-		apply(providers.OptionStopSequences, o.stopSequences)
+	if len(req.Stop) > 0 {
+		apply(providers.OptionStopSequences, req.Stop)
 	}
-	if o.seed != nil {
-		apply(providers.OptionSeed, *o.seed)
+	if req.Seed != nil {
+		apply(providers.OptionSeed, *req.Seed)
 	}
-	if o.frequencyPenalty != nil {
-		apply(providers.OptionFrequencyPenalty, *o.frequencyPenalty)
+	if req.FrequencyPenalty != nil {
+		apply(providers.OptionFrequencyPenalty, *req.FrequencyPenalty)
 	}
-	if o.presencePenalty != nil {
-		apply(providers.OptionPresencePenalty, *o.presencePenalty)
+	if req.PresencePenalty != nil {
+		apply(providers.OptionPresencePenalty, *req.PresencePenalty)
 	}
-	if o.thinkingBudget != nil {
-		apply(providers.OptionThinkingBudget, *o.thinkingBudget)
+	if req.ThinkingBudget != nil {
+		apply(providers.OptionThinkingBudget, *req.ThinkingBudget)
 	}
-	if o.reasoningEffort != "" {
-		apply(providers.OptionReasoningEffort, o.reasoningEffort)
+	if req.ReasoningEffort != nil {
+		apply(providers.OptionReasoningEffort, *req.ReasoningEffort)
 	}
 }
 
@@ -938,7 +1031,12 @@ func removeAdditionalProperties(schema any) {
 // Keyless, IO-free and pure (ADR-076 SYM-002): no Client, no credential, no
 // network, no clock. The wire shape is required, not derived — one provider can
 // serve two chat protocols, and inferring it silently mis-parses (SYM-003).
-// This is the same function the chat send path calls (SYM-004).
+// This is the same function the chat send path calls (SYM-004). It runs the
+// served-shape check EncodeResponse runs (servedChatWireShape, HANDOFF-105 F4):
+// a shape the provider does not serve, or a provider with no chat shape, is a
+// validation error on field "chatWireShape", and an unknown provider one on
+// "provider".
+//
 // resolveChatWireShape fills in an unspecified wire shape with the provider's
 // DEFAULT chat protocol.
 //
@@ -963,7 +1061,10 @@ func resolveChatWireShape(provider, chatWireShape string) string {
 }
 
 func DecodeResponse(provider, chatWireShape string, body []byte) (Response, error) {
-	chatWireShape = resolveChatWireShape(provider, chatWireShape)
+	chatWireShape, err := servedChatWireShape(provider, chatWireShape)
+	if err != nil {
+		return Response{}, err
+	}
 
 	var raw map[string]any
 	if err := json.Unmarshal(body, &raw); err != nil {
@@ -978,66 +1079,29 @@ func DecodeResponse(provider, chatWireShape string, body []byte) (Response, erro
 	if chatWireShape == providers.ChatResponsesOpenAI {
 		resp := parseResponsesEnvelope(raw)
 		resp.ProviderTurn = turn
+		resp.ChatWireShape = optString(chatWireShape)
 		return resp, nil
 	}
 
-	text := extractResponseText(raw, provider, chatWireShape)
+	parts, err := decodeChatParts(body, provider, chatWireShape)
+	if err != nil {
+		return Response{}, err
+	}
 	finishReason, finishMessage := extractFinishSignal(raw, provider)
+	id, model := extractResponseIdentity(raw, provider)
 
 	return Response{
-		Text:          text,
-		Usage:         decodeUsage(raw, provider),
-		FinishReason:  finishReason,
-		FinishMessage: finishMessage,
-		ProviderTurn:  turn,
+		Parts:                parts,
+		Usage:                decodeUsage(raw, provider),
+		FinishReason:         decodeFinishReason(chatWireShape, finishReason, raw),
+		ProviderFinishReason: finishReason,
+		FinishMessage:        finishMessage,
+		ProviderTurn:         turn,
+		ID:                   id,
+		Model:                model,
+		Created:              optIntPath(raw, providers.WireShapeResponseCreatedPath(chatWireShape)),
+		ChatWireShape:        optString(chatWireShape),
 	}, nil
-}
-
-// extractResponseText reads the assistant's text out of a parsed provider body.
-//
-// Two readers, selected by the wire shape, never by provider name (CLAUDE.md
-// forbids switching on provider outside errors.go):
-//
-//   - block-array families declare a ResponseTextConfig and are read by
-//     DISCRIMINATOR, because array position is not stable — Opus 5 and
-//     Sonnet 5 think by default, so content[0] is a thinking block (BUG-053);
-//   - scalar families declare none, and nil SELECTS the fixed-path reader.
-//
-// An empty result is a real answer, not a failure: every tool-use turn carries
-// no text block at all. FinishReason is what says why, which is the reason
-// Response.Text stays a plain string rather than becoming optional in seven
-// SDKs to mark something routine.
-func extractResponseText(raw map[string]any, provider, chatWireShape string) string {
-	cfg := providers.ResponseTextConfig(chatWireShape)
-	if cfg == nil {
-		return extractPath(raw, providers.ResponseTextPath(provider))
-	}
-	blocks := matchingBlocks(raw, cfg.BlocksPath, cfg.MarkerPath, cfg.MarkerValue)
-	if len(blocks) == 0 {
-		return ""
-	}
-	return extractPath(blocks[0], cfg.ValuePath)
-}
-
-// encodeResponseText is extractResponseText's inverse, driven by the SAME
-// config so the two cannot drift apart.
-//
-// The marker is WRITTEN, not just tested. Emitting only the value path would
-// produce {"content":[{"text":"pong"}]} — a body with no type discriminator,
-// which the reader above then finds no matching block in. That is the ADR-076
-// fixed point breaking, and it is why textMarkerValue is documented as a
-// write instruction rather than a read predicate.
-func encodeResponseText(raw map[string]any, provider, chatWireShape, text string) {
-	cfg := providers.ResponseTextConfig(chatWireShape)
-	if cfg == nil {
-		setWirePath(raw, providers.ResponseTextPath(provider), text)
-		return
-	}
-	block := cfg.BlocksPath + "[0]"
-	if cfg.MarkerValue != "" {
-		setWirePath(raw, block+"."+cfg.MarkerPath, cfg.MarkerValue)
-	}
-	setWirePath(raw, block+"."+cfg.ValuePath, text)
 }
 
 // decodeUsage reads all six dimensions out of a parsed provider body. The ONE
@@ -1072,16 +1136,28 @@ func decodeUsage(raw map[string]any, provider string) Usage {
 // The contract is the canonical fixed point, Decode(Encode(Decode(b))) ==
 // Decode(b) (SYM-006).
 func EncodeResponse(provider, chatWireShape string, resp Response) ([]byte, error) {
-	chatWireShape = resolveChatWireShape(provider, chatWireShape)
+	chatWireShape, err := servedChatWireShape(provider, chatWireShape)
+	if err != nil {
+		return nil, err
+	}
 	if err := guardOneWayFields(provider, resp); err != nil {
 		return nil, err
 	}
+	if err := checkResponseParts(resp.Parts); err != nil {
+		return nil, err
+	}
 	if chatWireShape == providers.ChatResponsesOpenAI {
-		return json.Marshal(encodeResponsesEnvelope(resp))
+		envelope, err := encodeResponsesEnvelope(provider, chatWireShape, resp)
+		if err != nil {
+			return nil, err
+		}
+		return marshalWire(envelope)
 	}
 
 	raw := map[string]any{}
-	encodeResponseText(raw, provider, chatWireShape, resp.Text)
+	if err := encodeChatParts(raw, provider, chatWireShape, resp.Parts); err != nil {
+		return nil, err
+	}
 	inputPath, outputPath := providers.UsagePaths(provider)
 	setWirePath(raw, inputPath, resp.Usage.Input)
 	setWirePath(raw, outputPath, resp.Usage.Output)
@@ -1093,27 +1169,104 @@ func EncodeResponse(provider, chatWireShape string, resp Response) ([]byte, erro
 	}
 	if cfg, ok := providerSpecs()[provider]; ok {
 		setWirePath(raw, cfg.ReasoningTokensPath, resp.Usage.Reasoning)
-		setWirePath(raw, cfg.FinishReasonPath, resp.FinishReason)
+		if e, ok := encodeFinishReason(chatWireShape, resp); ok {
+			setWirePath(raw, cfg.FinishReasonPath, e.WireValue)
+			setWirePath(raw, e.DetailPath, e.DetailValue)
+		}
 		setWirePath(raw, cfg.FinishMessagePath, resp.FinishMessage)
+		setWirePath(raw, cfg.ResponseIDPath, resp.ID)
+		setWirePath(raw, cfg.ResponseModelPath, resp.Model)
 	}
-	return json.Marshal(raw)
+	setWirePath(raw, providers.WireShapeResponseCreatedPath(chatWireShape), resp.Created)
+	encodeFixedValues(raw, chatWireShape)
+	return marshalWire(raw)
+}
+
+// marshalWire is the one marshal path for every body llmkit sends or encodes:
+// the chat request on every send path (Text, stream, the Agent, batch and its
+// JSONL), EncodeRequest, EncodeResponse and SaveHistory (HANDOFF-105 F7), and
+// the image, speech, music, video, transcription and caching bodies, the
+// Google upload metadata and the OTLP payload (F8).
+// TestMarshalWire_IsTheOneMarshalPath fails on any other JSON encoder in the
+// package. It renders JSON without HTML escaping, as TS and Rust do. A tool
+// call's map-format input is embedded as its own bytes (json.RawMessage), and
+// json.Marshal would rewrite a "<" inside it as \u003c, so the body would not
+// carry the tokens the provider sent (HANDOFF-105 F5).
+//
+// U+2028 and U+2029 go out as the escapes \u2028 and \u2029 everywhere, in a
+// Go string and in a json.RawMessage (a provider's or a caller's text), as TS
+// and Rust write them (HANDOFF-105 F10, owner decision 1). The escape keeps
+// the JSON value. encoding/json escapes them in a Go string, but inside a
+// json.RawMessage Go 1.27 (json v2) escapes them and GOEXPERIMENT=nojsonv2
+// keeps them, so marshalWire escapes after encoding, for every toolchain. In
+// valid JSON either character can stand only inside a string.
+func marshalWire(v any) ([]byte, error) {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(v); err != nil {
+		return nil, err
+	}
+	out := bytes.TrimSuffix(buf.Bytes(), []byte("\n"))
+	out = bytes.ReplaceAll(out, []byte("\u2028"), []byte(`\u2028`))
+	return bytes.ReplaceAll(out, []byte("\u2029"), []byte(`\u2029`)), nil
+}
+
+// servedChatWireShape resolves the shape DecodeResponse reads and
+// EncodeResponse writes: the named one,
+// or the provider's default when chatWireShape is "". A shape the provider
+// does not serve is a validation error on field "chatWireShape", the name
+// EncodeRequest uses (owner decision 2, HANDOFF-105 section 3b), and so is a provider that serves no chat shape at
+// all: writing provider paths into another family's body produces a body
+// neither family reads.
+func servedChatWireShape(provider, chatWireShape string) (string, error) {
+	cfg, err := servedChatSpec(provider, chatWireShape)
+	return cfg.ChatWireShape, err
+}
+
+// servedChatSpec is the one served-shape check (servedChatWireShape):
+// EncodeRequest, DecodeResponse and EncodeResponse all run it (HANDOFF-105
+// F11). It returns the provider's spec with the shape's endpoint and wire
+// shape.
+func servedChatSpec(provider, chatWireShape string) (providerSpec, error) {
+	cfg, ok := providerSpecs()[provider]
+	if !ok {
+		return providerSpec{}, &ValidationError{Field: "provider", Message: "unknown: " + provider}
+	}
+	shape := resolveChatWireShape(provider, chatWireShape)
+	served, ok := withWireShape(cfg, shape)
+	if shape == "" || !ok {
+		return providerSpec{}, &ValidationError{
+			Field:   "chatWireShape",
+			Message: fmt.Sprintf("provider %q does not serve chat wire shape %q", provider, chatWireShape),
+		}
+	}
+	return served, nil
+}
+
+// encodeFixedValues writes the fields every body of the shape carries with
+// the same value (shapeFixedValue, owner decision 4): on ChatOpenAI the
+// object type, the choice index and the message role.
+func encodeFixedValues(raw map[string]any, chatWireShape string) {
+	for _, fv := range providers.WireShapeFixedValues(chatWireShape) {
+		setWirePath(raw, fv.Path, fv.Value)
+	}
 }
 
 // guardOneWayFields refuses to encode a canonical field whose mapping is
-// OneWay for this provider — the result set of CQ-WMAP-011 (ADR-076
-// SYM-007). Only one member is in Phase 2's scope; the other,
-// exceptGoogleToolCallID, covers tool calls, which are out (SYM-008).
+// OneWay for this provider — the result set of CQ-WMAP-011 restricted to
+// Response (ADR-076 SYM-007). That set is empty today:
+// exceptGoogleToolCallID is on ToolCall, whose Google id the config
+// never writes (HANDOFF-105 F4), and
+// exceptVertexFinishReason is on the image response since ADR-099 slice
+// C4 (CRF-006). A Vertex chat Response writes no finish reason anyway: Vertex
+// has no chat wire shape, so encodeFinishReason finds no table.
 //
-// An empty value is not an error: there is nothing to write, so the common path
-// stays usable and only the lying path fails. Field and Message carry the
-// mapping's canonicalPath and invertibilityNote verbatim.
+// The guard stays so a new whole-field exception on Response fails
+// lint_response_codec.py until it is guarded here. An empty value is not an
+// error: there is nothing to write. Field and Message carry the mapping's
+// canonicalPath and invertibilityNote verbatim.
 func guardOneWayFields(provider string, resp Response) error {
-	if provider == string(providers.Vertex) && stringValue(resp.FinishReason) != "" {
-		return &ValidationError{
-			Field:   "response.finish_reason",
-			Message: "Vertex carries no finish-reason field. Its path reads predictions[0].raiFilteredReason — a safety-filter explanation surfaced AS the finish reason. Extraction is a deliberate fusion, so the reverse leg cannot decide whether a given canonical finish_reason originated as a safety verdict, and writing an ordinary stop signal into that field would fabricate one.",
-		}
-	}
 	return nil
 }
 
@@ -1217,20 +1370,33 @@ func derefWireValue(val any) (any, bool) {
 // and cached + reasoning sub-details. Hand-coded per wire shape on both legs,
 // symmetric with the reader, for the same reason the reader is (ADR-028:
 // behavior held by tests, not by declared response paths).
-func encodeResponsesEnvelope(resp Response) map[string]any {
+//
+// The shape declares no ToolCallResponseConfig, so a response with tool
+// calls is a ValidationError on field "toolCalls" (HANDOFF-105 F4 decision 2).
+func encodeResponsesEnvelope(provider, chatWireShape string, resp Response) (map[string]any, error) {
+	if len(resp.ToolCalls()) > 0 {
+		return nil, noToolCallConfigError(provider, chatWireShape)
+	}
 	raw := map[string]any{}
-	if resp.Text != "" {
+	if text := resp.Text(); text != "" {
 		raw["output"] = []any{map[string]any{
 			"type":    "message",
-			"content": []any{map[string]any{"type": "output_text", "text": resp.Text}},
+			"content": []any{map[string]any{"type": "output_text", "text": text}},
 		}}
 	}
 	setWirePath(raw, "usage.input_tokens", resp.Usage.Input)
 	setWirePath(raw, "usage.output_tokens", resp.Usage.Output)
 	setWirePath(raw, "usage.input_tokens_details.cached_tokens", resp.Usage.CacheRead)
 	setWirePath(raw, "usage.output_tokens_details.reasoning_tokens", resp.Usage.Reasoning)
-	setWirePath(raw, "status", resp.FinishReason)
-	return raw
+	if e, ok := encodeFinishReason(chatWireShape, resp); ok {
+		setWirePath(raw, "status", e.WireValue)
+		setWirePath(raw, e.DetailPath, e.DetailValue)
+	}
+	setWirePath(raw, providers.WireShapeResponseIDPath(providers.ChatResponsesOpenAI), resp.ID)
+	setWirePath(raw, providers.WireShapeResponseModelPath(providers.ChatResponsesOpenAI), resp.Model)
+	setWirePath(raw, providers.WireShapeResponseCreatedPath(providers.ChatResponsesOpenAI), resp.Created)
+	encodeFixedValues(raw, chatWireShape)
+	return raw, nil
 }
 
 // parseResponsesEnvelope extracts text + usage from OpenAI's Responses reply
@@ -1242,7 +1408,7 @@ func encodeResponsesEnvelope(resp Response) map[string]any {
 // not by declared response paths).
 func parseResponsesEnvelope(raw map[string]any) Response {
 	resp := Response{
-		Text: extractResponsesText(raw),
+		Parts: textParts(extractResponsesText(raw)),
 		Usage: Usage{
 			Input:     optIntPath(raw, "usage.input_tokens"),
 			Output:    optIntPath(raw, "usage.output_tokens"),
@@ -1251,8 +1417,12 @@ func parseResponsesEnvelope(raw map[string]any) Response {
 		},
 	}
 	if pathPresent(raw, "status") {
-		resp.FinishReason = optString(extractPath(raw, "status"))
+		resp.ProviderFinishReason = optString(extractPath(raw, "status"))
+		resp.FinishReason = decodeFinishReason(providers.ChatResponsesOpenAI, resp.ProviderFinishReason, raw)
 	}
+	resp.ID = optStringPath(raw, providers.WireShapeResponseIDPath(providers.ChatResponsesOpenAI))
+	resp.Model = optStringPath(raw, providers.WireShapeResponseModelPath(providers.ChatResponsesOpenAI))
+	resp.Created = optIntPath(raw, providers.WireShapeResponseCreatedPath(providers.ChatResponsesOpenAI))
 	return resp
 }
 
@@ -1306,6 +1476,26 @@ func extractFinishSignal(raw map[string]any, provider string) (reason, message *
 		message = optString(extractPath(raw, cfg.FinishMessagePath))
 	}
 	return reason, message
+}
+
+// extractResponseIdentity reads the response id and the reported model
+// (ADR-099 CRF-012) at the provider's declared paths. Each is absent when the
+// provider declares no path (Bedrock) or the body has no value there.
+func extractResponseIdentity(raw map[string]any, provider string) (id, model *string) {
+	cfg, ok := providerSpecs()[provider]
+	if !ok {
+		return nil, nil
+	}
+	return optStringPath(raw, cfg.ResponseIDPath), optStringPath(raw, cfg.ResponseModelPath)
+}
+
+// optStringPath is optIntPath for a string field: nil when the path is empty
+// or names no value in data.
+func optStringPath(data map[string]any, path string) *string {
+	if path == "" || !pathPresent(data, path) {
+		return nil
+	}
+	return optString(extractPath(data, path))
 }
 
 // pathPresent reports whether the given dot-path navigates to a non-nil

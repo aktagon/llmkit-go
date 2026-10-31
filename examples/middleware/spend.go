@@ -98,6 +98,6 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println("Answer:", resp.Text)
+	fmt.Println("Answer:", resp.Text())
 	fmt.Printf("Spent so far: $%.4f / $%.2f\n", cap.Spent(), 5.00)
 }

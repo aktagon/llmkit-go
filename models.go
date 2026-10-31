@@ -324,7 +324,7 @@ func wrapInList(body []byte, envelopeField string) []byte {
 }
 
 // buildCatalogueURL returns base + endpoint, splicing query-param auth
-// (Google's ?key=) directly into the URL the same way buildURL does for
+// (Google's ?key=) directly into the URL the same way sendURL does for
 // the prompt path.
 func buildCatalogueURL(p Provider, pcfg providerSpec, endpoint string) string {
 	base := p.BaseURL

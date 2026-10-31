@@ -75,7 +75,7 @@ func main() {
 		if err != nil {
 			log.Fatalf("Error calling %s API: %v", provider, err)
 		}
-		fmt.Print(resp.Text)
+		fmt.Print(resp.Text())
 	}
 }
 
