@@ -7,12 +7,31 @@ const (
 	// BatchRequestIDPrefix + the request index is the id sent with each
 	// batch request; the result parser reads the index back from it.
 	BatchRequestIDPrefix = "req-"
-	// BatchSlotMissing is the FinishReason of a batch slot whose request
-	// has no result line.
-	BatchSlotMissing = "missing"
-	// BatchSlotError is the FinishReason of a failed batch slot when the
-	// provider gives no reason.
-	BatchSlotError = "error"
+	// BatchSlotMissing is the Cause.Code of a batch slot whose request
+	// has no result line (ADR-099 CRF-016a).
+	BatchSlotMissing = FailureMissing
+	// BatchSlotError is the Cause.Code of a failed batch slot whose
+	// failure status has no entry in the provider's table, or that gives
+	// none (ADR-099 CRF-016a).
+	BatchSlotError = FailureError
+)
+
+// JobFailureCode says why an async job, or one batch item, failed
+// (ADR-099 CRF-016). JobFailure.Code holds one.
+type JobFailureCode string
+
+// Job failure codes.
+const (
+	// FailureCancelled: The job, or the batch that held the item, was cancelled before the work ran.
+	FailureCancelled JobFailureCode = "cancelled"
+	// FailureError: The provider reported a failure. Also the code of a failure status that has no entry in the provider's table.
+	FailureError JobFailureCode = "error"
+	// FailureExpired: The job, or the batch that held the item, reached the end of its time window before the work ran.
+	FailureExpired JobFailureCode = "expired"
+	// FailureMissing: No result line came back for the batch item. It is a code, not a job state: a poll never returns it (ADR-063). JobFailure.Status is empty.
+	FailureMissing JobFailureCode = "missing"
+	// FailureTimeout: The SDK's poll deadline passed while the provider still reported the job as running. The provider reported no failure, so JobFailure.Status is empty.
+	FailureTimeout JobFailureCode = "timeout"
 )
 
 // Batch input mode discriminators.
@@ -23,20 +42,21 @@ const (
 
 // BatchDef holds provider-specific batch processing configuration.
 type BatchDef struct {
-	InputMode           string   // BatchInlineRequests or BatchFileReferenceInput
-	InputField          string   // request field for file reference (OpenAI)
-	FilePurpose         string   // file upload purpose value
-	RequestWrapper      string   // field name wrapping individual requests
-	CompletionWindow    string   // time window for batch completion (e.g., "24h")
-	EndpointPath        string   // API endpoint path for JSONL batch requests
-	ItemBodyField       string   // field nesting request body in each item (e.g., "params" for Anthropic)
-	ResultBodyPath      string   // JSON path from each JSONL result line to the response body
-	ResultKeyPath       string   // JSON path from each result line; see batchResultKeyPath
-	ResultStatusPath    string   // JSON path from each result line; see batchResultStatusPath
-	ResultSuccessValues []string // see batchResultSuccessValues
-	ResultReasonPaths   []string // ordered; see batchResultReasonPaths
-	ResultMessagePaths  []string // ordered; see batchResultMessagePaths
-	RequestCountPaths   []string // summed from the status body; see batchRequestCountPaths
+	InputMode           string                    // BatchInlineRequests or BatchFileReferenceInput
+	InputField          string                    // request field for file reference (OpenAI)
+	FilePurpose         string                    // file upload purpose value
+	RequestWrapper      string                    // field name wrapping individual requests
+	CompletionWindow    string                    // time window for batch completion (e.g., "24h")
+	EndpointPath        string                    // API endpoint path for JSONL batch requests
+	ItemBodyField       string                    // field nesting request body in each item (e.g., "params" for Anthropic)
+	ResultBodyPath      string                    // JSON path from each JSONL result line to the response body
+	ResultKeyPath       string                    // JSON path from each result line; see batchResultKeyPath
+	ResultStatusPath    string                    // JSON path from each result line; see batchResultStatusPath
+	ResultSuccessValues []string                  // see batchResultSuccessValues
+	ResultReasonPaths   []string                  // ordered; see batchResultReasonPaths
+	ResultMessagePaths  []string                  // ordered; see batchResultMessagePaths
+	RequestCountPaths   []string                  // summed from the status body; see batchRequestCountPaths
+	ResultFailureCodes  map[string]JobFailureCode // failure status -> code; see failureCodeValue
 	Lifecycle           *ResourceLifecycleDef
 }
 
@@ -59,6 +79,7 @@ func BatchConfig(provider string) *BatchDef {
 			ResultReasonPaths:   []string{"result.type"},
 			ResultMessagePaths:  []string{"result.error.error.message"},
 			RequestCountPaths:   []string{"request_counts.processing", "request_counts.succeeded", "request_counts.errored", "request_counts.canceled", "request_counts.expired"},
+			ResultFailureCodes:  map[string]JobFailureCode{"canceled": FailureCancelled, "errored": FailureError, "expired": FailureExpired},
 			Lifecycle: &ResourceLifecycleDef{
 				CreateEndpoint:      "/v1/messages/batches",
 				ResponseIdPath:      "id",
@@ -101,6 +122,7 @@ func BatchConfig(provider string) *BatchDef {
 			ResultReasonPaths:   []string{"error.code", "response.body.error.code"},
 			ResultMessagePaths:  []string{"error.message", "response.body.error.message"},
 			RequestCountPaths:   []string{"request_counts.total"},
+			ResultFailureCodes:  map[string]JobFailureCode{"batch_expired": FailureExpired},
 			Lifecycle: &ResourceLifecycleDef{
 				CreateEndpoint:      "/v1/batches",
 				ResponseIdPath:      "id",
@@ -109,6 +131,7 @@ func BatchConfig(provider string) *BatchDef {
 				PollingStatusPath:   "status",
 				PollingDoneValue:    "completed",
 				PollingErrorValues:  []string{"failed", "expired", "cancelled"},
+				PollingFailureCodes: map[string]JobFailureCode{"cancelled": FailureCancelled, "expired": FailureExpired, "failed": FailureError},
 				ResultEndpoint:      "",
 				ResultResponsePath:  "",
 				ResultFileIdPath:    "output_file_id",

@@ -347,17 +347,34 @@ func doSigV4Get(ctx context.Context, client *http.Client, url string,
 	return data, nil
 }
 
+// streamLocators are the ADR-013 locators a stream reads its finish reason,
+// response id and model from (ADR-099 CRF-014). Each takes the form
+// `event_name:json.path` (event-typed SSE — Anthropic message_delta) or bare
+// `json.path` (data-only SSE — OpenAI / Grok / Google). Empty disables capture.
+type streamLocators struct {
+	FinishReason string
+	ID           string
+	Model        string
+}
+
+// streamFields are the values the locators found. Each is nil when no frame
+// matched its locator.
+type streamFields struct {
+	FinishReason *string
+	ID           *string
+	Model        *string
+}
+
 // doStreamPost sends a POST request and processes SSE events via callback.
-// Returns accumulated usage and the stream-time finish-reason after the
-// stream ends. finishReasonPath uses ADR-013 form: `event_name:json.path`
-// (event-typed SSE — Anthropic message_delta) or bare `json.path`
-// (data-only SSE — OpenAI / Grok / Google). Empty disables capture.
+// Returns accumulated usage and the stream-time fields after the stream ends.
+// A bare locator is read on every parsed data frame; the last non-empty value
+// wins.
 func doStreamPost(ctx context.Context, client *http.Client, url string, body []byte, headers map[string]string,
-	streamCfg *providers.StreamDef, finishReasonPath string, callback func(string)) (Usage, *string, error) {
+	streamCfg *providers.StreamDef, locs streamLocators, callback func(string)) (Usage, streamFields, error) {
 
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
 	if err != nil {
-		return Usage{}, nil, redactURLError(err)
+		return Usage{}, streamFields{}, redactURLError(err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -367,23 +384,25 @@ func doStreamPost(ctx context.Context, client *http.Client, url string, body []b
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return Usage{}, nil, redactURLError(err)
+		return Usage{}, streamFields{}, redactURLError(err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
 		data, _ := io.ReadAll(resp.Body)
-		return Usage{}, nil, &APIError{
+		return Usage{}, streamFields{}, &APIError{
 			StatusCode: resp.StatusCode,
 			Message:    string(data),
 			Retryable:  resp.StatusCode == 429 || resp.StatusCode >= 500,
 		}
 	}
 
-	finishEvent, finishJSONPath := parseStreamFinishPath(finishReasonPath)
+	finishLoc := parseStreamFinishPath(locs.FinishReason)
+	idLoc := parseStreamFinishPath(locs.ID)
+	modelLoc := parseStreamFinishPath(locs.Model)
 
 	var usage Usage
-	var finishReason *string
+	var fields streamFields
 	var currentEvent string
 	scanner := bufio.NewScanner(resp.Body)
 	// Default Scanner buffer is 64KB. SSE frames carrying large
@@ -420,19 +439,15 @@ func doStreamPost(ctx context.Context, client *http.Client, url string, body []b
 		var parsed map[string]any
 		parseErr := json.Unmarshal([]byte(data), &parsed)
 
-		if parseErr == nil && finishJSONPath != "" {
-			if finishEvent == "" || finishEvent == currentEvent {
-				if pathPresent(parsed, finishJSONPath) {
-					// pathPresent already vetoes nil; the "<nil>" string
-					// check guards against extractPath's fmt.Sprint
-					// path that stringifies a present-but-nil value
-					// (OpenAI mid-stream `finish_reason: null`). The
-					// TS/Python/Rust parsers return "" for null and
-					// rely on truthiness — Go alone needs the literal.
-					if v := extractPath(parsed, finishJSONPath); v != "" && v != "<nil>" && v != "FINISH_REASON_UNSPECIFIED" {
-						finishReason = optString(v)
-					}
-				}
+		if parseErr == nil {
+			if v := finishLoc.read(parsed, currentEvent); v != "" && v != "FINISH_REASON_UNSPECIFIED" {
+				fields.FinishReason = optString(v)
+			}
+			if v := idLoc.read(parsed, currentEvent); v != "" {
+				fields.ID = optString(v)
+			}
+			if v := modelLoc.read(parsed, currentEvent); v != "" {
+				fields.Model = optString(v)
 			}
 		}
 
@@ -484,21 +499,44 @@ func doStreamPost(ctx context.Context, client *http.Client, url string, body []b
 		currentEvent = ""
 	}
 
-	return usage, finishReason, scanner.Err()
+	return usage, fields, scanner.Err()
 }
 
-// parseStreamFinishPath splits an ADR-013 stream-finish locator into its
-// optional event-name prefix and the JSON path. `event_name:json.path`
-// returns (event_name, json.path); bare `json.path` returns ("", json.path);
-// empty returns ("", "").
-func parseStreamFinishPath(p string) (eventName, jsonPath string) {
+// streamLocator is one ADR-013 locator split into its optional event name and
+// its JSON path.
+type streamLocator struct {
+	event string
+	path  string
+}
+
+// read returns the string at the locator's path in a frame of the locator's
+// event, or "" when the frame does not match or carries no value there.
+func (l streamLocator) read(parsed map[string]any, currentEvent string) string {
+	if l.path == "" || (l.event != "" && l.event != currentEvent) || !pathPresent(parsed, l.path) {
+		return ""
+	}
+	// pathPresent already vetoes nil; the "<nil>" check guards against
+	// extractPath's fmt.Sprint path that stringifies a present-but-nil value
+	// (OpenAI mid-stream `finish_reason: null`). The TS and Rust parsers
+	// return "" for null and rely on truthiness — Go alone needs the literal.
+	if v := extractPath(parsed, l.path); v != "<nil>" {
+		return v
+	}
+	return ""
+}
+
+// parseStreamFinishPath splits an ADR-013 stream locator into its optional
+// event-name prefix and the JSON path. `event_name:json.path` returns
+// (event_name, json.path); bare `json.path` returns ("", json.path); empty
+// returns ("", "").
+func parseStreamFinishPath(p string) streamLocator {
 	if p == "" {
-		return "", ""
+		return streamLocator{}
 	}
 	if idx := strings.Index(p, ":"); idx >= 0 {
-		return p[:idx], p[idx+1:]
+		return streamLocator{event: p[:idx], path: p[idx+1:]}
 	}
-	return "", p
+	return streamLocator{path: p}
 }
 
 // detectMimeType returns MIME type based on file extension.

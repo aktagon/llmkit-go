@@ -19,8 +19,7 @@ import (
 // submitBatch / waitBatch are internal implementations.
 // Public surface: (*Text).Batch (ADR-064) / BatchHandle.Wait / BatchHandle.Poll
 // in batch_builder.go.
-func submitBatch(ctx context.Context, p Provider, reqs []Request, opts ...Option) (BatchHandle, error) {
-	o := resolveOptions(opts)
+func submitBatch(ctx context.Context, p Provider, reqs []Request, o *options) (BatchHandle, error) {
 	o.httpClient = withRequestTimeout(o.httpClient, p.Timeout)
 
 	if err := validateProvider(p); err != nil {
@@ -41,7 +40,9 @@ func submitBatch(ctx context.Context, p Provider, reqs []Request, opts ...Option
 		return BatchHandle{}, &ValidationError{Field: "provider", Message: "async batching not supported: " + p.Name}
 	}
 
-	model, err := resolveModel(p, cfg)
+	// Every item runs the one validation step before the pre hook (RQC-017,
+	// HANDOFF-105 F11), so a bad item fails the submit as it fails Text.
+	items, model, err := encodeBatch(p, cfg, reqs)
 	if err != nil {
 		return BatchHandle{}, err
 	}
@@ -75,7 +76,7 @@ func submitBatch(ctx context.Context, p Provider, reqs []Request, opts ...Option
 	switch bc.InputMode {
 	case providers.BatchFileReferenceInput:
 		// Build JSONL, upload file, create batch referencing file ID
-		jsonl, err := buildBatchJSONL(ctx, reqs, o, p, cfg, bc)
+		jsonl, err := buildBatchJSONL(ctx, items, o, p, cfg, bc)
 		if err != nil {
 			return BatchHandle{}, postWith(err)
 		}
@@ -88,12 +89,12 @@ func submitBatch(ctx context.Context, p Provider, reqs []Request, opts ...Option
 			"endpoint":          bc.EndpointPath,
 			"completion_window": bc.CompletionWindow,
 		}
-		jsonBody, err = json.Marshal(body)
+		jsonBody, err = marshalWire(body)
 		if err != nil {
 			return BatchHandle{}, postWith(fmt.Errorf("marshal batch request: %w", err))
 		}
 	default:
-		body, betaHeaders, err := buildBatchBody(ctx, reqs, o, p, cfg, bc)
+		body, betaHeaders, err := buildBatchBody(ctx, items, o, p, cfg, bc)
 		if err != nil {
 			return BatchHandle{}, postWith(err)
 		}
@@ -105,7 +106,7 @@ func submitBatch(ctx context.Context, p Provider, reqs []Request, opts ...Option
 		for k, v := range betaHeaders {
 			headers[k] = appendBeta(headers[k], v)
 		}
-		jsonBody, err = json.Marshal(body)
+		jsonBody, err = marshalWire(body)
 		if err != nil {
 			return BatchHandle{}, postWith(fmt.Errorf("marshal batch request: %w", err))
 		}
@@ -232,6 +233,7 @@ func newBatchAdapter(handle BatchHandle, o *options) (batchAdapter, error) {
 		StatusPath:   bc.Lifecycle.PollingStatusPath,
 		DoneValues:   nonEmptyValues(bc.Lifecycle.PollingDoneValue),
 		ErrorValues:  bc.Lifecycle.PollingErrorValues,
+		FailureCodes: bc.Lifecycle.PollingFailureCodes,
 		PollInterval: batchPollInterval,
 		PollTimeout:  timeout,
 	}
@@ -247,23 +249,20 @@ func newBatchAdapter(handle BatchHandle, o *options) (batchAdapter, error) {
 // per-request bodies require (files-api / structured output), composed across
 // items, so the caller can attach them to the batch CREATE request (buildRequest
 // returns them per request, but the batch submit sends only auth headers).
-func buildBatchBody(ctx context.Context, reqs []Request, o *options, p Provider, cfg providerSpec, bc *providers.BatchDef) (map[string]any, map[string]string, error) {
+// reqs are encoded (encodeBatch).
+func buildBatchBody(ctx context.Context, reqs []chatRequest, o *options, p Provider, cfg providerSpec, bc *providers.BatchDef) (map[string]any, map[string]string, error) {
 	body := map[string]any{}
 	betaHeaders := map[string]string{}
 	var items []map[string]any
-	for i, req := range reqs {
-		msgs, err := requestMsgs(req)
-		if err != nil {
-			return nil, nil, err
-		}
-		reqBody, reqHeaders := buildRequest(p, req, msgs, o, cfg, nil)
-		if v := reqHeaders["anthropic-beta"]; v != "" {
+	for i, chat := range reqs {
+		req, reqBody := chat.req, chat.body
+		if v := chat.content["anthropic-beta"]; v != "" {
 			betaHeaders["anthropic-beta"] = appendBeta(betaHeaders["anthropic-beta"], v)
 		}
 		// Caching is a shared request-construction step (ADR-026), applied on
 		// the batch path like Text/Agent — matching the TS/Python batch paths.
 		if o.caching {
-			if err := applyCaching(ctx, reqBody, p, o, cfg); err != nil {
+			if err := applyCaching(ctx, reqBody, p, req.Model, o, cfg); err != nil {
 				return nil, nil, err
 			}
 		}
@@ -286,18 +285,35 @@ func buildBatchBody(ctx context.Context, reqs []Request, o *options, p Provider,
 	return body, betaHeaders, nil
 }
 
+// encodeBatch runs encodeChat on every item and returns the encoded items
+// and the model the batch_submit event reports: the first item's.
+// Text.Batch builds every item from one builder, so they share one model.
+// With no items, the model is p's, as before.
+func encodeBatch(p Provider, cfg providerSpec, reqs []Request) ([]chatRequest, string, error) {
+	out := make([]chatRequest, 0, len(reqs))
+	for _, req := range reqs {
+		chat, err := encodeChat(p, cfg, req)
+		if err != nil {
+			return nil, "", err
+		}
+		out = append(out, chat)
+	}
+	if len(out) > 0 {
+		return out, out[0].req.Model, nil
+	}
+	model, err := resolveModel(p, cfg)
+	return out, model, err
+}
+
 // buildBatchJSONL serializes requests as JSONL for file-reference batch input.
 // Each line is: {"custom_id":"req-N","method":"POST","url":endpoint,"body":{...}}
-func buildBatchJSONL(ctx context.Context, reqs []Request, o *options, p Provider, cfg providerSpec, bc *providers.BatchDef) ([]byte, error) {
+// reqs are encoded (encodeBatch).
+func buildBatchJSONL(ctx context.Context, reqs []chatRequest, o *options, p Provider, cfg providerSpec, bc *providers.BatchDef) ([]byte, error) {
 	var buf strings.Builder
-	for i, req := range reqs {
-		msgs, err := requestMsgs(req)
-		if err != nil {
-			return nil, err
-		}
-		reqBody, _ := buildRequest(p, req, msgs, o, cfg, nil)
+	for i, chat := range reqs {
+		req, reqBody := chat.req, chat.body
 		if o.caching {
-			if err := applyCaching(ctx, reqBody, p, o, cfg); err != nil {
+			if err := applyCaching(ctx, reqBody, p, req.Model, o, cfg); err != nil {
 				return nil, err
 			}
 		}
@@ -307,7 +323,10 @@ func buildBatchJSONL(ctx context.Context, reqs []Request, o *options, p Provider
 			"url":       bc.EndpointPath,
 			"body":      reqBody,
 		}
-		data, _ := json.Marshal(line)
+		data, err := marshalWire(line)
+		if err != nil {
+			return nil, fmt.Errorf("marshal batch line: %w", err)
+		}
 		buf.Write(data)
 		buf.WriteByte('\n')
 	}
@@ -425,7 +444,8 @@ type batchSlot struct {
 //
 // With a request count (hasCount), there are exactly count slots, and an id at
 // or above the count follows them. Without one, slots run to the highest index
-// seen. An index with no line reads providers.BatchSlotMissing. Lines whose id
+// seen. An index with no line is a failed item whose cause code is
+// providers.BatchSlotMissing. Lines whose id
 // has another form (a batch created outside llmkit) follow the indexed slots
 // in file order. A line that is not JSON cannot be placed and is skipped.
 //
@@ -480,8 +500,10 @@ func parseBatchResults(provider string, sources [][]byte, bc *providers.BatchDef
 	responses := make([]Response, 0, len(slots)+len(unkeyed))
 	for _, slot := range slots {
 		if slot == nil {
-			missing := providers.BatchSlotMissing
-			responses = append(responses, Response{FinishReason: &missing})
+			responses = append(responses, Response{
+				State: batchItemState(JobFailed),
+				Cause: &JobFailure{Code: providers.BatchSlotMissing},
+			})
 			continue
 		}
 		responses = append(responses, slot.resp)
@@ -489,14 +511,24 @@ func parseBatchResults(provider string, sources [][]byte, bc *providers.BatchDef
 	return append(responses, unkeyed...)
 }
 
+// batchItemState is a batch item's Response.State. Only batch items carry one;
+// nil on any other Response means it is not a batch item (owner decision 7,
+// HANDOFF-105 section 3b).
+func batchItemState(s JobState) *JobState { return &s }
+
 // parseBatchResultLine decodes one result line. The line succeeded when the
 // value at bc.ResultStatusPath is one of bc.ResultSuccessValues (any value when
-// the provider declares no status path) and its body decodes. Every other line
-// becomes a failed Response: empty text, the first reason path that resolves
-// as FinishReason (providers.BatchSlotError when none does) and the first
-// message path that resolves as FinishMessage.
+// the provider declares no status path) and its body decodes; its State is
+// JobSucceeded. Every other line becomes a failed item (ADR-099 CRF-015):
+// empty text, no finish reason or message, State JobFailed, and a Cause whose
+// Status is the first reason path that resolves, whose Code is that status's
+// entry in bc.ResultFailureCodes (providers.BatchSlotError when it has none),
+// and whose Message is the first message path that resolves. A line that
+// succeeded but whose body does not decode keeps the decode error as its
+// Message (HANDOFF-105 F5).
 func parseBatchResultLine(provider string, line []byte, wrapper map[string]any, bc *providers.BatchDef, raw bool) batchSlot {
 	signalled := bc.ResultStatusPath == "" || slices.Contains(bc.ResultSuccessValues, extractPath(wrapper, bc.ResultStatusPath))
+	message := firstPath(wrapper, bc.ResultMessagePaths)
 	if signalled {
 		responseBytes := line
 		if bc.ResultBodyPath != "" {
@@ -513,19 +545,29 @@ func parseBatchResultLine(provider string, line []byte, wrapper map[string]any, 
 		if len(responseBytes) > 0 && responseBytes[0] == '{' {
 			// Batch is Chat-Completions-only (ADR-055): empty wire shape selects
 			// the provider's declared response paths, not the Responses arm.
-			if resp, err := decodeResponseRaw(provider, "", responseBytes, raw); err == nil {
+			resp, err := decodeResponseRaw(provider, "", responseBytes, raw)
+			if err == nil {
+				resp.State = batchItemState(JobSucceeded)
 				return batchSlot{resp: resp, succeeded: true}
 			}
+			// The provider says the request succeeded, but llmkit cannot read
+			// its body: the item failed here, and the decode error is why.
+			message = err.Error()
 		}
 	}
 
-	reason := firstPath(wrapper, bc.ResultReasonPaths)
-	if reason == "" {
-		reason = providers.BatchSlotError
+	status := firstPath(wrapper, bc.ResultReasonPaths)
+	code, ok := bc.ResultFailureCodes[status]
+	if !ok {
+		code = providers.BatchSlotError
 	}
 	failed := Response{
-		FinishReason:  &reason,
-		FinishMessage: optString(firstPath(wrapper, bc.ResultMessagePaths)),
+		State: batchItemState(JobFailed),
+		Cause: &JobFailure{
+			Code:    code,
+			Status:  status,
+			Message: message,
+		},
 	}
 	return batchSlot{resp: attachRaw(failed, line, raw)}
 }

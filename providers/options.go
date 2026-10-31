@@ -427,3 +427,15 @@ func WireShapeOptionOverrides(chatWireShape string) map[OptionKey]string {
 		return nil
 	}
 }
+
+// WireShapeRequiredParams returns the generation params a chat wire shape's
+// API rejects a request without (ADR-098 RQC-014). An unset param that is
+// not listed is not sent.
+func WireShapeRequiredParams(chatWireShape string) []OptionKey {
+	switch chatWireShape {
+	case ChatAnthropic:
+		return []OptionKey{OptionMaxTokens}
+	default:
+		return nil
+	}
+}

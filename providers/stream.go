@@ -496,3 +496,25 @@ func WireShapeStreamFinishReasonPath(chatWireShape string) string {
 		return ""
 	}
 }
+
+// WireShapeStreamResponseIDPath returns the ADR-013 stream response-id
+// locator read with WireShapeStreamConfig (ADR-099 CRF-014).
+func WireShapeStreamResponseIDPath(chatWireShape string) string {
+	switch chatWireShape {
+	case ChatResponsesOpenAI:
+		return "response.completed:response.id"
+	default:
+		return ""
+	}
+}
+
+// WireShapeStreamResponseModelPath returns the ADR-013 stream
+// response-model locator read with WireShapeStreamConfig (ADR-099 CRF-014).
+func WireShapeStreamResponseModelPath(chatWireShape string) string {
+	switch chatWireShape {
+	case ChatResponsesOpenAI:
+		return "response.completed:response.model"
+	default:
+		return ""
+	}
+}
