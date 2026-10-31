@@ -69,8 +69,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   value: the call's `Input` is `""`, and the next request sends it. Only
   `null` reads as no input.
 - **BREAKING — `SaveHistory` rejects a tool call whose `Input` is empty but
-  not nil.** It used to save the call with no input. Set `Input` to nil for a
-  call with no input.
+  not nil.** It returns a `*ValidationError` on `messages[i].parts[j]`, as
+  for any `Input` that is not JSON. It used to save the call with no input.
+  Set `Input` to nil for a call with no input.
 - **BREAKING — a saved provider turn must be one JSON value of its format's
   kind.** `LoadHistory` and every request (`Text`, stream, batch, the Agent,
   `EncodeRequest`) return a `ValidationError` on
