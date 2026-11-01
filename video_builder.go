@@ -6,7 +6,7 @@ import (
 
 // Submit executes the chained VideoGeneration request against the client's
 // provider and returns a VideoHandle immediately (ADR-034). Chain state
-// populates VideoRequest and the matching VideoOption set; finalText, when
+// populates videoRequest and the matching VideoOption set; finalText, when
 // non-empty, becomes a trailing text Part appended to the chain's accumulated
 // Parts. Poll the returned handle with Wait.
 func (b *Video) Submit(ctx context.Context, finalText string) (VideoHandle, error) {
@@ -15,7 +15,7 @@ func (b *Video) Submit(ctx context.Context, finalText string) (VideoHandle, erro
 		parts = append(parts, Part{Text: finalText})
 	}
 
-	req := VideoRequest{
+	req := videoRequest{
 		Model:           b.model,
 		Parts:           parts,
 		OutputURI:       b.outputURI,

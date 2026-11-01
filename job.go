@@ -109,13 +109,13 @@ type JobStatus[T any] struct {
 	RawStatus string
 }
 
-// LifecycleConfig is the config half of the engine seam: the classification
+// lifecycleConfig is the config half of the engine seam: the classification
 // facts (status path + done / error value sets + the error-message path) and
 // the poll cadence. Each capability assembles it from its own generated facts
 // (batch Lifecycle.*, transcription StatusPath / DoneStatus / ErrorStatus).
 // Slice 1 assembles it from today's facts; the shared AsyncJobLifecycle
 // block is slice 2 (ADR-062 §(a)).
-type LifecycleConfig struct {
+type lifecycleConfig struct {
 	// Noun labels the capability in the failure error string ("transcription",
 	// "batch") so a JobFailed terminal reads "<noun> failed: <message>",
 	// preserving transcription's existing surface (S02).
@@ -160,12 +160,12 @@ type LifecycleConfig struct {
 // method every adapter must implement (dead code, YAGNI). If slice 2 (video)
 // or telemetry-on-Poll needs the URL surfaced independently, re-add it then.
 //
-// config returns the LifecycleConfig (classification facts + cadence). It is the
+// config returns the lifecycleConfig (classification facts + cadence). It is the
 // single source of that config: pollJob reads it for cadence/deadline and
 // classify reads it for the done/error sets — so the adapter is the only place
 // the config lives (no parallel copy threaded through the engine).
 type jobAdapter[T any] interface {
-	config() LifecycleConfig
+	config() lifecycleConfig
 	poll(ctx context.Context) (pollBody, error)
 	classify(raw pollBody) (classification, error)
 	result(ctx context.Context, raw pollBody) (T, error)
@@ -195,7 +195,7 @@ type classification struct {
 // on, bounded by the backstop). So an unmodeled/new terminal degrades to a
 // bounded timeout — never a false success and never a false failure of a live
 // job (ADR-062 §"Implementation refinements" 4).
-func classifyByConfig(lc LifecycleConfig, raw pollBody) classification {
+func classifyByConfig(lc lifecycleConfig, raw pollBody) classification {
 	status := raw.Status(lc.StatusPath)
 	for _, d := range lc.DoneValues {
 		if status == d {
@@ -226,7 +226,7 @@ func failureCode(codes map[string]JobFailureCode, status string) JobFailureCode 
 
 // jobFailedError is the error pollJob returns (and Wait, which loops it) on a
 // terminal failure. Its message preserves each capability's surface via
-// LifecycleConfig.Noun — transcription's "transcription failed: <msg>" (S02) —
+// lifecycleConfig.Noun — transcription's "transcription failed: <msg>" (S02) —
 // while carrying the structured JobFailure for programmatic branching.
 type jobFailedError struct {
 	noun    string

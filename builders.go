@@ -376,9 +376,9 @@ func (b *Music) Text(s string) *Music {
 // terminals live in hand-written text.go / image.go.
 type Speech struct {
 	client     *Client
-	lines      []SpeechLine
+	lines      []speechLine
 	middleware []MiddlewareFn
-	speakers   []SpeechSpeaker
+	speakers   []speechSpeaker
 	model      string
 	style      string
 	voice      string
@@ -388,7 +388,7 @@ type Speech struct {
 // order. When lines are set, the text passed to Generate must be empty.
 func (b *Speech) AddLine(speaker, text string) *Speech {
 	out := *b
-	out.lines = append(append([]SpeechLine{}, b.lines...), SpeechLine{Speaker: speaker, Text: text})
+	out.lines = append(append([]speechLine{}, b.lines...), speechLine{Speaker: speaker, Text: text})
 	return &out
 } // ordered
 func (b *Speech) AddMiddleware(fns ...MiddlewareFn) *Speech {
@@ -401,14 +401,14 @@ func (b *Speech) AddMiddleware(fns ...MiddlewareFn) *Speech {
 // request. Declare exactly 2 speakers, and do not set a Voice with them.
 func (b *Speech) AddSpeaker(name, voice string) *Speech {
 	out := *b
-	out.speakers = append(append([]SpeechSpeaker{}, b.speakers...), SpeechSpeaker{Name: name, Voice: voice})
+	out.speakers = append(append([]speechSpeaker{}, b.speakers...), speechSpeaker{Name: name, Voice: voice})
 	return &out
 } // ordered
 // AddStyledLine appends a line said by a declared speaker in a delivery style, such as
 // "calm and relaxed". Otherwise it works like AddLine.
 func (b *Speech) AddStyledLine(speaker, style, text string) *Speech {
 	out := *b
-	out.lines = append(append([]SpeechLine{}, b.lines...), SpeechLine{Speaker: speaker, Style: style, Text: text})
+	out.lines = append(append([]speechLine{}, b.lines...), speechLine{Speaker: speaker, Style: style, Text: text})
 	return &out
 }                                           // ordered
 func (b *Speech) Model(name string) *Speech { out := *b; out.model = name; return &out }

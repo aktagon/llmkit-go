@@ -13,7 +13,7 @@ import (
 	internalproviders "github.com/aktagon/llmkit-go/v3/internal/providers"
 )
 
-// MusicRequest is the canonical music-generation request (ADR-033).
+// musicRequest is the canonical music-generation request (ADR-033).
 //
 // Model is required: music-generation models are explicit choices and the
 // text-generation default does not generate audio.
@@ -28,7 +28,7 @@ import (
 // Pre-flight validation requires exactly one of Prompt or Parts to be
 // non-empty (XOR). Lyrics on an instrumental-only model are advisory, not
 // rejected (ADR-037 MUS-008): they fold into the prompt for the Predict shape.
-type MusicRequest struct {
+type musicRequest struct {
 	Model  string
 	Prompt string
 	Parts  []Part
@@ -78,7 +78,7 @@ func resolveMusicOptions(opts []musicOption) *musicOptions {
 // not gated.
 //
 // Internal helper — the public surface is (*Music).Generate in music_builder.go.
-func generateMusic(ctx context.Context, p Provider, req MusicRequest, opts ...musicOption) (MusicResponse, error) {
+func generateMusic(ctx context.Context, p Provider, req musicRequest, opts ...musicOption) (MusicResponse, error) {
 	o := resolveMusicOptions(opts)
 
 	if err := validateProvider(p); err != nil {
@@ -327,7 +327,7 @@ func buildMusicURL(p Provider, cfg providerSpec, mgCfg *internalproviders.MusicG
 // normalizeMusicParts enforces the XOR rule and produces the canonical []Part.
 // When only Prompt is set, it synthesises []Part{Text(req.Prompt)}. Both empty
 // or both set is a validation error.
-func normalizeMusicParts(req MusicRequest) ([]Part, error) {
+func normalizeMusicParts(req musicRequest) ([]Part, error) {
 	hasPrompt := req.Prompt != ""
 	hasParts := len(req.Parts) > 0
 	switch {
