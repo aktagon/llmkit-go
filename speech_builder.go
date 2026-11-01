@@ -6,10 +6,10 @@ import (
 
 // Generate executes the chained SpeechGeneration request against the client's
 // provider. Chain state (Model, Voice, Style, speakers, lines) populates
-// SpeechRequest; text is the single utterance to speak (ADR-049), and must be
+// speechRequest; text is the single utterance to speak (ADR-049), and must be
 // empty when lines are set (BUG-091).
 func (b *Speech) Generate(ctx context.Context, text string) (SpeechResponse, error) {
-	req := SpeechRequest{
+	req := speechRequest{
 		Model:    b.model,
 		Voice:    b.voice,
 		Style:    b.style,

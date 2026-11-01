@@ -14,7 +14,7 @@ import (
 	internalproviders "github.com/aktagon/llmkit-go/v3/internal/providers"
 )
 
-// ImageRequest is the canonical image-generation request.
+// imageRequest is the canonical image-generation request.
 //
 // Model is required: image-generation models are explicit choices and the
 // text-generation default (e.g., gemini-2.5-flash) does not generate images.
@@ -29,7 +29,7 @@ import (
 //
 // Pre-flight validation requires exactly one of Prompt or Parts to be
 // non-empty (XOR). Image-typed parts respect the model's SupportsImageInput and MaxInputImages.
-type ImageRequest struct {
+type imageRequest struct {
 	Model  string
 	Prompt string
 	Parts  []Part
@@ -174,7 +174,7 @@ func resolveImageOptions(opts []imageOption) *imageOptions {
 //
 // Internal helper as of plan-018 D1.3c — public surface is
 // (*Image).Generate in image_builder.go.
-func generateImage(ctx context.Context, p Provider, req ImageRequest, opts ...imageOption) (ImageResponse, error) {
+func generateImage(ctx context.Context, p Provider, req imageRequest, opts ...imageOption) (ImageResponse, error) {
 	o := resolveImageOptions(opts)
 
 	if err := validateProvider(p); err != nil {
@@ -687,7 +687,7 @@ func extFromMime(mime string) string {
 // []Part the rest of the pipeline operates on. When only Prompt is set
 // (the text-only sugar path), it synthesises a single-element slice
 // []Part{Text(req.Prompt)}. Both empty or both set is a validation error.
-func normalizeImageParts(req ImageRequest) ([]Part, error) {
+func normalizeImageParts(req imageRequest) ([]Part, error) {
 	hasPrompt := req.Prompt != ""
 	hasParts := len(req.Parts) > 0
 	switch {

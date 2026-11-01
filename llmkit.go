@@ -14,8 +14,8 @@ import (
 	"github.com/aktagon/llmkit-go/v3/providers"
 )
 
-// StreamCallback is called with each text chunk during streaming.
-type StreamCallback func(chunk string)
+// streamCallback is called with each text chunk during streaming.
+type streamCallback func(chunk string)
 
 // BaseURL and AddHeader (Client-scoped config setters, ADR-052) are
 // generated into builders.go from the ClientConfigMethod manifest.
@@ -47,7 +47,7 @@ func (c *Client) Supports(cap Capability) bool {
 // promptStream is the internal streaming implementation. The
 // public surface is (*Text).Stream in stream.go (plan-018 D1.3b).
 // protocol is the Text.Protocol token (ADR-055); "" keeps the default.
-func promptStream(ctx context.Context, p Provider, req Request, protocol string, callback StreamCallback, o *options) (Response, error) {
+func promptStream(ctx context.Context, p Provider, req Request, protocol string, callback streamCallback, o *options) (Response, error) {
 	o.httpClient = withRequestTimeout(o.httpClient, p.Timeout)
 
 	if err := validateProvider(p); err != nil {

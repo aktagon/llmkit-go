@@ -161,7 +161,7 @@ func waitBatch(ctx context.Context, handle BatchHandle, opts ...Option) ([]Respo
 // closes over the resolved options (http client, raw flag) + provider config so
 // result can perform batch's two-hop (output_file_id → GET /content).
 type batchAdapter struct {
-	lc         LifecycleConfig
+	lc         lifecycleConfig
 	o          *options
 	handle     BatchHandle
 	base       string
@@ -171,7 +171,7 @@ type batchAdapter struct {
 	pollURLStr string
 }
 
-func (a batchAdapter) config() LifecycleConfig { return a.lc }
+func (a batchAdapter) config() lifecycleConfig { return a.lc }
 
 func (a batchAdapter) poll(ctx context.Context) (pollBody, error) {
 	respBody, err := doGet(ctx, a.o.httpClient, a.pollURLStr, a.headers)
@@ -196,7 +196,7 @@ func (a batchAdapter) result(ctx context.Context, raw pollBody) ([]Response, err
 	return fetchBatchResults(ctx, a.o, a.handle, a.base, a.bc, a.cfg, a.headers, a.o.raw, raw.raw)
 }
 
-// newBatchAdapter assembles the batch adapter + its LifecycleConfig from the
+// newBatchAdapter assembles the batch adapter + its lifecycleConfig from the
 // batch facts. ErrorValues comes from the provider's pollingErrorValues fact
 // (OpenAI: failed/expired/cancelled); when absent (Anthropic — failures are
 // per-request, batch "ended" is done) it is empty and a stuck batch terminates
@@ -229,7 +229,7 @@ func newBatchAdapter(handle BatchHandle, o *options) (batchAdapter, error) {
 		timeout = o.pollTimeout
 	}
 
-	lc := LifecycleConfig{
+	lc := lifecycleConfig{
 		Noun:         "batch",
 		StatusPath:   bc.Lifecycle.PollingStatusPath,
 		DoneValues:   nonEmptyValues(bc.Lifecycle.PollingDoneValue),

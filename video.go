@@ -17,7 +17,7 @@ import (
 	internalproviders "github.com/aktagon/llmkit-go/v3/internal/providers"
 )
 
-// VideoRequest is the canonical video-generation request (ADR-034).
+// videoRequest is the canonical video-generation request (ADR-034).
 //
 // Model is required: video-generation models are explicit choices and the
 // text-generation default does not generate video.
@@ -30,7 +30,7 @@ import (
 //
 // Pre-flight validation requires exactly one of Prompt or Parts to be
 // non-empty (XOR).
-type VideoRequest struct {
+type videoRequest struct {
 	Model  string
 	Prompt string
 	Parts  []Part
@@ -132,7 +132,7 @@ func resolveVideoOptions(opts []VideoOption) *videoOptions {
 // rejects unknown models and unsupported part kinds before any HTTP call.
 //
 // Internal helper — the public surface is (*Video).Submit in video_builder.go.
-func submitVideo(ctx context.Context, p Provider, req VideoRequest, opts ...VideoOption) (VideoHandle, error) {
+func submitVideo(ctx context.Context, p Provider, req videoRequest, opts ...VideoOption) (VideoHandle, error) {
 	o := resolveVideoOptions(opts)
 
 	if err := validateProvider(p); err != nil {
@@ -249,7 +249,7 @@ func dispatchVideoSubmit(
 	cfg providerSpec,
 	vgCfg *internalproviders.VideoGenDef,
 	variant internalproviders.RequestVariant,
-	req VideoRequest,
+	req videoRequest,
 	parts []Part,
 	headers map[string]string,
 ) (string, error) {
@@ -1216,7 +1216,7 @@ func veoImage(img *MediaRef) map[string]any {
 // The two per-model rules block a stated SupportNo only on a config whose
 // provider ignores the option (ADR-102 MPT-006 G6); an unlisted model (nil)
 // skips them (ADR-102 MPT-001).
-func validateVideoFrames(cfg *internalproviders.VideoGenDef, model *internalproviders.VideoModelDef, imageCount int, req VideoRequest) error {
+func validateVideoFrames(cfg *internalproviders.VideoGenDef, model *internalproviders.VideoModelDef, imageCount int, req videoRequest) error {
 	refs := len(req.ReferenceImages)
 	switch {
 	case req.LastFrame != nil && model != nil && statedFalseBlocks(cfg.IgnoresUnsupported, "LastFrame", model.SupportsLastFrame):
@@ -1239,7 +1239,7 @@ func validateVideoFrames(cfg *internalproviders.VideoGenDef, model *internalprov
 // contradicts, in this order in every SDK: image-to-video, last frame,
 // reference images, maximum duration, resolution, aspect ratio (ADR-102
 // MPT-008). An unlisted model (nil) and an unknown fact give none.
-func videoHint(model *internalproviders.VideoModelDef, imageCount int, req VideoRequest) string {
+func videoHint(model *internalproviders.VideoModelDef, imageCount int, req videoRequest) string {
 	if model == nil {
 		return ""
 	}
@@ -1270,7 +1270,7 @@ func videoHint(model *internalproviders.VideoModelDef, imageCount int, req Video
 // HANDOFF-100), each only when set, so the prompt-only body stays
 // {model, prompt}. duration is a JSON integer; validateVideoOptions has
 // already checked each value against the model.
-func setRootVideoOptions(body map[string]any, req VideoRequest) {
+func setRootVideoOptions(body map[string]any, req videoRequest) {
 	if req.DurationSeconds > 0 {
 		body["duration"] = req.DurationSeconds
 	}
@@ -1308,7 +1308,7 @@ func videoShapeSendsOptions(shape string) bool {
 //
 // A model's maximum duration, resolutions and aspect ratios are hints, not
 // blocks (ADR-102 MPT-006 G5): the provider answers an off-list value.
-func validateVideoOptions(providerName string, vgCfg *internalproviders.VideoGenDef, req VideoRequest) error {
+func validateVideoOptions(providerName string, vgCfg *internalproviders.VideoGenDef, req videoRequest) error {
 	if !videoShapeSendsOptions(vgCfg.WireShape) {
 		for _, opt := range []struct {
 			field string
@@ -1338,7 +1338,7 @@ func validateVideoOptions(providerName string, vgCfg *internalproviders.VideoGen
 // field), a seed frame, a last frame and reference images (llmkit sends text
 // only). It is a config check on the wire shape, so it holds for every model on
 // it (ADR-102 MPT-006). The rules run in this order in every SDK.
-func validateGeminiOmniInputs(vgCfg *internalproviders.VideoGenDef, parts []Part, req VideoRequest) error {
+func validateGeminiOmniInputs(vgCfg *internalproviders.VideoGenDef, parts []Part, req videoRequest) error {
 	if vgCfg.WireShape != internalproviders.VideoShapeGeminiOmni {
 		return nil
 	}
@@ -1363,7 +1363,7 @@ func validateGeminiOmniInputs(vgCfg *internalproviders.VideoGenDef, parts []Part
 
 // videoCarries is the request's carried inputs (ADR-096): reference images,
 // a seed frame with an optional last frame, or text only.
-func videoCarries(imageCount int, req VideoRequest) []string {
+func videoCarries(imageCount int, req videoRequest) []string {
 	switch {
 	case len(req.ReferenceImages) > 0:
 		return []string{internalproviders.WithReferenceImages}
@@ -1405,7 +1405,7 @@ func videoFallbackMime(vgCfg *internalproviders.VideoGenDef) string {
 // normalizeVideoParts enforces the XOR rule and produces the canonical []Part.
 // When only Prompt is set, it synthesises []Part{Text(req.Prompt)}. Both empty
 // or both set is a validation error.
-func normalizeVideoParts(req VideoRequest) ([]Part, error) {
+func normalizeVideoParts(req videoRequest) ([]Part, error) {
 	hasPrompt := req.Prompt != ""
 	hasParts := len(req.Parts) > 0
 	switch {
