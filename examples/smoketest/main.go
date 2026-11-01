@@ -28,7 +28,6 @@ import (
 	"time"
 
 	llmkit "github.com/aktagon/llmkit-go/v3"
-	internalproviders "github.com/aktagon/llmkit-go/v3/internal/providers"
 	"github.com/aktagon/llmkit-go/v3/providers"
 )
 
@@ -42,9 +41,9 @@ var models = map[string]string{
 }
 
 func main() {
-	// internalproviders.List() is already sorted by slug.
+	// providers.List() is already sorted by slug.
 	var pass, fail, skip int
-	for _, cfg := range internalproviders.List() {
+	for _, cfg := range providers.List() {
 		name := cfg.Slug
 		if cfg.EnvVar == "" {
 			fmt.Printf("SKIP %-12s no single API-key env var (local or multi-credential)\n", name)

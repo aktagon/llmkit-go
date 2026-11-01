@@ -55,3 +55,71 @@ const (
 	ChatBedrock         = pub.ChatBedrock
 	ChatResponsesOpenAI = pub.ChatResponsesOpenAI
 )
+
+// Usage is the public type, aliased.
+type Usage = pub.Usage
+
+// MiddlewarePhase is the public type, aliased.
+type MiddlewarePhase = pub.MiddlewarePhase
+
+const (
+	PhasePre  = pub.PhasePre
+	PhasePost = pub.PhasePost
+)
+
+// MiddlewareOp is the public type, aliased.
+type MiddlewareOp = pub.MiddlewareOp
+
+const (
+	OpLLMRequest       = pub.OpLLMRequest
+	OpToolCall         = pub.OpToolCall
+	OpCacheCreate      = pub.OpCacheCreate
+	OpUpload           = pub.OpUpload
+	OpBatchSubmit      = pub.OpBatchSubmit
+	OpImageGeneration  = pub.OpImageGeneration
+	OpMusicGeneration  = pub.OpMusicGeneration
+	OpVideoGeneration  = pub.OpVideoGeneration
+	OpModelsList       = pub.OpModelsList
+	OpSpeechGeneration = pub.OpSpeechGeneration
+	OpTranscription    = pub.OpTranscription
+)
+
+// Event is the public type, aliased.
+type Event = pub.Event
+
+// MiddlewareFn is the public type, aliased.
+type MiddlewareFn = pub.MiddlewareFn
+
+// FinishReason is the public type, aliased.
+type FinishReason = pub.FinishReason
+
+const (
+	FinishContentFilter = pub.FinishContentFilter
+	FinishLength        = pub.FinishLength
+	FinishOther         = pub.FinishOther
+	FinishStop          = pub.FinishStop
+	FinishToolCalls     = pub.FinishToolCalls
+)
+
+// JobFailureCode is the public type, aliased.
+type JobFailureCode = pub.JobFailureCode
+
+const (
+	FailureCancelled = pub.FailureCancelled
+	FailureError     = pub.FailureError
+	FailureExpired   = pub.FailureExpired
+	FailureMissing   = pub.FailureMissing
+	FailureTimeout   = pub.FailureTimeout
+)
+
+// Support is the public type, aliased.
+type Support = pub.Support
+
+const (
+	SupportUnknown = pub.SupportUnknown
+	SupportYes     = pub.SupportYes
+	SupportNo      = pub.SupportNo
+)
+
+// ProviderInfo is the public type, aliased.
+type ProviderInfo = pub.ProviderInfo
