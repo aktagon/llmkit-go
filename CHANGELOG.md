@@ -79,10 +79,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   object where the format replays an array (Anthropic, Responses) or an array
   where it replays an object (OpenAI Chat Completions, Google). Such a turn
   used to be sent as it was, or to fail when the body was written.
-- **BREAKING — behavior changes whose commits carry no `!`.** ADR-044
-  VER-001 now counts a change that rejects input the SDK used to accept, or
-  that changes a value callers already get, as breaking (owner, 2026-10-31,
-  HANDOFF-111). These HANDOFF-105 commits made such a change without the
+- **BREAKING — behavior changes whose commits carry no `!`.** A change
+  that rejects input the SDK used to accept, or that changes a value callers
+  already get, is breaking. These commits made such a change without the
   marker:
   - `04ad8ba7`: a provider's `"input": ""` in an Anthropic, Google or
     Bedrock reply decodes as the `Input` `""`. It used to decode as no
