@@ -305,9 +305,10 @@ func (b *Image) AddMiddleware(fns ...MiddlewareFn) *Image {
 	return &out
 }
 
-// AspectRatio sets the output aspect ratio, such as "16:9". A ratio the model does
-// not list is rejected before send. On a video, OpenRouter, Grok, Veo and
-// Gemini Omni send it.
+// AspectRatio sets the output aspect ratio, such as "16:9". The SDK sends a ratio the
+// model does not list; if the provider rejects it, the error names the
+// catalogue fact. On a video, OpenRouter, Grok, Veo and Gemini Omni send it;
+// for other video providers the SDK rejects it before send.
 func (b *Image) AspectRatio(r string) *Image { out := *b; out.aspectRatio = r; return &out }
 func (b *Image) Background(s string) *Image  { out := *b; out.background = s; return &out }
 func (b *Image) Count(n int) *Image          { out := *b; v := n; out.count = &v; return &out }
@@ -469,14 +470,16 @@ func (b *Video) AddReferenceImage(mime string, data []byte) *Video {
 	out.referenceImages = append(append([]MediaRef{}, b.referenceImages...), MediaRef{MimeType: mime, Bytes: data})
 	return &out
 } // ordered
-// AspectRatio sets the output aspect ratio, such as "16:9". A ratio the model does
-// not list is rejected before send. On a video, OpenRouter, Grok, Veo and
-// Gemini Omni send it.
+// AspectRatio sets the output aspect ratio, such as "16:9". The SDK sends a ratio the
+// model does not list; if the provider rejects it, the error names the
+// catalogue fact. On a video, OpenRouter, Grok, Veo and Gemini Omni send it;
+// for other video providers the SDK rejects it before send.
 func (b *Video) AspectRatio(r string) *Video { out := *b; out.aspectRatio = r; return &out }
 
 // Duration sets the video length in whole seconds; 0 means the provider default.
-// OpenRouter, Grok and Veo send it. Above the model's maximum, it is rejected
-// before send. With Veo reference images, only 8 is accepted.
+// OpenRouter, Grok and Veo send it; for other video providers the SDK
+// rejects it before send. The SDK rejects a negative value and sends a
+// value above the model's maximum. With Veo reference images, only 8 is accepted.
 func (b *Video) Duration(seconds int) *Video { out := *b; out.duration = seconds; return &out }
 func (b *Video) Image(mime string, data []byte) *Video {
 	out := *b
@@ -500,8 +503,9 @@ func (b *Video) OutputURI(uri string) *Video { out := *b; out.outputURI = uri; r
 func (b *Video) Raw() *Video                 { out := *b; out.raw = true; return &out }
 
 // Resolution sets the video resolution, such as "720p". OpenRouter, Grok, Veo and
-// Gemini Omni send it.
-// A resolution the model does not list is rejected before send.
+// Gemini Omni send it; for other video providers the SDK rejects it before
+// send. The SDK sends a resolution the model does not list; if the provider
+// rejects it, the error names the catalogue fact.
 func (b *Video) Resolution(r string) *Video { out := *b; out.resolution = r; return &out }
 func (b *Video) Text(s string) *Video {
 	out := *b
