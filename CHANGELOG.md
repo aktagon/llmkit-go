@@ -7,6 +7,132 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.0] — 2026-11-01
+
+### Added
+
+- **`ModelInfo` carries what the SDK's catalogue states about a model.**
+  `ModelInfo.Image`, `Video` and `Speech` are filled for a model the SDK
+  lists for that capability, and nil otherwise. `ImageHints` holds the aspect
+  ratios, sizes and whether the model takes image parts. `VideoHints` holds
+  the resolutions, aspect ratios, maximum duration in seconds, and whether
+  the model takes a seed image, a last frame or reference images.
+  `SpeechHints` holds whether the model takes a speech style. Each support
+  fact is a `providers.Support`: `SupportUnknown` when no source states it.
+  The values are hints: a request outside them is still sent.
+- **`providers.Event.ModelUnlisted` marks a model the SDK does not list.**
+  Image, speech, music, video, chat, stream, agent and batch set it on their
+  pre and post middleware events. It is true when the SDK's model list does
+  not hold the model for that provider, so no per-model check ran before the
+  request was sent. It is not a telemetry attribute.
+
+- **`Response.Created` (`*int`).** The Unix time the provider reports, read
+  from `created` (Chat Completions) or `created_at` (Responses); nil when the
+  provider reports none.
+- **`Response.ToolCalls`.** `Text.Request` sends `req.Tools` and returns the
+  model's tool calls in `ToolCalls` without running them.
+- **BREAKING — `FinishReason` on `ImageResponse`, `MusicResponse`,
+  `SpeechResponse` and `VideoResponse` is renamed `ProviderFinishReason`.**
+  The value is unchanged: the provider's string, verbatim.
+- **BREAKING — a batch item reports its outcome in `State` and `Cause`.**
+  Each `Response` from `BatchHandle.Wait` or `Poll` has `State` `JobSucceeded`
+  or `JobFailed`. A failed item has a `Cause` (`*JobFailure`) and no
+  `FinishReason` or `FinishMessage`: the provider's failure status
+  (`"errored"`, `"batch_expired"`, an error code) moved from `FinishReason` to
+  `Cause.Status`, and its error message from `FinishMessage` to
+  `Cause.Message`. Branch on `item.State == llmkit.JobFailed`.
+- **BREAKING — `JobFailure.TimedOut` is replaced by `JobFailure.Code`.**
+  `Code` is a `JobFailureCode`: `FailureError`, `FailureExpired`,
+  `FailureCancelled`, `FailureTimeout` or `FailureMissing`. `Poll` reports
+  it too: an OpenAI batch whose status is `expired` has `Code`
+  `FailureExpired`, and `cancelled` has `FailureCancelled`. Replace
+  `cause.TimedOut` with `cause.Code == llmkit.FailureTimeout`;
+  `errors.Is(err, ErrPollTimeout)` still matches the poll deadline.
+- **BREAKING — `providers.BatchSlotMissing` and `providers.BatchSlotError`
+  are `JobFailureCode` values.** They are the `Cause.Code` of an item with no
+  result line and of a failure the provider gives no known status for. They
+  were `FinishReason` strings.
+- Batch items carry `ID` and `Model` from the provider's response body.
+- **BREAKING — `Request.Tools` is `[]ToolDefinition`.** A `ToolDefinition`
+  holds the name, description and input schema of a tool. `Tool`, with its
+  `Run` function, stays the type `Agent.AddTool` takes; the Agent sends its
+  definition and keeps `Run` to itself.
+- `Part` gains the fields `File`, `ToolCall` and `ToolResult`. Image, music,
+  video and transcription reject a part kind they do not accept, before any
+  HTTP call, with a `*ValidationError` that names the kind, for example
+  `parts[1]: image generation does not accept tool_call parts`. A part that
+  sets more than one field is rejected on every capability; image generation
+  used to ignore a set `Lyrics` or audio field beside `Text`.
+- **BREAKING — `Request.ReasoningEffort` is `*string`.** `nil` sends no
+  reasoning effort. `Text.ReasoningEffort(level)` and
+  `Agent.ReasoningEffort(level)` keep their signatures.
+- **BREAKING — a request with no turn fails on field `messages`.** The
+  `*ValidationError` used to name the field `user`.
+- The Agent and batch reject an option the provider does not take, before any
+  HTTP call, with the same `*ValidationError` as `Text.Prompt`. They used to
+  send it. A batch prompt with no text and no parts is rejected the same way.
+- The builder's model is the `Request`'s model. The `batch_submit` middleware
+  event reports it, and a Google cache is created for it.
+- **BREAKING — a chat request without max tokens sends none, except to
+  Anthropic.** Every request used to carry `max_tokens: 4096` (or the
+  provider's key for it) when you set none, so a long answer was cut at 4096
+  tokens. Now the provider's own default applies. The Anthropic Messages API
+  rejects a request without `max_tokens`, so an Anthropic request still sends
+  4096 when you set none. To keep a cap, set it: `.MaxTokens(4096)`.
+- **BREAKING — the `CacheTTL` option is removed.** Since 3.0.0 it reached only
+  `BatchHandle.Wait` and `Poll`, which create no cache, so it had no effect.
+  Use `Text.CacheTTL(d)` instead.
+
+- `Response.ID` and `Response.Model` carry the response id and the model the
+  provider reports. `Prompt`, `Stream`, `Agent.Prompt` and `DecodeResponse`
+  fill them, and `EncodeResponse` writes them back. Each is `nil` when the
+  response carries none, as on Bedrock. `Model` can differ from the requested
+  model: OpenAI returns the dated snapshot, and Google returns the served
+  version.
+- `Text.Request(req)` sets the whole `Request` on the text builder: its model, system
+  prompt, messages, tools, schema and options. It replaces what the chain set
+  before it, the text, image and file parts included; a chain method after it
+  changes its own field. A request from `DecodeRequest` is sent unchanged by
+  `.Prompt(ctx, "")`. Caching, its TTL, middleware, `Raw` and
+  `Protocol` are kept.
+- `DecodeRequest(provider, chatWireShape, wire)` decodes an OpenAI Chat
+  Completions request into a `Request`, the inverse of `EncodeRequest`. It
+  reads the model, a leading system turn, user and assistant turns with text
+  content, and every option the provider takes. `max_tokens` and
+  `max_completion_tokens` both set `MaxTokens`. A bare-string `stop` is a
+  one-item list, `"stream": false` is ignored, and a `developer` turn is the
+  system turn for OpenAI and OpenRouter, whose APIs define that role; other
+  providers reject it on the turn's role. An integer option takes an
+  integral number in any notation, such as `4096.0`, and rejects a fraction.
+  A number out of range, such as `1e999`, fails on its own field. Any other field, such as `"stream": true`, `tools`, `response_format` or a content list, fails with a
+  `*ValidationError` that names it, for example `messages[1].tool_calls`.
+  Other wire shapes fail on field `chatWireShape`. Bytes after the body
+  object fail on field `body`; trailing whitespace passes.
+- `providers.WireShapeRequiredParams(chatWireShape)` lists the generation
+  params a chat wire shape's API rejects a request without. Today that is
+  `OptionMaxTokens` on `ChatAnthropic`.
+- `Text.CacheTTL(d)` and `Agent.CacheTTL(d)` set how long the cache that
+  `.Caching()` creates lives.
+  Google resource caching sends it on the cache-create request; without it,
+  Google's default TTL (3600 s) applies. Other providers ignore it. The TTL
+  is positive whole seconds: `CacheTTL(0)`, a negative TTL and
+  `1500*time.Millisecond` fail the call with a `*ValidationError` on field
+  `cacheTTL`.
+
+- `EncodeRequest(provider, chatWireShape, req)` encodes a chat `Request` for a
+  provider without a key or a network call. It returns `WireRequest{Path,
+  Headers, Body}`: the endpoint path with the model filled in, the content
+  headers (such as `anthropic-beta`), and the body. Your send path adds the
+  base URL, the key and your own headers.
+
+- `providers.BatchSlotMissing` and `providers.BatchSlotError`: the finish
+  reasons of a batch slot with no result, and of a failed slot the provider
+  gave no reason for. Compare against them instead of typing the strings.
+
+- **Streaming with the Responses protocol.** A stream with `Protocol("responses")`
+  now posts to `/v1/responses` and reads its events: text deltas, the finish
+  status and token usage. It used to fail validation.
+
 ### Changed
 
 - **BREAKING — a rejected request for a listed model names the facts it
@@ -143,144 +269,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   shape,** such as `assemblyai`, with a `*ValidationError` on
   `chatWireShape`. It used to return a chat body.
 
-### Added
-
-- **`ModelInfo` carries what the SDK's catalogue states about a model.**
-  `ModelInfo.Image`, `Video` and `Speech` are filled for a model the SDK
-  lists for that capability, and nil otherwise. `ImageHints` holds the aspect
-  ratios, sizes and whether the model takes image parts. `VideoHints` holds
-  the resolutions, aspect ratios, maximum duration in seconds, and whether
-  the model takes a seed image, a last frame or reference images.
-  `SpeechHints` holds whether the model takes a speech style. Each support
-  fact is a `providers.Support`: `SupportUnknown` when no source states it.
-  The values are hints: a request outside them is still sent.
-- **`providers.Event.ModelUnlisted` marks a model the SDK does not list.**
-  Image, speech, music, video, chat, stream, agent and batch set it on their
-  pre and post middleware events. It is true when the SDK's model list does
-  not hold the model for that provider, so no per-model check ran before the
-  request was sent. It is not a telemetry attribute.
-
-- **`Response.Created` (`*int`).** The Unix time the provider reports, read
-  from `created` (Chat Completions) or `created_at` (Responses); nil when the
-  provider reports none.
-- **`Response.ToolCalls`.** `Text.Request` sends `req.Tools` and returns the
-  model's tool calls in `ToolCalls` without running them.
-- **BREAKING — `FinishReason` on `ImageResponse`, `MusicResponse`,
-  `SpeechResponse` and `VideoResponse` is renamed `ProviderFinishReason`.**
-  The value is unchanged: the provider's string, verbatim.
-- **BREAKING — a batch item reports its outcome in `State` and `Cause`.**
-  Each `Response` from `BatchHandle.Wait` or `Poll` has `State` `JobSucceeded`
-  or `JobFailed`. A failed item has a `Cause` (`*JobFailure`) and no
-  `FinishReason` or `FinishMessage`: the provider's failure status
-  (`"errored"`, `"batch_expired"`, an error code) moved from `FinishReason` to
-  `Cause.Status`, and its error message from `FinishMessage` to
-  `Cause.Message`. Branch on `item.State == llmkit.JobFailed`.
-- **BREAKING — `JobFailure.TimedOut` is replaced by `JobFailure.Code`.**
-  `Code` is a `JobFailureCode`: `FailureError`, `FailureExpired`,
-  `FailureCancelled`, `FailureTimeout` or `FailureMissing`. `Poll` reports
-  it too: an OpenAI batch whose status is `expired` has `Code`
-  `FailureExpired`, and `cancelled` has `FailureCancelled`. Replace
-  `cause.TimedOut` with `cause.Code == llmkit.FailureTimeout`;
-  `errors.Is(err, ErrPollTimeout)` still matches the poll deadline.
-- **BREAKING — `providers.BatchSlotMissing` and `providers.BatchSlotError`
-  are `JobFailureCode` values.** They are the `Cause.Code` of an item with no
-  result line and of a failure the provider gives no known status for. They
-  were `FinishReason` strings.
-- Batch items carry `ID` and `Model` from the provider's response body.
-- **BREAKING — `Request.Tools` is `[]ToolDefinition`.** A `ToolDefinition`
-  holds the name, description and input schema of a tool. `Tool`, with its
-  `Run` function, stays the type `Agent.AddTool` takes; the Agent sends its
-  definition and keeps `Run` to itself.
-- `Part` gains the fields `File`, `ToolCall` and `ToolResult`. Image, music,
-  video and transcription reject a part kind they do not accept, before any
-  HTTP call, with a `*ValidationError` that names the kind, for example
-  `parts[1]: image generation does not accept tool_call parts`. A part that
-  sets more than one field is rejected on every capability; image generation
-  used to ignore a set `Lyrics` or audio field beside `Text`.
-- **BREAKING — `Request.ReasoningEffort` is `*string`.** `nil` sends no
-  reasoning effort. `Text.ReasoningEffort(level)` and
-  `Agent.ReasoningEffort(level)` keep their signatures.
-- **BREAKING — a request with no turn fails on field `messages`.** The
-  `*ValidationError` used to name the field `user`.
-- The Agent and batch reject an option the provider does not take, before any
-  HTTP call, with the same `*ValidationError` as `Text.Prompt`. They used to
-  send it. A batch prompt with no text and no parts is rejected the same way.
-- The builder's model is the `Request`'s model. The `batch_submit` middleware
-  event reports it, and a Google cache is created for it.
-- **BREAKING — a chat request without max tokens sends none, except to
-  Anthropic.** Every request used to carry `max_tokens: 4096` (or the
-  provider's key for it) when you set none, so a long answer was cut at 4096
-  tokens. Now the provider's own default applies. The Anthropic Messages API
-  rejects a request without `max_tokens`, so an Anthropic request still sends
-  4096 when you set none. To keep a cap, set it: `.MaxTokens(4096)`.
-- **BREAKING — the `CacheTTL` option is removed.** Since 3.0.0 it reached only
-  `BatchHandle.Wait` and `Poll`, which create no cache, so it had no effect.
-  Use `Text.CacheTTL(d)` instead.
-
-### Added
-
-- `Response.ID` and `Response.Model` carry the response id and the model the
-  provider reports. `Prompt`, `Stream`, `Agent.Prompt` and `DecodeResponse`
-  fill them, and `EncodeResponse` writes them back. Each is `nil` when the
-  response carries none, as on Bedrock. `Model` can differ from the requested
-  model: OpenAI returns the dated snapshot, and Google returns the served
-  version.
-- `Text.Request(req)` sets the whole `Request` on the text builder: its model, system
-  prompt, messages, tools, schema and options. It replaces what the chain set
-  before it, the text, image and file parts included; a chain method after it
-  changes its own field. A request from `DecodeRequest` is sent unchanged by
-  `.Prompt(ctx, "")`. Caching, its TTL, middleware, `Raw` and
-  `Protocol` are kept.
-- `DecodeRequest(provider, chatWireShape, wire)` decodes an OpenAI Chat
-  Completions request into a `Request`, the inverse of `EncodeRequest`. It
-  reads the model, a leading system turn, user and assistant turns with text
-  content, and every option the provider takes. `max_tokens` and
-  `max_completion_tokens` both set `MaxTokens`. A bare-string `stop` is a
-  one-item list, `"stream": false` is ignored, and a `developer` turn is the
-  system turn for OpenAI and OpenRouter, whose APIs define that role; other
-  providers reject it on the turn's role. An integer option takes an
-  integral number in any notation, such as `4096.0`, and rejects a fraction.
-  A number out of range, such as `1e999`, fails on its own field. Any other field, such as `"stream": true`, `tools`, `response_format` or a content list, fails with a
-  `*ValidationError` that names it, for example `messages[1].tool_calls`.
-  Other wire shapes fail on field `chatWireShape`. Bytes after the body
-  object fail on field `body`; trailing whitespace passes.
-- `providers.WireShapeRequiredParams(chatWireShape)` lists the generation
-  params a chat wire shape's API rejects a request without. Today that is
-  `OptionMaxTokens` on `ChatAnthropic`.
-- `Text.CacheTTL(d)` and `Agent.CacheTTL(d)` set how long the cache that
-  `.Caching()` creates lives.
-  Google resource caching sends it on the cache-create request; without it,
-  Google's default TTL (3600 s) applies. Other providers ignore it. The TTL
-  is positive whole seconds: `CacheTTL(0)`, a negative TTL and
-  `1500*time.Millisecond` fail the call with a `*ValidationError` on field
-  `cacheTTL`.
-
-### Fixed
-
-- `Agent.Prompt` leaves the history unchanged when it rejects the request,
-  for example an option the provider does not take. The rejected user turn
-  used to stay in the history, so the next prompt sent two user turns.
-
-## [3.0.0] — 2026-10-27
-
-### Added
-
-- `EncodeRequest(provider, chatWireShape, req)` encodes a chat `Request` for a
-  provider without a key or a network call. It returns `WireRequest{Path,
-  Headers, Body}`: the endpoint path with the model filled in, the content
-  headers (such as `anthropic-beta`), and the body. Your send path adds the
-  base URL, the key and your own headers.
-
-- `providers.BatchSlotMissing` and `providers.BatchSlotError`: the finish
-  reasons of a batch slot with no result, and of a failed slot the provider
-  gave no reason for. Compare against them instead of typing the strings.
-
-- **Streaming with the Responses protocol.** A stream with `Protocol("responses")`
-  now posts to `/v1/responses` and reads its events: text deltas, the finish
-  status and token usage. It used to fail validation.
-
-### Changed
-
 - **BREAKING — `Request` is the one form of a chat call.** `Request.User` is
   removed: put the final prompt in `Messages` as the last `user` message.
   `Files` and `Images` attach to that message. `Request` gains `Model` (it
@@ -365,6 +353,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   any request is sent. Veo stays available on Vertex.
 
 ### Fixed
+
+- `Agent.Prompt` leaves the history unchanged when it rejects the request,
+  for example an option the provider does not take. The rejected user turn
+  used to stay in the history, so the next prompt sent two user turns.
 
 - `Text.History(...).Prompt(ctx, text)` now sends `text` as the last user
   turn, after the history. Before, the request ended at the history and the
