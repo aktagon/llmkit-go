@@ -48,10 +48,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `FailureExpired`, and `cancelled` has `FailureCancelled`. Replace
   `cause.TimedOut` with `cause.Code == llmkit.FailureTimeout`;
   `errors.Is(err, ErrPollTimeout)` still matches the poll deadline.
-- **BREAKING — `providers.BatchSlotMissing` and `providers.BatchSlotError`
-  are `JobFailureCode` values.** They are the `Cause.Code` of an item with no
-  result line and of a failure the provider gives no known status for. They
-  were `FinishReason` strings.
+- `providers.BatchSlotMissing` and `providers.BatchSlotError` are
+  `JobFailureCode` values: the `Cause.Code` of an item with no result line
+  and of a failure the provider gives no known status for.
 - Batch items carry `ID` and `Model` from the provider's response body.
 - **BREAKING — `Request.Tools` is `[]ToolDefinition`.** A `ToolDefinition`
   holds the name, description and input schema of a tool. `Tool`, with its
@@ -79,7 +78,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   tokens. Now the provider's own default applies. The Anthropic Messages API
   rejects a request without `max_tokens`, so an Anthropic request still sends
   4096 when you set none. To keep a cap, set it: `.MaxTokens(4096)`.
-- **BREAKING — the `CacheTTL` option is removed.** Since 3.0.0 it reached only
+- **BREAKING — the `CacheTTL` option is removed.** It reached only
   `BatchHandle.Wait` and `Poll`, which create no cache, so it had no effect.
   Use `Text.CacheTTL(d)` instead.
 
@@ -125,10 +124,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   headers (such as `anthropic-beta`), and the body. Your send path adds the
   base URL, the key and your own headers.
 
-- `providers.BatchSlotMissing` and `providers.BatchSlotError`: the finish
-  reasons of a batch slot with no result, and of a failed slot the provider
-  gave no reason for. Compare against them instead of typing the strings.
-
 - **Streaming with the Responses protocol.** A stream with `Protocol("responses")`
   now posts to `/v1/responses` and reads its events: text deltas, the finish
   status and token usage. It used to fail validation.
@@ -161,7 +156,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Models.Live(ctx)`, which is removed. The synchronous `Models.List()` and
   `Models.Get(id)`, which read a list compiled into the SDK, are removed. Use
   `c.Models.Provider(p).Get(ctx, id)` to look up one model. Vertex and
-  Bedrock still report `ErrModelsNotSupported` in `LiveResult.Errors`.
+  Bedrock still report a `ProviderError` with `Kind` `"not_supported"` in
+  `LiveResult.Errors`.
 - **Each client caches the live model list for one hour.** A repeat
   `Models.List(ctx)` or `Provider(p).List(ctx)` within the hour makes no HTTP
   call, and `Provider(p).Get(ctx, id)` answers from the cached list when it
@@ -291,8 +287,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `WithPresencePenalty`, `WithThinkingBudget`, `WithReasoningEffort`,
   `WithSafetySettings`, `WithCaching` (`.Caching()`), `WithMiddleware`
   (`.AddMiddleware`) and `WithMaxToolIterations`. `WithHTTPClient`
-  and `WithPollTimeout` remain, for `BatchHandle.Wait` and `Poll`. `CacheTTL`
-  is unchanged.
+  and `WithPollTimeout` remain, for `BatchHandle.Wait` and `Poll`.
 
 - **BREAKING — image and video configs list request variants.**
   `ImageGenDef.InputMode`, `ImageGenDef.GenEndpoint`,
@@ -303,10 +298,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   picked from the parts you pass, so builder calls do not change. Migration:
   read the variant whose carried input matches your request from `Variants`
   instead of the removed fields.
-
-- **Vertex Imagen is text-to-image only.** Image parts and a mask on a
-  Vertex image request are now rejected before the request is sent. Google's
-  reference documents no reference-image field for these models.
 
 - **A mask is accepted only on an OpenAI request with reference images.** A
   mask on any other image request is rejected before the request is sent.
@@ -366,23 +357,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   used to stay in the history, so the next prompt sent two user turns.
 
 - **OpenAI batch failures show the provider's error.** Waiting on an OpenAI
-  batch now also reads its error file. A failed request's finish reason is the
-  provider's error code (for example `batch_expired`), and its finish message
+  batch now also reads its error file. A failed request's `Cause.Status` is the
+  provider's error code (for example `batch_expired`), and its `Cause.Message`
   is the provider's error message.
 - **A batch result succeeds only when the provider says it did.** A result line
   with a failure status and an empty body reads as failed, not as a success
   with empty text.
 - **A batch returns one response per prompt, even when the last one has no
   result.** The list length comes from the batch's request count, so a missing
-  last request keeps its slot and reads `missing`.
+  last request keeps its slot, with `Cause.Code` `FailureMissing`.
 - **Batch results are matched to prompts by request id, not by line order.**
   Providers return batch results in any order, and a failed request used to be
   dropped, so later answers moved up one place. Waiting on a batch now returns
   one response per prompt, at the prompt's index. A failed request keeps its
-  slot with empty text, the provider's result status as the finish reason
-  (`errored`, `expired`, `canceled`, or `error`) and the provider's error
-  message as the finish message. A request with no result reads finish reason
-  `missing`. Results for request ids this SDK did not assign follow in file
+  slot with empty text, `State` `JobFailed`, the provider's result status in
+  `Cause.Status` (`errored`, `expired`, `canceled`, or `error`) and the provider's
+  error message in `Cause.Message`. A request with no result has `Cause.Code`
+  `FailureMissing`. Results for request ids this SDK did not assign follow in file
   order.
 
 - **Anthropic streams report the finish reason.** It was read from the
