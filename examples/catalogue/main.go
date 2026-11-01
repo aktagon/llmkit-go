@@ -1,15 +1,15 @@
 // Model catalogue + provider lookup.
 //
-// Demonstrates the c.Models / c.Providers surface (ADR-019). Three modes:
+// Demonstrates the c.Models / c.Providers surface (ADR-019). Three parts:
 //
-//  1. Compiled-in catalogue — synchronous, no HTTP. List, filter by
-//
+//  1. Live list — List(ctx) fans out to each configured provider's
+//     /v1/models endpoint. The client caches each provider's list in
+//     memory for one hour; Fresh() makes the call again and refills it.
 //  2. Providers namespace — configured (have credentials + a /v1/models
 //     endpoint) and supported (every provider the SDK was built with).
-//  3. Live + scoped HTTP — opt into provider /v1/models endpoints for
-//     the freshest catalogue. Live(ctx) fans out across configured
-//     providers; Provider(p).List(ctx) hits one. Raw() additionally
-//     populates ModelInfo.Raw with the provider-native record.
+//  3. Scoped — Provider(p).Get(ctx, id) answers from the cached list when
+//     it holds the ID; Provider(p).List(ctx) lists one provider. Raw()
+//     additionally populates ModelInfo.Raw with the provider-native record.
 //
 // Run with: ANTHROPIC_API_KEY=sk-... go run ./examples/catalogue
 package main
@@ -32,15 +32,24 @@ func main() {
 	c := llmkit.New("anthropic", key)
 	ctx := context.Background()
 
-	// 1. Compiled-in catalogue.
-	all := c.Models.List()
-	fmt.Println("compiled-in non-empty:", len(all) > 0)
+	// 1. Live list, cached for one hour.
+	live, err := c.Models.List(ctx)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println("live models:", len(live.Models))
 
-	info, ok := c.Models.Get("claude-opus-4-7")
-	fmt.Println("claude-opus-4-7 context > 0:", ok && info.ContextWindow > 0)
+	chat, err := c.Models.WithCapability(llmkit.CapChatCompletion).List(ctx)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println("chat-capable non-empty:", len(chat.Models) > 0)
 
-	chat := c.Models.WithCapability(llmkit.CapChatCompletion).List()
-	fmt.Println("chat-capable non-empty:", len(chat) > 0)
+	fresh, err := c.Models.Fresh().List(ctx)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println("fresh models:", len(fresh.Models))
 
 	// 2. Providers namespace.
 	names := make([]string, 0, len(c.Providers.List()))
@@ -50,13 +59,13 @@ func main() {
 	fmt.Println("configured:", names)
 	fmt.Println("supported >= 1:", len(providers.List()) > 0)
 
-	// 3. Live + scoped HTTP.
+	// 3. Scoped to one provider.
 	p := llmkit.Provider{Name: "anthropic", APIKey: key}
-	live, err := c.Models.Live(ctx)
+	info, err := c.Models.Provider(p).Get(ctx, "claude-opus-4-7")
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println("live models:", len(live.Models))
+	fmt.Println("claude-opus-4-7 context > 0:", info.ContextWindow > 0)
 
 	scoped, err := c.Models.Provider(p).List(ctx)
 	if err != nil {
