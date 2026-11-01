@@ -1,5 +1,7 @@
 package llmkit
 
+import "slices"
+
 // lookupModel finds modelID in one capability's compiled catalogue (ADR-102
 // MPT-001, G4). It never errors: an unlisted model returns nil and false.
 // The caller then sends the request with the fields the caller set and skips
@@ -26,4 +28,12 @@ func fallbackMime[M any](models []M, model *M, mimeOf func(*M) string) string {
 		return mimeOf(&models[0])
 	}
 	return ""
+}
+
+// chatModelListed is the catalogue lookup for chat, stream, agent and batch
+// (ADR-102 MPT-002): true when the compiled catalogue lists modelID as a
+// chat model of provider. It never errors; the chat send path runs no
+// per-model check, so the answer only marks the middleware event.
+func chatModelListed(provider, modelID string) bool {
+	return slices.Contains(ontologyCapabilities[provider][modelID], CapChatCompletion)
 }
