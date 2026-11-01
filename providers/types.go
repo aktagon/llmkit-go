@@ -41,8 +41,9 @@ const (
 
 // Support is a catalogue fact with three states (decision 009): the zero
 // value SupportUnknown means no source states it. Only SupportNo blocks a
-// request before send, and only for an option the config's
-// IgnoresUnsupported lists.
+// request before send. It blocks only an option the provider would drop
+// without an error; for any other option, llmkit sends the request and the
+// provider decides.
 type Support int
 
 // The Support values.

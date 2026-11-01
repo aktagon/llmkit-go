@@ -42,7 +42,7 @@ const (
 	OpMusicGeneration MiddlewareOp = providers.OpMusicGeneration
 	// OpVideoGeneration: Async video submit. Phase=pre fires before the HTTP submit; Phase=post after the submit returns the request id. The job completes later via VideoHandle.Wait, which polls separately and does not itself fire middleware (mirrors batch_submit).
 	OpVideoGeneration MiddlewareOp = providers.OpVideoGeneration
-	// OpModelsList: Live catalogue HTTP call. Fires around each provider GET in Models().Live() and Models().Provider(p).List/Get (ADR-019).
+	// OpModelsList: Live catalogue HTTP call. Fires around each provider GET in Models.Provider(p).List and Models.Provider(p).Get (ADR-019).
 	OpModelsList MiddlewareOp = providers.OpModelsList
 	// OpSpeechGeneration: GenerateSpeech call. Phase=pre fires before the HTTP request; Phase=post after decoding the synthesized audio bytes.
 	OpSpeechGeneration MiddlewareOp = providers.OpSpeechGeneration
@@ -101,8 +101,9 @@ const (
 
 // Support is a catalogue fact with three states (decision 009): the zero
 // value SupportUnknown means no source states it. Only SupportNo blocks a
-// request before send, and only for an option the config's
-// IgnoresUnsupported lists.
+// request before send. It blocks only an option the provider would drop
+// without an error; for any other option, llmkit sends the request and the
+// provider decides.
 // It is providers.Support.
 type Support = providers.Support
 
