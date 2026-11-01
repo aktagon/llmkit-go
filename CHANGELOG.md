@@ -39,12 +39,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `MiddlewareFn`, `FinishReason` and `JobFailureCode` aliases. Each constant
   is listed under its type in `go doc`. Code that names `providers.Event`
   keeps compiling.
+- **Video on `google` through Gemini Omni.** `gemini-omni-1.1-flash` makes a
+  video from a text prompt on the Gemini Interactions API. It sends
+  `.Resolution(r)` and `.AspectRatio(r)`. The SDK rejects a duration, a seed
+  image, a last frame or reference images before send. The video bytes arrive
+  in the reply. `VideoResponse.Usage` reports input, output and reasoning
+  tokens.
+- **`VideoHandle.Wait` deletes the job that Gemini Omni stores.** Once Wait
+  has the video, it sends a DELETE for the stored job.
+  `c.Video.KeepStored()` keeps the job. The handle records the choice in
+  `VideoHandle.KeepStored`, so a resumed Wait applies it. When the delete
+  fails, Wait returns the video and a `*VideoDeleteError`. The error holds
+  the job `ID`, the same `Video` and the delete error in `Err`. Gemini Omni
+  is the only provider that stores jobs, so Wait on other providers is
+  unchanged.
+- **`Video.Duration(s)`, `Resolution(r)` and `AspectRatio(r)` set the video
+  length, resolution and aspect ratio.** OpenRouter, Grok and Vertex Veo send
+  all three. Gemini Omni sends resolution and aspect ratio. Any other
+  provider rejects a set option with a `*ValidationError` before send. A
+  value outside the model's hints is still sent.
+- **`Video.LastFrame(mime, data)` and `Video.AddReferenceImage(mime, data)`.**
+  `LastFrame` sets the frame the video ends on. Send it with a first frame
+  from `.Image(...)`; Vertex Veo and OpenRouter send it.
+  `AddReferenceImage` adds an image of a person, character or product the
+  video keeps. Vertex Veo takes up to 3, without a first or last frame, and
+  only an 8-second duration. A provider whose request has no field for the
+  input rejects it before send.
+- **Multi-speaker speech and a speech style.** `Speech.AddSpeaker(name,
+  voice)` declares a speaker, and `AddLine(speaker, text)` adds a line it
+  says. Declare exactly 2 speakers, and pass empty text to `Generate`.
+  Google takes multi-speaker requests. `AddStyledLine(speaker, style, text)`
+  gives one line a delivery style, such as "calm and relaxed".
+  `Style(s)` sets the style of a single-voice request. OpenAI and Google send
+  a style; any other provider rejects it before send.
+- **New provider capabilities.** Speech generation runs on `google` (Gemini
+  TTS), `grok`, `minimax` and `openrouter`. Image and video generation run on
+  `openrouter`.
+- **`ProviderTurn` keeps the assistant turn as the provider wrote it.**
+  `Response.ProviderTurn` and `Message.ProviderTurn` hold its JSON text in
+  `Wire` and its format in `WireShape`. The Agent, and a loop that passes
+  the message on, send the turn back unchanged on the next request.
+  `SaveHistory` and `LoadHistory` keep it. A turn you write yourself has
+  none, and the SDK builds it from the parts. Bedrock replies carry none.
 
 - **`Response.Created` (`*int`).** The Unix time the provider reports, read
   from `created` (Chat Completions) or `created_at` (Responses); nil when the
   provider reports none.
-- **`Response.ToolCalls`.** `Text.Request` sends `req.Tools` and returns the
-  model's tool calls in `ToolCalls` without running them.
+- **`Response.ToolCalls()`.** `Text.Request` sends `req.Tools` and returns
+  the model's tool calls without running them. Read them with
+  `resp.ToolCalls()`.
 - **BREAKING — `FinishReason` on `ImageResponse`, `MusicResponse`,
   `SpeechResponse` and `VideoResponse` is renamed `ProviderFinishReason`.**
   The value is unchanged: the provider's string, verbatim.
@@ -145,12 +188,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Request.Images` and `InputImage` are removed; put the same content in
   `Message.Parts`. `SaveHistory` writes version 2, and `LoadHistory` rejects
   a version 1 document.
+- **BREAKING — `Response.Text` is a method, and `Response.Parts` holds the
+  reply.** `Parts` holds the assistant turn as ordered text and tool-call
+  parts. `resp.Text()` joins the text parts, and `resp.ToolCalls()` returns
+  the tool-call parts. Replace `resp.Text` with `resp.Text()`.
+- **BREAKING — a failed Agent call leaves the history unchanged.** Once an
+  Agent call has started, an error restores the history to what it was
+  before the call. Before, the history kept the user turn, assistant turns
+  and tool results of the failed call. The new `Agent.UnsavedTurns()`
+  returns those turns, in order. It is empty after a call that succeeded or
+  was rejected before it started. The call returns the error that stopped
+  it, as before.
 - **BREAKING — every request times out after 600 seconds without data.**
   The client waits at most 600 seconds for the response headers, and for
   each next chunk of the body. A long stream that keeps sending does not time
   out. Before, a request waited with no limit. The new `c.Timeout(d)` sets
   another limit, and `c.Timeout(0)` turns it off. A timeout error matches
-  `context.DeadlineExceeded`.
+  `context.DeadlineExceeded`. The new field `Provider.Timeout` holds the
+  limit. Zero means the 600-second default, and a negative value turns it
+  off.
 
 - **BREAKING — a rejected request for a listed model names the facts it
   contradicts.** When the provider answers 400 or 422, `APIError.Hint` names the
@@ -356,7 +412,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   gone. So are the types they return (`ImageGenDef`, `ImageModelDef`,
   `VideoGenDef` and the rest), the option and usage tables
   (`OptionOverrides`, `SupportedOptions`, `UsagePaths`), the `ImageInput*`
-  constants and the `Parse*ModelsResponse` functions. Read model facts from the `ModelInfo`
+  constants and the `Parse*ModelsResponse` functions. The constants of those
+  tables are gone too, such as `AuthBearerToken`, `CachingExplicit`,
+  `OptionTemperature`, `VideoShapeVeo`, `OtelAttrModel` and
+  `TelemetryTracesPath`. Read model facts from the `ModelInfo`
   hints: `info, err := c.Models.Provider(p).Get(ctx, "gpt-image-1")`, then
   `info.Image.MaxInputImages`. In place of
   `CachingConfig`, ask `c.Supports(llmkit.CapCaching)`.
@@ -368,9 +427,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   holds for the other `WithImage*`, `WithMusic*` and `WithSpeechMiddleware`
   functions. `TranscriptionOption` and `VideoOption` stay, for
   `TranscriptionHandle.Wait`, `Poll` and `VideoHandle.Wait`.
-- **BREAKING — Google video generation removed.** Google shut down the Gemini API Veo
-  preview models. Video generation on the `google` provider now fails before
-  any request is sent. Veo stays available on Vertex.
+- **BREAKING — Google video no longer runs the Veo preview models.** Google
+  shut down the Gemini API Veo preview models, such as
+  `veo-3.1-generate-preview`. A 2.x call that names one now fails. The
+  `google` provider now serves `gemini-omni-1.1-flash` on the Interactions API
+  (see Added). It takes text only. The SDK rejects a seed image before send,
+  as it did for Veo. Veo stays available on Vertex.
 - **BREAKING — nine types that no exported function takes are unexported.**
   `ImageRequest`, `MusicRequest`, `SpeechRequest`, `SpeechLine`,
   `SpeechSpeaker`, `TranscriptionRequest`, `VideoRequest`, `LifecycleConfig`
