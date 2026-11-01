@@ -29,13 +29,15 @@ const (
 // VideoModelDef describes one video-generation model. MaxDurationSeconds
 // is 0 when the provider documents no fixed ceiling.
 type VideoModelDef struct {
-	ModelID              string
-	Label                string
-	SupportsImageToVideo bool
-	// SupportsLastFrame and SupportsReferenceImages gate LastFrame and
-	// AddReferenceImage; false means the request is rejected before send.
-	SupportsLastFrame       bool
-	SupportsReferenceImages bool
+	ModelID string
+	Label   string
+	// SupportsImageToVideo, SupportsLastFrame and SupportsReferenceImages
+	// cover Image, LastFrame and AddReferenceImage. SupportNo rejects the
+	// request before send only when the config's IgnoresUnsupported lists
+	// the option.
+	SupportsImageToVideo    Support
+	SupportsLastFrame       Support
+	SupportsReferenceImages Support
 	MaxDurationSeconds      int
 	OutputMime              string
 	Resolutions             []string
@@ -67,6 +69,10 @@ type VideoGenDef struct {
 	UsageInputPath     string
 	UsageOutputPath    string
 	UsageReasoningPath string
+	// IgnoresUnsupported lists the options ("Image", "LastFrame",
+	// "AddReferenceImage") this provider silently ignores when the model
+	// lacks them; only for these does a model's SupportNo reject the request.
+	IgnoresUnsupported []string
 	Models             []VideoModelDef
 }
 
@@ -95,9 +101,9 @@ func VideoGenConfig(provider string) *VideoGenDef {
 				{
 					ModelID:                 "amazon.nova-reel-v1:0",
 					Label:                   "Nova Reel",
-					SupportsImageToVideo:    false,
-					SupportsLastFrame:       false,
-					SupportsReferenceImages: false,
+					SupportsImageToVideo:    SupportNo,
+					SupportsLastFrame:       SupportNo,
+					SupportsReferenceImages: SupportNo,
 					MaxDurationSeconds:      6,
 					OutputMime:              "video/mp4",
 					Resolutions:             []string{"720p"},
@@ -127,9 +133,9 @@ func VideoGenConfig(provider string) *VideoGenDef {
 				{
 					ModelID:                 "gemini-omni-1.1-flash",
 					Label:                   "Gemini Omni 1.1 Flash",
-					SupportsImageToVideo:    false,
-					SupportsLastFrame:       false,
-					SupportsReferenceImages: false,
+					SupportsImageToVideo:    SupportNo,
+					SupportsLastFrame:       SupportNo,
+					SupportsReferenceImages: SupportNo,
 					MaxDurationSeconds:      0,
 					OutputMime:              "video/mp4",
 					Resolutions:             []string{},
@@ -160,9 +166,9 @@ func VideoGenConfig(provider string) *VideoGenDef {
 				{
 					ModelID:                 "grok-imagine-video",
 					Label:                   "Grok Imagine Video",
-					SupportsImageToVideo:    true,
-					SupportsLastFrame:       false,
-					SupportsReferenceImages: false,
+					SupportsImageToVideo:    SupportYes,
+					SupportsLastFrame:       SupportNo,
+					SupportsReferenceImages: SupportNo,
 					MaxDurationSeconds:      15,
 					OutputMime:              "video/mp4",
 					Resolutions:             []string{"480p", "720p"},
@@ -172,9 +178,9 @@ func VideoGenConfig(provider string) *VideoGenDef {
 				{
 					ModelID:                 "grok-imagine-video-1.5",
 					Label:                   "Grok Imagine Video 1.5",
-					SupportsImageToVideo:    true,
-					SupportsLastFrame:       false,
-					SupportsReferenceImages: false,
+					SupportsImageToVideo:    SupportYes,
+					SupportsLastFrame:       SupportNo,
+					SupportsReferenceImages: SupportNo,
 					MaxDurationSeconds:      15,
 					OutputMime:              "video/mp4",
 					Resolutions:             []string{"1080p", "480p", "720p"},
@@ -184,9 +190,9 @@ func VideoGenConfig(provider string) *VideoGenDef {
 				{
 					ModelID:                 "grok-imagine-video-1.5-lite",
 					Label:                   "Grok Imagine Video 1.5 Lite",
-					SupportsImageToVideo:    true,
-					SupportsLastFrame:       false,
-					SupportsReferenceImages: false,
+					SupportsImageToVideo:    SupportYes,
+					SupportsLastFrame:       SupportNo,
+					SupportsReferenceImages: SupportNo,
 					MaxDurationSeconds:      15,
 					OutputMime:              "video/mp4",
 					Resolutions:             []string{"1080p", "480p", "720p"},
@@ -216,9 +222,9 @@ func VideoGenConfig(provider string) *VideoGenDef {
 				{
 					ModelID:                 "MiniMax-Hailuo-2.3",
 					Label:                   "MiniMax Hailuo 2.3",
-					SupportsImageToVideo:    false,
-					SupportsLastFrame:       false,
-					SupportsReferenceImages: false,
+					SupportsImageToVideo:    SupportNo,
+					SupportsLastFrame:       SupportNo,
+					SupportsReferenceImages: SupportNo,
 					MaxDurationSeconds:      6,
 					OutputMime:              "video/mp4",
 					Resolutions:             []string{"1080p", "768p"},
@@ -250,9 +256,9 @@ func VideoGenConfig(provider string) *VideoGenDef {
 				{
 					ModelID:                 "alibaba/wan-3.0",
 					Label:                   "Wan 3.0",
-					SupportsImageToVideo:    true,
-					SupportsLastFrame:       true,
-					SupportsReferenceImages: false,
+					SupportsImageToVideo:    SupportYes,
+					SupportsLastFrame:       SupportYes,
+					SupportsReferenceImages: SupportNo,
 					MaxDurationSeconds:      30,
 					OutputMime:              "video/mp4",
 					Resolutions:             []string{"1080p", "480p", "720p"},
@@ -262,9 +268,9 @@ func VideoGenConfig(provider string) *VideoGenDef {
 				{
 					ModelID:                 "bytedance/seedance-2.0",
 					Label:                   "Seedance 2.0",
-					SupportsImageToVideo:    true,
-					SupportsLastFrame:       true,
-					SupportsReferenceImages: false,
+					SupportsImageToVideo:    SupportYes,
+					SupportsLastFrame:       SupportYes,
+					SupportsReferenceImages: SupportNo,
 					MaxDurationSeconds:      15,
 					OutputMime:              "video/mp4",
 					Resolutions:             []string{"1080p", "480p", "4K", "720p"},
@@ -274,9 +280,9 @@ func VideoGenConfig(provider string) *VideoGenDef {
 				{
 					ModelID:                 "bytedance/seedance-2.0-fast",
 					Label:                   "Seedance 2.0 Fast",
-					SupportsImageToVideo:    true,
-					SupportsLastFrame:       true,
-					SupportsReferenceImages: false,
+					SupportsImageToVideo:    SupportYes,
+					SupportsLastFrame:       SupportYes,
+					SupportsReferenceImages: SupportNo,
 					MaxDurationSeconds:      15,
 					OutputMime:              "video/mp4",
 					Resolutions:             []string{"480p", "720p"},
@@ -286,9 +292,9 @@ func VideoGenConfig(provider string) *VideoGenDef {
 				{
 					ModelID:                 "bytedance/seedance-2.5",
 					Label:                   "Seedance 2.5",
-					SupportsImageToVideo:    true,
-					SupportsLastFrame:       true,
-					SupportsReferenceImages: false,
+					SupportsImageToVideo:    SupportYes,
+					SupportsLastFrame:       SupportYes,
+					SupportsReferenceImages: SupportNo,
 					MaxDurationSeconds:      30,
 					OutputMime:              "video/mp4",
 					Resolutions:             []string{"480p", "720p"},
@@ -298,9 +304,9 @@ func VideoGenConfig(provider string) *VideoGenDef {
 				{
 					ModelID:                 "google/veo-3.1-fast",
 					Label:                   "Veo 3.1 Fast",
-					SupportsImageToVideo:    true,
-					SupportsLastFrame:       true,
-					SupportsReferenceImages: false,
+					SupportsImageToVideo:    SupportYes,
+					SupportsLastFrame:       SupportYes,
+					SupportsReferenceImages: SupportNo,
 					MaxDurationSeconds:      8,
 					OutputMime:              "video/mp4",
 					Resolutions:             []string{"1080p", "4K", "720p"},
@@ -310,9 +316,9 @@ func VideoGenConfig(provider string) *VideoGenDef {
 				{
 					ModelID:                 "google/veo-3.1-lite",
 					Label:                   "Veo 3.1 Lite",
-					SupportsImageToVideo:    true,
-					SupportsLastFrame:       true,
-					SupportsReferenceImages: false,
+					SupportsImageToVideo:    SupportYes,
+					SupportsLastFrame:       SupportYes,
+					SupportsReferenceImages: SupportNo,
 					MaxDurationSeconds:      8,
 					OutputMime:              "video/mp4",
 					Resolutions:             []string{"1080p", "720p"},
@@ -322,9 +328,9 @@ func VideoGenConfig(provider string) *VideoGenDef {
 				{
 					ModelID:                 "heygen/heygen-video-1",
 					Label:                   "HeyGen Video 1",
-					SupportsImageToVideo:    true,
-					SupportsLastFrame:       false,
-					SupportsReferenceImages: false,
+					SupportsImageToVideo:    SupportYes,
+					SupportsLastFrame:       SupportNo,
+					SupportsReferenceImages: SupportNo,
 					MaxDurationSeconds:      15,
 					OutputMime:              "video/mp4",
 					Resolutions:             []string{"2K", "480p", "768p"},
@@ -334,9 +340,9 @@ func VideoGenConfig(provider string) *VideoGenDef {
 				{
 					ModelID:                 "kwaivgi/kling-v3.0-std",
 					Label:                   "Kling 3.0 Standard",
-					SupportsImageToVideo:    true,
-					SupportsLastFrame:       true,
-					SupportsReferenceImages: false,
+					SupportsImageToVideo:    SupportYes,
+					SupportsLastFrame:       SupportYes,
+					SupportsReferenceImages: SupportNo,
 					MaxDurationSeconds:      15,
 					OutputMime:              "video/mp4",
 					Resolutions:             []string{"720p"},
@@ -346,9 +352,9 @@ func VideoGenConfig(provider string) *VideoGenDef {
 				{
 					ModelID:                 "minimax/hailuo-3",
 					Label:                   "Hailuo 3",
-					SupportsImageToVideo:    true,
-					SupportsLastFrame:       true,
-					SupportsReferenceImages: false,
+					SupportsImageToVideo:    SupportYes,
+					SupportsLastFrame:       SupportYes,
+					SupportsReferenceImages: SupportNo,
 					MaxDurationSeconds:      15,
 					OutputMime:              "video/mp4",
 					Resolutions:             []string{"2K"},
@@ -358,9 +364,9 @@ func VideoGenConfig(provider string) *VideoGenDef {
 				{
 					ModelID:                 "x-ai/grok-imagine-video-1.5-lite",
 					Label:                   "Grok Imagine Video 1.5 Lite",
-					SupportsImageToVideo:    true,
-					SupportsLastFrame:       false,
-					SupportsReferenceImages: false,
+					SupportsImageToVideo:    SupportYes,
+					SupportsLastFrame:       SupportNo,
+					SupportsReferenceImages: SupportNo,
 					MaxDurationSeconds:      15,
 					OutputMime:              "video/mp4",
 					Resolutions:             []string{"1080p", "480p", "720p"},
@@ -390,9 +396,9 @@ func VideoGenConfig(provider string) *VideoGenDef {
 				{
 					ModelID:                 "v4.5",
 					Label:                   "PixVerse v4.5",
-					SupportsImageToVideo:    false,
-					SupportsLastFrame:       false,
-					SupportsReferenceImages: false,
+					SupportsImageToVideo:    SupportNo,
+					SupportsLastFrame:       SupportNo,
+					SupportsReferenceImages: SupportNo,
 					MaxDurationSeconds:      8,
 					OutputMime:              "video/mp4",
 					Resolutions:             []string{},
@@ -402,9 +408,9 @@ func VideoGenConfig(provider string) *VideoGenDef {
 				{
 					ModelID:                 "v5",
 					Label:                   "PixVerse v5",
-					SupportsImageToVideo:    false,
-					SupportsLastFrame:       false,
-					SupportsReferenceImages: false,
+					SupportsImageToVideo:    SupportNo,
+					SupportsLastFrame:       SupportNo,
+					SupportsReferenceImages: SupportNo,
 					MaxDurationSeconds:      8,
 					OutputMime:              "video/mp4",
 					Resolutions:             []string{},
@@ -414,9 +420,9 @@ func VideoGenConfig(provider string) *VideoGenDef {
 				{
 					ModelID:                 "v6",
 					Label:                   "PixVerse v6",
-					SupportsImageToVideo:    false,
-					SupportsLastFrame:       false,
-					SupportsReferenceImages: false,
+					SupportsImageToVideo:    SupportNo,
+					SupportsLastFrame:       SupportNo,
+					SupportsReferenceImages: SupportNo,
 					MaxDurationSeconds:      15,
 					OutputMime:              "video/mp4",
 					Resolutions:             []string{},
@@ -446,9 +452,9 @@ func VideoGenConfig(provider string) *VideoGenDef {
 				{
 					ModelID:                 "wan2.2-t2v-plus",
 					Label:                   "Wan 2.2 T2V Plus",
-					SupportsImageToVideo:    false,
-					SupportsLastFrame:       false,
-					SupportsReferenceImages: false,
+					SupportsImageToVideo:    SupportNo,
+					SupportsLastFrame:       SupportNo,
+					SupportsReferenceImages: SupportNo,
 					MaxDurationSeconds:      5,
 					OutputMime:              "video/mp4",
 					Resolutions:             []string{"720p"},
@@ -478,9 +484,9 @@ func VideoGenConfig(provider string) *VideoGenDef {
 				{
 					ModelID:                 "minimax/video-01-director",
 					Label:                   "MiniMax Video 01 Director (Together)",
-					SupportsImageToVideo:    false,
-					SupportsLastFrame:       false,
-					SupportsReferenceImages: false,
+					SupportsImageToVideo:    SupportNo,
+					SupportsLastFrame:       SupportNo,
+					SupportsReferenceImages: SupportNo,
 					MaxDurationSeconds:      6,
 					OutputMime:              "video/mp4",
 					Resolutions:             []string{"720p"},
@@ -513,9 +519,9 @@ func VideoGenConfig(provider string) *VideoGenDef {
 				{
 					ModelID:                 "veo-3.1-fast-generate-001",
 					Label:                   "Veo 3.1 Fast",
-					SupportsImageToVideo:    true,
-					SupportsLastFrame:       true,
-					SupportsReferenceImages: true,
+					SupportsImageToVideo:    SupportYes,
+					SupportsLastFrame:       SupportYes,
+					SupportsReferenceImages: SupportYes,
 					MaxDurationSeconds:      8,
 					OutputMime:              "video/mp4",
 					Resolutions:             []string{"1080p", "720p"},
@@ -525,9 +531,9 @@ func VideoGenConfig(provider string) *VideoGenDef {
 				{
 					ModelID:                 "veo-3.1-generate-001",
 					Label:                   "Veo 3.1",
-					SupportsImageToVideo:    true,
-					SupportsLastFrame:       true,
-					SupportsReferenceImages: true,
+					SupportsImageToVideo:    SupportYes,
+					SupportsLastFrame:       SupportYes,
+					SupportsReferenceImages: SupportYes,
 					MaxDurationSeconds:      8,
 					OutputMime:              "video/mp4",
 					Resolutions:             []string{"1080p", "4k", "720p"},
@@ -537,9 +543,9 @@ func VideoGenConfig(provider string) *VideoGenDef {
 				{
 					ModelID:                 "veo-3.1-generate-preview",
 					Label:                   "Veo 3.1",
-					SupportsImageToVideo:    true,
-					SupportsLastFrame:       false,
-					SupportsReferenceImages: true,
+					SupportsImageToVideo:    SupportYes,
+					SupportsLastFrame:       SupportNo,
+					SupportsReferenceImages: SupportYes,
 					MaxDurationSeconds:      8,
 					OutputMime:              "video/mp4",
 					Resolutions:             []string{"1080p", "720p"},
@@ -549,9 +555,9 @@ func VideoGenConfig(provider string) *VideoGenDef {
 				{
 					ModelID:                 "veo-3.1-lite-generate-001",
 					Label:                   "Veo 3.1 Lite",
-					SupportsImageToVideo:    false,
-					SupportsLastFrame:       false,
-					SupportsReferenceImages: false,
+					SupportsImageToVideo:    SupportNo,
+					SupportsLastFrame:       SupportNo,
+					SupportsReferenceImages: SupportNo,
 					MaxDurationSeconds:      8,
 					OutputMime:              "video/mp4",
 					Resolutions:             []string{"1080p", "720p"},
@@ -581,9 +587,9 @@ func VideoGenConfig(provider string) *VideoGenDef {
 				{
 					ModelID:                 "viduq1",
 					Label:                   "Vidu Q1",
-					SupportsImageToVideo:    false,
-					SupportsLastFrame:       false,
-					SupportsReferenceImages: false,
+					SupportsImageToVideo:    SupportNo,
+					SupportsLastFrame:       SupportNo,
+					SupportsReferenceImages: SupportNo,
 					MaxDurationSeconds:      16,
 					OutputMime:              "video/mp4",
 					Resolutions:             []string{},
@@ -593,9 +599,9 @@ func VideoGenConfig(provider string) *VideoGenDef {
 				{
 					ModelID:                 "viduq2",
 					Label:                   "Vidu Q2",
-					SupportsImageToVideo:    false,
-					SupportsLastFrame:       false,
-					SupportsReferenceImages: false,
+					SupportsImageToVideo:    SupportNo,
+					SupportsLastFrame:       SupportNo,
+					SupportsReferenceImages: SupportNo,
 					MaxDurationSeconds:      16,
 					OutputMime:              "video/mp4",
 					Resolutions:             []string{},
@@ -605,9 +611,9 @@ func VideoGenConfig(provider string) *VideoGenDef {
 				{
 					ModelID:                 "viduq3-pro",
 					Label:                   "Vidu Q3 Pro",
-					SupportsImageToVideo:    false,
-					SupportsLastFrame:       false,
-					SupportsReferenceImages: false,
+					SupportsImageToVideo:    SupportNo,
+					SupportsLastFrame:       SupportNo,
+					SupportsReferenceImages: SupportNo,
 					MaxDurationSeconds:      16,
 					OutputMime:              "video/mp4",
 					Resolutions:             []string{},
@@ -637,9 +643,9 @@ func VideoGenConfig(provider string) *VideoGenDef {
 				{
 					ModelID:                 "cogvideox-3",
 					Label:                   "CogVideoX-3",
-					SupportsImageToVideo:    false,
-					SupportsLastFrame:       false,
-					SupportsReferenceImages: false,
+					SupportsImageToVideo:    SupportNo,
+					SupportsLastFrame:       SupportNo,
+					SupportsReferenceImages: SupportNo,
 					MaxDurationSeconds:      10,
 					OutputMime:              "video/mp4",
 					Resolutions:             []string{"1080p", "4k", "720p"},
