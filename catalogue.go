@@ -7,7 +7,8 @@
 package llmkit
 
 // compiledInModels is the SDK's built-in catalogue, sorted by
-// (Provider, ID). Walked by *Models.List() and *Models.Get(id).
+// (Provider, ID). The runtime reads its capabilities through
+// ontologyCapabilities.
 var compiledInModels = []ModelInfo{
 	{ID: "claude-haiku-4-5-20251001", Provider: Provider{Name: "anthropic"}, Capabilities: []Capability{CapChatCompletion, CapToolCalling}, DisplayName: "Claude Haiku 4.5", ContextWindow: 200000, MaxOutput: 64000},
 	{ID: "claude-opus-4-5-20251101", Provider: Provider{Name: "anthropic"}, Capabilities: []Capability{CapChatCompletion, CapToolCalling}, DisplayName: "Claude Opus 4.5", ContextWindow: 200000, MaxOutput: 64000},

@@ -101,9 +101,10 @@ func (a *legacyAgent) runToolLoop(ctx context.Context, cfg providerSpec, req Req
 		headers := sendHeaders(a.provider, cfg, chat.content)
 
 		llmEvent := providers.Event{
-			Op:       providers.OpLLMRequest,
-			Provider: a.provider.Name,
-			Model:    model,
+			Op:            providers.OpLLMRequest,
+			Provider:      a.provider.Name,
+			Model:         model,
+			ModelUnlisted: !chatModelListed(a.provider.Name, model),
 		}
 		llmStart := time.Now()
 		if err := firePre(ctx, a.opts.middleware, llmEvent); err != nil {
