@@ -17,7 +17,8 @@ func lookupModel[M any](models []M, modelID string, idOf func(*M) string) (*M, b
 // fallbackMime is the MIME a reply without its own MIME is labelled with:
 // the listed model's OutputMime, or for an unlisted model (nil) the config's
 // first listed model's. Every model of one config states the same MIME, so
-// the config's first model stands for the config.
+//
+// music, video and speech (CQ-MUS-015, CQ-VID-021, CQ-SPK-019).
 func fallbackMime[M any](models []M, model *M, mimeOf func(*M) string) string {
 	if model != nil {
 		return mimeOf(model)
