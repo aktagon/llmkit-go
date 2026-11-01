@@ -49,20 +49,20 @@ type SpeechLine struct {
 
 // AudioData and SpeechResponse are declared in go/structs.go (ADR-018).
 
-// SpeechOption configures Generate.
-type SpeechOption func(*speechOptions)
+// speechOption configures Generate.
+type speechOption func(*speechOptions)
 
 type speechOptions struct {
 	middleware []MiddlewareFn
 }
 
-// WithSpeechMiddleware registers pre/post hooks that fire around the speech
+// withSpeechMiddleware registers pre/post hooks that fire around the speech
 // request. Op is OpSpeechGeneration. Pre-phase can veto.
-func WithSpeechMiddleware(fns ...MiddlewareFn) SpeechOption {
+func withSpeechMiddleware(fns ...MiddlewareFn) speechOption {
 	return func(o *speechOptions) { o.middleware = append(o.middleware, fns...) }
 }
 
-func resolveSpeechOptions(opts []SpeechOption) *speechOptions {
+func resolveSpeechOptions(opts []speechOption) *speechOptions {
 	o := &speechOptions{}
 	for _, fn := range opts {
 		fn(o)
@@ -76,7 +76,7 @@ func resolveSpeechOptions(opts []SpeechOption) *speechOptions {
 // as a single decoded AudioData (one synthesis, one clip — ADR-049 OQ-4).
 //
 // Internal helper — the public surface is (*Speech).Generate in speech_builder.go.
-func generateSpeech(ctx context.Context, p Provider, req SpeechRequest, opts ...SpeechOption) (SpeechResponse, error) {
+func generateSpeech(ctx context.Context, p Provider, req SpeechRequest, opts ...speechOption) (SpeechResponse, error) {
 	o := resolveSpeechOptions(opts)
 
 	if err := validateProvider(p); err != nil {

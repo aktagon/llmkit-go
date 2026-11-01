@@ -18,9 +18,9 @@ func (b *Speech) Generate(ctx context.Context, text string) (SpeechResponse, err
 		Text:     text,
 	}
 
-	var opts []SpeechOption
+	var opts []speechOption
 	if len(b.middleware) > 0 {
-		opts = append(opts, WithSpeechMiddleware(b.middleware...))
+		opts = append(opts, withSpeechMiddleware(b.middleware...))
 	}
 
 	provider := b.client.provider.toProvider(b.model)

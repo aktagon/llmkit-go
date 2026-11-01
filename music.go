@@ -36,8 +36,8 @@ type MusicRequest struct {
 
 // AudioData and MusicResponse are declared in go/structs.go (ADR-018, API-PDS-002).
 
-// MusicOption configures GenerateMusic.
-type MusicOption func(*musicOptions)
+// musicOption configures GenerateMusic.
+type musicOption func(*musicOptions)
 
 type musicOptions struct {
 	middleware []MiddlewareFn
@@ -45,25 +45,25 @@ type musicOptions struct {
 	raw        bool
 }
 
-// WithMusicHTTPClient overrides the http.Client used for the GenerateMusic call.
-func WithMusicHTTPClient(c *http.Client) MusicOption {
+// withMusicHTTPClient overrides the http.Client used for the GenerateMusic call.
+func withMusicHTTPClient(c *http.Client) musicOption {
 	return func(o *musicOptions) { o.httpClient = c }
 }
 
-// WithMusicMiddleware registers pre/post hooks that fire around the music
+// withMusicMiddleware registers pre/post hooks that fire around the music
 // generation request. Op is OpMusicGeneration. Pre-phase can veto.
-func WithMusicMiddleware(fns ...MiddlewareFn) MusicOption {
+func withMusicMiddleware(fns ...MiddlewareFn) musicOption {
 	return func(o *musicOptions) { o.middleware = append(o.middleware, fns...) }
 }
 
 // withMusicRaw opts the call into populating MusicResponse.Raw with the parsed
 // provider response body (ADR-014). Internal — typed-builder users reach this
 // via *Music.Raw().
-func withMusicRaw() MusicOption {
+func withMusicRaw() musicOption {
 	return func(o *musicOptions) { o.raw = true }
 }
 
-func resolveMusicOptions(opts []MusicOption) *musicOptions {
+func resolveMusicOptions(opts []musicOption) *musicOptions {
 	o := &musicOptions{}
 	for _, fn := range opts {
 		fn(o)
@@ -78,7 +78,7 @@ func resolveMusicOptions(opts []MusicOption) *musicOptions {
 // not gated.
 //
 // Internal helper — the public surface is (*Music).Generate in music_builder.go.
-func generateMusic(ctx context.Context, p Provider, req MusicRequest, opts ...MusicOption) (MusicResponse, error) {
+func generateMusic(ctx context.Context, p Provider, req MusicRequest, opts ...musicOption) (MusicResponse, error) {
 	o := resolveMusicOptions(opts)
 
 	if err := validateProvider(p); err != nil {
