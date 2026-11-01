@@ -114,6 +114,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`providers.Event.ModelUnlisted` marks a model the SDK does not list.**
+  Image, speech, music, video, chat, stream, agent and batch set it on their
+  pre and post middleware events. It is true when the SDK's model list does
+  not hold the model for that provider, so no per-model check ran before the
+  request was sent. It is not a telemetry attribute.
+
 - **`Response.Created` (`*int`).** The Unix time the provider reports, read
   from `created` (Chat Completions) or `created_at` (Responses); nil when the
   provider reports none.

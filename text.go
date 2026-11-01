@@ -47,9 +47,10 @@ func (b *Text) Prompt(ctx context.Context, finalText string) (Response, error) {
 	headers := sendHeaders(p, cfg, chat.content)
 
 	baseEvent := providers.Event{
-		Op:       providers.OpLLMRequest,
-		Provider: p.Name,
-		Model:    model,
+		Op:            providers.OpLLMRequest,
+		Provider:      p.Name,
+		Model:         model,
+		ModelUnlisted: !chatModelListed(p.Name, model),
 	}
 	start := time.Now()
 	if err := firePre(ctx, o.middleware, baseEvent); err != nil {
