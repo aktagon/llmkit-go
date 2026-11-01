@@ -257,6 +257,10 @@ func decodeInt(v any, dst **int) error {
 	if err != nil {
 		return err
 	}
+	// An int is 32 bits on a 32-bit platform; int(i) would truncate there.
+	if i < math.MinInt || i > math.MaxInt {
+		return fmt.Errorf("is out of range")
+	}
 	out := int(i)
 	*dst = &out
 	return nil
