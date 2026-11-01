@@ -8,7 +8,7 @@ import (
 	"slices"
 	"time"
 
-	"github.com/aktagon/llmkit-go/v3/providers"
+	internalproviders "github.com/aktagon/llmkit-go/v3/internal/providers"
 )
 
 // legacyAgent manages multi-turn conversations with optional tool calling.
@@ -100,8 +100,8 @@ func (a *legacyAgent) runToolLoop(ctx context.Context, cfg providerSpec, req Req
 		model, body := chat.req.Model, chat.body
 		headers := sendHeaders(a.provider, cfg, chat.content)
 
-		llmEvent := providers.Event{
-			Op:            providers.OpLLMRequest,
+		llmEvent := Event{
+			Op:            OpLLMRequest,
 			Provider:      a.provider.Name,
 			Model:         model,
 			ModelUnlisted: !chatModelListed(a.provider.Name, model),
@@ -137,7 +137,7 @@ func (a *legacyAgent) runToolLoop(ctx context.Context, cfg providerSpec, req Req
 
 		url := sendURL(a.provider, cfg, requestPath(cfg, model))
 		var respBody []byte
-		if cfg.AuthScheme == providers.AuthSigV4 {
+		if cfg.AuthScheme == internalproviders.AuthSigV4 {
 			region := os.Getenv(cfg.RegionEnvVar)
 			secretKey := os.Getenv(cfg.SecretKeyEnvVar)
 			sessionToken := os.Getenv(cfg.SessionTokenEnvVar)
@@ -212,8 +212,8 @@ func (a *legacyAgent) runToolLoop(ctx context.Context, cfg providerSpec, req Req
 				continue
 			}
 
-			toolEv := providers.Event{
-				Op:       providers.OpToolCall,
+			toolEv := Event{
+				Op:       OpToolCall,
 				Provider: a.provider.Name,
 				Model:    model,
 				Tool:     tc.Name,

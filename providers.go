@@ -1,6 +1,7 @@
 package llmkit
 
 import (
+	internalproviders "github.com/aktagon/llmkit-go/v3/internal/providers"
 	"github.com/aktagon/llmkit-go/v3/providers"
 )
 
@@ -25,14 +26,13 @@ func (b *Providers) eligible() []Provider {
 }
 
 // runList maps the eligible providers to their secret-free public
-// metadata via providers.Info (ADR-040 PSR-005). The static roster of
-// every supported provider is the package-level providers.List().
-func (b *Providers) runList() []providers.ProviderInfo {
+// metadata via internalproviders.Info (ADR-040 PSR-005).
+func (b *Providers) runList() []ProviderInfo {
 	eligible := b.eligible()
-	out := make([]providers.ProviderInfo, 0, len(eligible))
+	out := make([]ProviderInfo, 0, len(eligible))
 	for _, p := range eligible {
 		if id, ok := providers.Parse(p.Name); ok {
-			out = append(out, providers.Info(id))
+			out = append(out, internalproviders.Info(id))
 		}
 	}
 	return out

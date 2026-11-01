@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aktagon/llmkit-go/v3/providers"
+	internalproviders "github.com/aktagon/llmkit-go/v3/internal/providers"
 )
 
 // BatchHandle is defined in builders.go (typed-builder API surface);
@@ -31,7 +31,7 @@ func submitBatch(ctx context.Context, p Provider, reqs []Request, o *options) (B
 		return BatchHandle{}, &ValidationError{Field: "provider", Message: "unknown: " + p.Name}
 	}
 
-	bc := providers.BatchConfig(p.Name)
+	bc := internalproviders.BatchConfig(p.Name)
 	if bc == nil {
 		return BatchHandle{}, &ValidationError{Field: "provider", Message: "batching not supported: " + p.Name}
 	}
@@ -46,8 +46,8 @@ func submitBatch(ctx context.Context, p Provider, reqs []Request, o *options) (B
 	if err != nil {
 		return BatchHandle{}, err
 	}
-	baseEvent := providers.Event{
-		Op:            providers.OpBatchSubmit,
+	baseEvent := Event{
+		Op:            OpBatchSubmit,
 		Provider:      p.Name,
 		Model:         model,
 		ModelUnlisted: !chatModelListed(p.Name, model),
@@ -75,7 +75,7 @@ func submitBatch(ctx context.Context, p Provider, reqs []Request, o *options) (B
 
 	var jsonBody []byte
 	switch bc.InputMode {
-	case providers.BatchFileReferenceInput:
+	case internalproviders.BatchFileReferenceInput:
 		// Build JSONL, upload file, create batch referencing file ID
 		jsonl, err := buildBatchJSONL(ctx, items, o, p, cfg, bc)
 		if err != nil {
@@ -165,7 +165,7 @@ type batchAdapter struct {
 	o          *options
 	handle     BatchHandle
 	base       string
-	bc         *providers.BatchDef
+	bc         *internalproviders.BatchDef
 	cfg        providerSpec
 	headers    map[string]string
 	pollURLStr string
@@ -208,7 +208,7 @@ func newBatchAdapter(handle BatchHandle, o *options) (batchAdapter, error) {
 	if !ok {
 		return batchAdapter{}, &ValidationError{Field: "provider", Message: "unknown: " + p.Name}
 	}
-	bc := providers.BatchConfig(p.Name)
+	bc := internalproviders.BatchConfig(p.Name)
 	if bc == nil || bc.Lifecycle == nil {
 		return batchAdapter{}, fmt.Errorf("batch polling not available for %s", p.Name)
 	}
@@ -251,7 +251,7 @@ func newBatchAdapter(handle BatchHandle, o *options) (batchAdapter, error) {
 // items, so the caller can attach them to the batch CREATE request (buildRequest
 // returns them per request, but the batch submit sends only auth headers).
 // reqs are encoded (encodeBatch).
-func buildBatchBody(ctx context.Context, reqs []chatRequest, o *options, p Provider, cfg providerSpec, bc *providers.BatchDef) (map[string]any, map[string]string, error) {
+func buildBatchBody(ctx context.Context, reqs []chatRequest, o *options, p Provider, cfg providerSpec, bc *internalproviders.BatchDef) (map[string]any, map[string]string, error) {
 	body := map[string]any{}
 	betaHeaders := map[string]string{}
 	var items []map[string]any
@@ -270,7 +270,7 @@ func buildBatchBody(ctx context.Context, reqs []chatRequest, o *options, p Provi
 		var item map[string]any
 		if bc.ItemBodyField != "" {
 			item = map[string]any{
-				"custom_id":      providers.BatchRequestIDPrefix + strconv.Itoa(i),
+				"custom_id":      internalproviders.BatchRequestIDPrefix + strconv.Itoa(i),
 				bc.ItemBodyField: reqBody,
 			}
 		} else {
@@ -309,7 +309,7 @@ func encodeBatch(p Provider, cfg providerSpec, reqs []Request) ([]chatRequest, s
 // buildBatchJSONL serializes requests as JSONL for file-reference batch input.
 // Each line is: {"custom_id":"req-N","method":"POST","url":endpoint,"body":{...}}
 // reqs are encoded (encodeBatch).
-func buildBatchJSONL(ctx context.Context, reqs []chatRequest, o *options, p Provider, cfg providerSpec, bc *providers.BatchDef) ([]byte, error) {
+func buildBatchJSONL(ctx context.Context, reqs []chatRequest, o *options, p Provider, cfg providerSpec, bc *internalproviders.BatchDef) ([]byte, error) {
 	var buf strings.Builder
 	for i, chat := range reqs {
 		req, reqBody := chat.req, chat.body
@@ -319,7 +319,7 @@ func buildBatchJSONL(ctx context.Context, reqs []chatRequest, o *options, p Prov
 			}
 		}
 		line := map[string]any{
-			"custom_id": providers.BatchRequestIDPrefix + strconv.Itoa(i),
+			"custom_id": internalproviders.BatchRequestIDPrefix + strconv.Itoa(i),
 			"method":    "POST",
 			"url":       bc.EndpointPath,
 			"body":      reqBody,
@@ -335,7 +335,7 @@ func buildBatchJSONL(ctx context.Context, reqs []chatRequest, o *options, p Prov
 }
 
 // uploadBatchFile uploads JSONL data as a file for batch processing.
-func uploadBatchFile(ctx context.Context, client *http.Client, base string, jsonl []byte, bc *providers.BatchDef, headers map[string]string) (string, error) {
+func uploadBatchFile(ctx context.Context, client *http.Client, base string, jsonl []byte, bc *internalproviders.BatchDef, headers map[string]string) (string, error) {
 	uploadURL := base + "/v1/files"
 	fields := map[string]string{"purpose": bc.FilePurpose}
 
@@ -370,7 +370,7 @@ func uploadBatchFile(ctx context.Context, client *http.Client, base string, json
 // statusRaw is the already-decoded poll body when the caller has it (the poll
 // engine does). When nil and a file ID or the count is needed, the status is
 // fetched.
-func fetchBatchResults(ctx context.Context, o *options, handle BatchHandle, base string, bc *providers.BatchDef, cfg providerSpec, headers map[string]string, raw bool, statusRaw map[string]any) ([]Response, error) {
+func fetchBatchResults(ctx context.Context, o *options, handle BatchHandle, base string, bc *internalproviders.BatchDef, cfg providerSpec, headers map[string]string, raw bool, statusRaw map[string]any) ([]Response, error) {
 	lc := bc.Lifecycle
 	needsStatus := lc.ResultFileIdPath != "" || lc.ErrorFileIdPath != "" || len(bc.RequestCountPaths) > 0
 	if statusRaw == nil && needsStatus {
@@ -439,21 +439,21 @@ type batchSlot struct {
 // submitted request, at that request's index (BUG-072, HANDOFF-078).
 //
 // Providers return result lines in any order, so a line is placed by the
-// request id at bc.ResultKeyPath: providers.BatchRequestIDPrefix + N goes to #gitleaks:allow
+// request id at bc.ResultKeyPath: internalproviders.BatchRequestIDPrefix + N goes to #gitleaks:allow
 // index N. When one index appears twice, a line that succeeded replaces a
 // failed one; otherwise the later line follows the indexed slots.
 //
 // With a request count (hasCount), there are exactly count slots, and an id at
 // or above the count follows them. Without one, slots run to the highest index
 // seen. An index with no line is a failed item whose cause code is
-// providers.BatchSlotMissing. Lines whose id
+// internalproviders.BatchSlotMissing. Lines whose id
 // has another form (a batch created outside llmkit) follow the indexed slots
 // in file order. A line that is not JSON cannot be placed and is skipped.
 //
 // When raw is true, a succeeded Response carries Response.Raw set to its body
 // (the unwrapped inner body when ResultBodyPath is set, otherwise the line);
 // a failed Response carries the whole line.
-func parseBatchResults(provider string, sources [][]byte, bc *providers.BatchDef, raw bool, count int, hasCount bool) []Response {
+func parseBatchResults(provider string, sources [][]byte, bc *internalproviders.BatchDef, raw bool, count int, hasCount bool) []Response {
 	var slots []*batchSlot
 	if hasCount {
 		slots = make([]*batchSlot, count)
@@ -503,7 +503,7 @@ func parseBatchResults(provider string, sources [][]byte, bc *providers.BatchDef
 		if slot == nil {
 			responses = append(responses, Response{
 				State: batchItemState(JobFailed),
-				Cause: &JobFailure{Code: providers.BatchSlotMissing},
+				Cause: &JobFailure{Code: internalproviders.BatchSlotMissing},
 			})
 			continue
 		}
@@ -523,11 +523,11 @@ func batchItemState(s JobState) *JobState { return &s }
 // JobSucceeded. Every other line becomes a failed item (ADR-099 CRF-015):
 // empty text, no finish reason or message, State JobFailed, and a Cause whose
 // Status is the first reason path that resolves, whose Code is that status's
-// entry in bc.ResultFailureCodes (providers.BatchSlotError when it has none),
+// entry in bc.ResultFailureCodes (internalproviders.BatchSlotError when it has none),
 // and whose Message is the first message path that resolves. A line that
 // succeeded but whose body does not decode keeps the decode error as its
 // Message (HANDOFF-105 F5).
-func parseBatchResultLine(provider string, line []byte, wrapper map[string]any, bc *providers.BatchDef, raw bool) batchSlot {
+func parseBatchResultLine(provider string, line []byte, wrapper map[string]any, bc *internalproviders.BatchDef, raw bool) batchSlot {
 	signalled := bc.ResultStatusPath == "" || slices.Contains(bc.ResultSuccessValues, extractPath(wrapper, bc.ResultStatusPath))
 	message := firstPath(wrapper, bc.ResultMessagePaths)
 	if signalled {
@@ -560,7 +560,7 @@ func parseBatchResultLine(provider string, line []byte, wrapper map[string]any, 
 	status := firstPath(wrapper, bc.ResultReasonPaths)
 	code, ok := bc.ResultFailureCodes[status]
 	if !ok {
-		code = providers.BatchSlotError
+		code = internalproviders.BatchSlotError
 	}
 	failed := Response{
 		State: batchItemState(JobFailed),
@@ -584,10 +584,10 @@ func firstPath(data map[string]any, paths []string) string {
 	return ""
 }
 
-// batchRequestIndex reads N out of the providers.BatchRequestIDPrefix + N id
+// batchRequestIndex reads N out of the internalproviders.BatchRequestIDPrefix + N id
 // the SDK sends with request N. Any other id reports false.
 func batchRequestIndex(id string) (int, bool) {
-	digits, ok := strings.CutPrefix(id, providers.BatchRequestIDPrefix)
+	digits, ok := strings.CutPrefix(id, internalproviders.BatchRequestIDPrefix)
 	if !ok || digits == "" {
 		return 0, false
 	}
@@ -649,9 +649,9 @@ func headerPresent(m map[string]string, key string) bool {
 func buildAuthHeaders(p Provider, cfg providerSpec) map[string]string {
 	headers := map[string]string{}
 	switch cfg.AuthScheme {
-	case providers.AuthBearerToken:
+	case internalproviders.AuthBearerToken:
 		headers[cfg.AuthHeader] = cfg.AuthPrefix + " " + p.APIKey
-	case providers.AuthHeaderAPIKey:
+	case internalproviders.AuthHeaderAPIKey:
 		headers[cfg.AuthHeader] = p.APIKey
 	}
 	if cfg.RequiredHeader != "" {

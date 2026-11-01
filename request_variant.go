@@ -3,20 +3,20 @@ package llmkit
 import (
 	"strings"
 
-	"github.com/aktagon/llmkit-go/v3/providers"
+	internalproviders "github.com/aktagon/llmkit-go/v3/internal/providers"
 )
 
 // selectRequestVariant picks the config's wire request whose carried inputs
 // equal carries, in any order (ADR-096). A first-and-last-frame request
 // carries two inputs. A config with no variant for those inputs cannot send
 // the request, so the caller gets a ValidationError on "parts".
-func selectRequestVariant(provider string, variants []providers.RequestVariant, carries []string) (providers.RequestVariant, error) {
+func selectRequestVariant(provider string, variants []internalproviders.RequestVariant, carries []string) (internalproviders.RequestVariant, error) {
 	for _, v := range variants {
 		if sameCarriedInputs(v.Carries, carries) {
 			return v, nil
 		}
 	}
-	return providers.RequestVariant{}, &ValidationError{
+	return internalproviders.RequestVariant{}, &ValidationError{
 		Field:   "parts",
 		Message: provider + " has no " + strings.Join(carries, "+") + " request",
 	}
@@ -30,7 +30,7 @@ func partsCarry(imageCount int, imageInput string) []string {
 	if imageCount > 0 {
 		return []string{imageInput}
 	}
-	return []string{providers.TextOnly}
+	return []string{internalproviders.TextOnly}
 }
 
 // sameCarriedInputs reports whether a and b hold the same inputs. Neither

@@ -34,15 +34,15 @@ func NewSpendCap(budget float64, prices map[string]Price) *SpendCap {
 	return &SpendCap{budget: budget, prices: prices}
 }
 
-// Middleware implements the providers.MiddlewareFn contract.
-func (s *SpendCap) Middleware(ctx context.Context, e providers.Event) error {
-	if e.Op != providers.OpLLMRequest {
+// Middleware implements the llmkit.MiddlewareFn contract.
+func (s *SpendCap) Middleware(ctx context.Context, e llmkit.Event) error {
+	if e.Op != llmkit.OpLLMRequest {
 		return nil
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if e.Phase == providers.PhasePre {
+	if e.Phase == llmkit.PhasePre {
 		if s.spent >= s.budget {
 			return fmt.Errorf("daily budget $%.2f exceeded (spent $%.4f)", s.budget, s.spent)
 		}
@@ -73,8 +73,8 @@ func (s *SpendCap) Spent() float64 {
 }
 
 // TokenLogger prints token usage for each completed LLM request.
-func TokenLogger(ctx context.Context, e providers.Event) error {
-	if e.Op == providers.OpLLMRequest && e.Phase == providers.PhasePost {
+func TokenLogger(ctx context.Context, e llmkit.Event) error {
+	if e.Op == llmkit.OpLLMRequest && e.Phase == llmkit.PhasePost {
 		log.Printf("[%s/%s] in=%d out=%d cache_read=%d took=%s",
 			e.Provider, e.Model,
 			e.Usage.Input, e.Usage.Output, e.Usage.CacheRead,
