@@ -97,15 +97,16 @@ func generateSpeech(ctx context.Context, p Provider, req SpeechRequest, opts ...
 	if sgCfg == nil {
 		return SpeechResponse{}, &ValidationError{Field: "provider", Message: p.Name + " does not support speech generation"}
 	}
-	model, _ := lookupModel(sgCfg.Models, req.Model, speechModelID)
+	model, listed := lookupModel(sgCfg.Models, req.Model, speechModelID)
 	if err := validateSpeechModel(req, sgCfg, model); err != nil {
 		return SpeechResponse{}, err
 	}
 
 	baseEvent := providers.Event{
-		Op:       providers.OpSpeechGeneration,
-		Provider: p.Name,
-		Model:    req.Model,
+		Op:            providers.OpSpeechGeneration,
+		Provider:      p.Name,
+		Model:         req.Model,
+		ModelUnlisted: !listed,
 	}
 	start := time.Now()
 	if err := firePre(ctx, o.middleware, baseEvent); err != nil {

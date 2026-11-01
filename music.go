@@ -105,15 +105,16 @@ func generateMusic(ctx context.Context, p Provider, req MusicRequest, opts ...Mu
 		return MusicResponse{}, &ValidationError{Field: "provider", Message: p.Name + " does not support music generation"}
 	}
 	// ADR-102 MPT-001: an unlisted model (nil) is sent as given.
-	model, _ := lookupModel(mgCfg.Models, req.Model, musicModelID)
+	model, listed := lookupModel(mgCfg.Models, req.Model, musicModelID)
 	// ADR-037 (MUS-008): supportsLyrics is advisory metadata, not a gate.
 	// Lyrics on an instrumental-only model fold into the prompt (for the
 	// single-prompt Predict shape) and the model ignores or honors them.
 
 	baseEvent := providers.Event{
-		Op:       providers.OpMusicGeneration,
-		Provider: p.Name,
-		Model:    req.Model,
+		Op:            providers.OpMusicGeneration,
+		Provider:      p.Name,
+		Model:         req.Model,
+		ModelUnlisted: !listed,
 	}
 	start := time.Now()
 	if err := firePre(ctx, o.middleware, baseEvent); err != nil {

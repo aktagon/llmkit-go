@@ -72,6 +72,8 @@ type Event struct {
 	Provider string
 	// Model — Always set.
 	Model string
+	// ModelUnlisted — Set on the pre and post events of image, speech, music, video, chat, stream, agent and batch: true when the catalogue does not list Model for Provider, so the per-model checks did not run (ADR-102 MPT-002). Internal-only: not an OTEL attribute.
+	ModelUnlisted bool
 	// Tool — Only set when Op=tool_call. Internal-only.
 	Tool string
 	// Args — Only set when Op=tool_call, Phase=pre. Mutation by middleware is observed by the tool. Internal-only.

@@ -211,7 +211,7 @@ func generateImage(ctx context.Context, p Provider, req ImageRequest, opts ...Im
 		return ImageResponse{}, &ValidationError{Field: "provider", Message: p.Name + " does not support image generation"}
 	}
 	// ADR-102 MPT-001: an unlisted model (nil) skips the per-model checks.
-	model, _ := lookupModel(imgCfg.Models, req.Model, imageModelID)
+	model, listed := lookupModel(imgCfg.Models, req.Model, imageModelID)
 	// ADR-102 MPT-006 G5: a listed model's aspect ratios and sizes are hints,
 	// not blocks. The provider answers an off-list value.
 	imageCount := 0
@@ -236,9 +236,10 @@ func generateImage(ctx context.Context, p Provider, req ImageRequest, opts ...Im
 	}
 
 	baseEvent := providers.Event{
-		Op:       providers.OpImageGeneration,
-		Provider: p.Name,
-		Model:    req.Model,
+		Op:            providers.OpImageGeneration,
+		Provider:      p.Name,
+		Model:         req.Model,
+		ModelUnlisted: !listed,
 	}
 	start := time.Now()
 	if err := firePre(ctx, o.middleware, baseEvent); err != nil {

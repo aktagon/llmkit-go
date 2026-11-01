@@ -47,6 +47,7 @@ func APIOptions() []APIOptionDef {
 		{GoFunc: "WithFile", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithFilename", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithFrequencyPenalty", SubOptions: []APISubOptionDef{}},
+		{GoFunc: "WithFresh", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithHistory", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithImage", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithImageSize", SubOptions: []APISubOptionDef{}},

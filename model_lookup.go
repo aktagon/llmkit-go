@@ -35,6 +35,14 @@ func fallbackMime[M any](models []M, model *M, mimeOf func(*M) string) string {
 	return ""
 }
 
+// chatModelListed is the catalogue lookup for chat, stream, agent and batch
+// (ADR-102 MPT-002): true when the compiled catalogue lists modelID as a
+// chat model of provider. It never errors; the chat send path runs no
+// per-model check, so the answer only marks the middleware event.
+func chatModelListed(provider, modelID string) bool {
+	return slices.Contains(ontologyCapabilities[provider][modelID], CapChatCompletion)
+}
+
 // statedFalseBlocks reports whether a listed model's support fact rejects
 // option before send (ADR-102 MPT-006 G6, MPT-007). Only a stated SupportNo
 // blocks, and only on a config whose provider silently ignores the option

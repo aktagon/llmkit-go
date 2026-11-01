@@ -401,26 +401,26 @@ served Vertex Imagen, which Google shut down; every provider now returns a
 
 ### Model catalogue
 
-`c.Models` and `c.Providers` cover model discovery in three modes. Runnable counterpart at [`examples/catalogue/main.go`](./examples/catalogue/main.go).
+`c.Models` and `c.Providers` cover model discovery. Every list comes live from the provider's `/v1/models` endpoint. Runnable counterpart at [`examples/catalogue/main.go`](./examples/catalogue/main.go).
 
 ```go
-// 1. Compiled-in catalogue -- synchronous, no HTTP.
-all := c.Models.List()
-info, ok := c.Models.Get("claude-opus-4-7")                       // (ModelInfo, bool)
-chat := c.Models.WithCapability(llmkit.CapChatCompletion).List()
+// 1. Live list across configured providers.
+live, err := c.Models.List(ctx)                                    // LiveResult -- fan-out
+chat, err := c.Models.WithCapability(llmkit.CapChatCompletion).List(ctx)
+fresh, err := c.Models.Fresh().List(ctx)                           // skip the cache, refill it
 
 // 2. Providers namespace.
 c.Providers.List()       // configured (credentials + /v1/models endpoint)
 providers.List()         // every provider the SDK ships with (static, keyless)
 
-// 3. Live + scoped HTTP.
-live, err := c.Models.Live(ctx)                                   // LiveResult -- fan-out
+// 3. Scoped to one provider.
 p := llmkit.Provider{Name: "anthropic", APIKey: "sk-..."}
-scoped, err := c.Models.Provider(p).List(ctx)                     // single-provider list
-raw, err := c.Models.Provider(p).Raw().List(ctx)                  // ModelInfo.Raw populated
+info, err := c.Models.Provider(p).Get(ctx, "claude-opus-4-7")      // single model
+scoped, err := c.Models.Provider(p).List(ctx)                      // single-provider list
+raw, err := c.Models.Provider(p).Raw().List(ctx)                   // ModelInfo.Raw populated
 ```
 
-`Live(ctx)` calls every configured provider's `/v1/models` in parallel and aggregates results into `LiveResult.Models` + a per-provider `LiveResult.Errors` map (partial success is the normal case). `Provider(p).Raw().List(ctx)` opts into populating `ModelInfo.Raw` with the provider-native record -- useful when you need fields the universal `ModelInfo` does not carry (Anthropic's capability matrix, Google's `supportedGenerationMethods`, etc.).
+`List(ctx)` calls every configured provider's `/v1/models` and aggregates results into `LiveResult.Models` + a per-provider `LiveResult.Errors` map (partial success is the normal case). Each client keeps every provider's list in memory for one hour, so a repeat `List` or a `Provider(p).Get` for a listed ID makes no HTTP call. A failed call is not kept. `Fresh()` makes the call again and refills the cache. `Provider(p).Raw().List(ctx)` opts into populating `ModelInfo.Raw` with the provider-native record -- useful when you need fields the universal `ModelInfo` does not carry (Anthropic's capability matrix, Google's `supportedGenerationMethods`, etc.).
 
 ## Options
 

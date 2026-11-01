@@ -47,9 +47,10 @@ func submitBatch(ctx context.Context, p Provider, reqs []Request, o *options) (B
 		return BatchHandle{}, err
 	}
 	baseEvent := providers.Event{
-		Op:       providers.OpBatchSubmit,
-		Provider: p.Name,
-		Model:    model,
+		Op:            providers.OpBatchSubmit,
+		Provider:      p.Name,
+		Model:         model,
+		ModelUnlisted: !chatModelListed(p.Name, model),
 	}
 	start := time.Now()
 	if err := firePre(ctx, o.middleware, baseEvent); err != nil {
