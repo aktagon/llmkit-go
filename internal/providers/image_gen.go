@@ -12,14 +12,10 @@ const (
 
 // Image request-shape discriminators: each names one request body (ADR-096).
 const (
-	InlineParts           = "InlineParts"
-	JSONGenerationsOpenAI = "JSONGenerationsOpenAI"
-	MultipartForm         = "MultipartForm"
-	JSONInlineRefs        = "JSONInlineRefs"
-	// JSONPredict is the former Vertex Imagen :predict body.
-	//
-	// Deprecated: no provider accepts this since 2026-10-15 (Vertex Imagen shut down, BUG-101); removed at the next major.
-	JSONPredict              = "JSONPredict"
+	InlineParts              = "InlineParts"
+	JSONGenerationsOpenAI    = "JSONGenerationsOpenAI"
+	MultipartForm            = "MultipartForm"
+	JSONInlineRefs           = "JSONInlineRefs"
 	JSONGenerations          = "JSONGenerations"
 	JSONGenerationsInputRefs = "JSONGenerationsInputRefs"
 )
