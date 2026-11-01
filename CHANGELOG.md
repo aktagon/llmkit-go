@@ -143,6 +143,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`ModelInfo` carries what the SDK's catalogue states about a model.**
+  `ModelInfo.Image`, `Video` and `Speech` are filled for a model the SDK
+  lists for that capability, and nil otherwise. `ImageHints` holds the aspect
+  ratios, sizes and whether the model takes image parts. `VideoHints` holds
+  the resolutions, aspect ratios, maximum duration in seconds, and whether
+  the model takes a seed image, a last frame or reference images.
+  `SpeechHints` holds whether the model takes a speech style. Each support
+  fact is a `providers.Support`: `SupportUnknown` when no source states it.
+  The values are hints: a request outside them is still sent.
 - **`providers.Event.ModelUnlisted` marks a model the SDK does not list.**
   Image, speech, music, video, chat, stream, agent and batch set it on their
   pre and post middleware events. It is true when the SDK's model list does

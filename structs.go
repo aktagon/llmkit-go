@@ -4,6 +4,8 @@ package llmkit
 
 import (
 	"encoding/json"
+
+	"github.com/aktagon/llmkit-go/v3/providers"
 )
 
 // AudioData is one decoded audio payload returned in a MusicResponse. Same shape as MediaRef (mime type + raw bytes) but a distinct type so capability-specific return semantics stay typed: MusicResponse.audio carries decoded outputs; MediaRef appears in input payloads.
@@ -49,6 +51,18 @@ type ImageData struct {
 
 	// Bytes is the raw (not base64-encoded) decoded image payload. The SDK decodes provider wire format (base64, URL fetch) before returning so callers always see raw bytes.
 	Bytes []byte
+}
+
+// ImageHints is what the SDK's catalogue states about one image-generation model (ADR-102 MPT-008). The values are hints: a request outside them is still sent, and the provider answers.
+type ImageHints struct {
+	// AspectRatios are the aspect ratios the catalogue lists for the model, such as "16:9". Empty when it lists no fixed set.
+	AspectRatios []string
+
+	// Sizes are the image sizes the catalogue lists for the model, such as "1K". Empty when it lists no fixed set.
+	Sizes []string
+
+	// ImageInput is whether the model takes image parts: yes, no, or unknown when no source states it.
+	ImageInput providers.Support
 }
 
 // ImageResponse is the universal image-generation response container returned by Image.Generate. Carries the decoded images, optional text captions/refusals, usage, and the same finish-reason / finish-message / raw fields the text-gen Response carries.
@@ -130,6 +144,15 @@ type ModelInfo struct {
 
 	// Raw is the parsed provider-native record for this model, populated only when the caller opted in via the builder's .Raw() chain method (ADR-014). Type-erased — consumers cast to a provider-shape type for fields the universal ModelInfo does not carry (Anthropic capability matrix, Google supportedGenerationMethods, etc.).
 	Raw json.RawMessage
+
+	// Image is what the SDK's catalogue states about this model for image generation (ADR-102 MPT-008). Absent when the catalogue does not list the model for image generation.
+	Image *ImageHints
+
+	// Video is what the SDK's catalogue states about this model for video generation (ADR-102 MPT-008). Absent when the catalogue does not list the model for video generation.
+	Video *VideoHints
+
+	// Speech is what the SDK's catalogue states about this model for speech generation (ADR-102 MPT-008). Absent when the catalogue does not list the model for speech generation.
+	Speech *SpeechHints
 }
 
 // MusicResponse is the universal music-generation response container returned by Music.Generate. Carries the decoded audio, optional text (generated lyrics / commentary), usage, and the same finish-reason / finish-message / raw fields the image-gen and text-gen responses carry.
@@ -273,6 +296,12 @@ type SafetySetting struct {
 	Threshold string
 }
 
+// SpeechHints is what the SDK's catalogue states about one speech-generation model (ADR-102 MPT-008). The values are hints: a request outside them is still sent, and the provider answers.
+type SpeechHints struct {
+	// Style is whether the model takes a speech style: yes, no, or unknown when no source states it.
+	Style providers.Support
+}
+
 // SpeechResponse is the universal text-to-speech response container returned by Speech.Generate. Carries the synthesized audio (a single clip), the provider-reported usage, and an optional finish reason — reusing the music pipeline's AudioData container unchanged (ADR-049).
 type SpeechResponse struct {
 	// Audio is the synthesized audio (mime type + raw bytes). One synthesis yields one clip, so this is a single AudioData, not a list (ADR-049 OQ-4).
@@ -385,6 +414,27 @@ type VideoHandle struct {
 
 	// KeepStored is the caller's choice to keep the provider's stored job after Wait has the video. False (the default) makes Wait delete it on providers that store jobs (Gemini Omni); a failed delete returns the video with a VideoDeleteError. Submit copies the builder's KeepStored() flag here; cross-process resume callers set it directly.
 	KeepStored bool
+}
+
+// VideoHints is what the SDK's catalogue states about one video-generation model (ADR-102 MPT-008). The values are hints: a request outside them is still sent, and the provider answers.
+type VideoHints struct {
+	// Resolutions are the resolutions the catalogue lists for the model, such as "720p". Empty when it lists no fixed set.
+	Resolutions []string
+
+	// AspectRatios are the aspect ratios the catalogue lists for the model, such as "16:9". Empty when it lists no fixed set.
+	AspectRatios []string
+
+	// MaxDurationSeconds is the longest video the catalogue lists for the model, in seconds. Zero when it states none.
+	MaxDurationSeconds int
+
+	// ImageToVideo is whether the model takes a seed image: yes, no, or unknown when no source states it.
+	ImageToVideo providers.Support
+
+	// LastFrame is whether the model takes a last frame: yes, no, or unknown when no source states it.
+	LastFrame providers.Support
+
+	// ReferenceImages is whether the model takes reference images: yes, no, or unknown when no source states it.
+	ReferenceImages providers.Support
 }
 
 // VideoResponse is the universal video-generation response container returned by VideoHandle.Wait. Carries the finished video references, usage, and the same finish-reason / finish-message / raw fields the image-gen and music-gen responses carry.
