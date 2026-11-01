@@ -20,7 +20,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Each client caches the live model list for one hour.** A repeat
   `Models.List(ctx)` or `Provider(p).List(ctx)` within the hour makes no HTTP
   call, and `Provider(p).Get(ctx, id)` answers from the cached list when it
-  holds the ID. A failed call is not cached. The new `Models.Fresh()` makes
+  holds the ID. A failed call is not cached. Each list is kept per provider, base URL
+  and API key, so a call sent to another endpoint or with another key
+  makes its own request. The new `Models.Fresh()` makes
   the call again and refills the cache; it carries through `Provider(p)`.
   Sends never read the cache. A list served from the cache fires no
   middleware event.
