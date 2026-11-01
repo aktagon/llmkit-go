@@ -18,7 +18,7 @@ type APIError struct {
 	RetryAfter time.Duration
 	// Hint names the stated catalogue facts a rejected request for a listed
 	// model contradicts, for example "catalogue: heygen/heygen-video-1 lists
-	// no last frame". It is set only on a 4xx reply; empty otherwise.
+	// no last frame". It is set only on a 400 or 422 reply; empty otherwise.
 	Hint string
 }
 

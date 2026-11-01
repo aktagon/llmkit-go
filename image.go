@@ -251,13 +251,13 @@ func generateImage(ctx context.Context, p Provider, req ImageRequest, opts ...Im
 
 	respBody, err := dispatchImageHTTP(ctx, client, p, cfg, variant, req.Model, parts, o, headers)
 	if err != nil {
+		if apiErr, ok := err.(*APIError); ok && respBody != nil {
+			err = withHint(parseError(p.Name, apiErr.StatusCode, respBody, nil), imageHint(model, o, imageCount))
+		}
 		postEv := baseEvent
 		postEv.Err = err
 		postEv.Duration = time.Since(start)
 		firePost(ctx, o.middleware, postEv)
-		if apiErr, ok := err.(*APIError); ok && respBody != nil {
-			return ImageResponse{}, withHint(parseError(p.Name, apiErr.StatusCode, respBody, nil), imageHint(model, o, imageCount))
-		}
 		return ImageResponse{}, err
 	}
 
