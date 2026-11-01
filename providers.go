@@ -1,9 +1,6 @@
 package llmkit
 
-import (
-	internalproviders "github.com/aktagon/llmkit-go/v3/internal/providers"
-	"github.com/aktagon/llmkit-go/v3/providers"
-)
+import "github.com/aktagon/llmkit-go/v3/providers"
 
 // eligible returns the providers eligible for *Models.List(ctx), carrying
 // this Client's credentials. Per ADR-019 the eligibility test is:
@@ -26,13 +23,13 @@ func (b *Providers) eligible() []Provider {
 }
 
 // runList maps the eligible providers to their secret-free public
-// metadata via internalproviders.Info (ADR-040 PSR-005).
+// metadata via providers.Info (ADR-040 PSR-005).
 func (b *Providers) runList() []ProviderInfo {
 	eligible := b.eligible()
 	out := make([]ProviderInfo, 0, len(eligible))
 	for _, p := range eligible {
 		if id, ok := providers.Parse(p.Name); ok {
-			out = append(out, internalproviders.Info(id))
+			out = append(out, providers.Info(id))
 		}
 	}
 	return out
