@@ -52,10 +52,9 @@ func classifyCatalogueErr(err error) string {
 // filterByCapability returns the records whose Capabilities slice
 // contains c; an empty c means no filter. Always returns a fresh slice
 // so callers cannot mutate the input. The single capability predicate
-// (HANDOFF-036 A4): shared by the compiled-in path
-// (filterCompiledModels), the scoped live list (runList), and — through
-// runList — the live aggregate (runLive). Get stays an unfiltered
-// point lookup by id.
+// (HANDOFF-036 A4): shared by the scoped live list (runList) and —
+// through runList — the live aggregate (runLive). Get stays an
+// unfiltered point lookup by id.
 func filterByCapability(models []ModelInfo, c Capability) []ModelInfo {
 	out := make([]ModelInfo, 0, len(models))
 	for _, m := range models {
@@ -73,26 +72,6 @@ func filterByCapability(models []ModelInfo, c Capability) []ModelInfo {
 	return out
 }
 
-//
-// through the shared capability predicate. Always a fresh []ModelInfo
-// to keep callers from mutating the package-level slice.
-func filterCompiledModels(c Capability) []ModelInfo {
-	return filterByCapability(compiledInModels, c)
-}
-
-// lookupCompiledModel returns the compiled-in record for id, or zero +
-// false when no entry matches. Linear scan: the catalogue is small
-// enough that the map indirection cost outweighs the lookup, and
-// callers rarely Get() in tight loops.
-func lookupCompiledModel(id string) (ModelInfo, bool) {
-	for _, m := range compiledInModels {
-		if m.ID == id {
-			return m, true
-		}
-	}
-	return ModelInfo{}, false
-}
-
 // runLive aggregates live results across providers. Per ADR-019 the
 // configured set is filtered through *Providers.eligible() — providers
 // with both credentials configured and hasModelsEndpoint declared.
@@ -105,8 +84,7 @@ func (b *Models) runLive(ctx context.Context) (LiveResult, error) {
 		errs = map[string]ProviderError{}
 	)
 	for _, p := range configured {
-		scoped := &ScopedModels{client: b.client, target: p, capFilter: b.capFilter}
-		models, err := scoped.runList(ctx)
+		models, err := b.Provider(p).runList(ctx)
 		if err != nil {
 			// ADR-019 Amendment 1: structured discriminant + message.
 			errs[p.Name] = ProviderError{Kind: classifyCatalogueErr(err), Message: err.Error()}
@@ -123,15 +101,39 @@ func (b *Models) runLive(ctx context.Context) (LiveResult, error) {
 	return LiveResult{Models: all, Errors: errs}, nil
 }
 
-// runList performs the single-provider live HTTP call. Paginates per
-// the catalogue config until the parser reports no next cursor, then
+// runList returns the provider's model list, enriched with the
 //
-// returns the typed []ModelInfo filtered by the chain's capFilter
-// (WithCapability composes with Provider(p).List — HANDOFF-036 A4;
-// Get stays an unfiltered point lookup by id). Middleware fires once
-// per call (not once per page) — pre fires before the first request,
-// post fires after the final page (or first error).
+// (WithCapability composes with Provider(p).List — HANDOFF-036 A4; Get
+// stays an unfiltered point lookup by id). A list younger than one hour
+// comes from the client's cache unless Fresh() is set (ADR-102 MPT-005);
+// otherwise the live call runs and a successful result refills the cache.
 func (b *ScopedModels) runList(ctx context.Context) ([]ModelInfo, error) {
+	records, ok := b.cached()
+	if !ok {
+		var err error
+		if records, err = b.fetchList(ctx); err != nil {
+			return nil, err
+		}
+		b.client.modelCache.put(b.target.Name, records)
+	}
+	return filterByCapability(b.enrich(records), b.capFilter), nil
+}
+
+// cached returns the provider's cached records, unless the chain asked for
+// a fresh call.
+func (b *ScopedModels) cached() ([]providers.ParsedModelRecord, bool) {
+	if b.fresh {
+		return nil, false
+	}
+	return b.client.modelCache.get(b.target.Name)
+}
+
+// fetchList performs the single-provider live HTTP call. Paginates per the
+// catalogue config until the parser reports no next cursor. Middleware
+// fires once per call (not once per page) — pre fires before the first
+// request, post fires after the final page (or first error). A list served
+// from the cache makes no call and fires no event.
+func (b *ScopedModels) fetchList(ctx context.Context) ([]providers.ParsedModelRecord, error) {
 	cfg, ok := catalogueByProvider[b.target.Name]
 	if !ok {
 		return nil, ErrModelsNotSupported
@@ -162,15 +164,23 @@ func (b *ScopedModels) runList(ctx context.Context) ([]ModelInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	return filterByCapability(b.enrich(out), b.capFilter), nil
+	return out, nil
 }
 
-// runGet performs the single-provider live model fetch. URL shapes pinned
-// in plan 025: Anthropic /v1/models/{id}, OpenAI /v1/models/{id}, Google
+// runGet returns one model record by ID. A fresh cached list that holds
+// the ID answers without a call (ADR-102 MPT-005); otherwise the live
+// point lookup runs. URL shapes pinned in plan 025: Anthropic /v1/models/{id}, OpenAI /v1/models/{id}, Google
 // /v1beta/models/{id} (the parser strips models/ from the response, but
 // the URL itself uses the bare ID — verified live 2026-05-20). Vertex +
 // Bedrock fall through ErrModelsNotSupported until their parsers land.
 func (b *ScopedModels) runGet(ctx context.Context, id string) (ModelInfo, error) {
+	if records, ok := b.cached(); ok {
+		for _, rec := range records {
+			if rec.ID == id {
+				return b.enrich([]providers.ParsedModelRecord{rec})[0], nil
+			}
+		}
+	}
 	cfg, ok := catalogueByProvider[b.target.Name]
 	if !ok {
 		return ModelInfo{}, ErrModelsNotSupported
