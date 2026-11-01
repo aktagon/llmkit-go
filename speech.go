@@ -331,9 +331,11 @@ func validateSpeechInputs(req SpeechRequest) error {
 
 // validateSpeechModel checks the request against what the config's body can
 // carry and the model's stated speaker and style facts (BUG-091). An unknown
-// model fact sends the request; only a stated false or a stated speaker count
-// that does not match blocks it (decision 009, HANDOFF-099). An unlisted
-// model (nil) has no facts, so only the config checks run (ADR-102 MPT-001).
+// model fact sends the request; a stated speaker count of 1 or one that does
+// not match blocks it (decision 009, HANDOFF-099). A stated-false style
+// blocks only on a config that ignores the option (ADR-102 MPT-006 G6). An
+// unlisted model (nil) has no facts, so only the config checks run (ADR-102
+// MPT-001).
 func validateSpeechModel(req SpeechRequest, cfg *providers.SpeechGenDef, model *providers.SpeechModelDef) error {
 	name, maxSpeakers, style := req.Model, 0, providers.SupportUnknown
 	if model != nil {
@@ -347,7 +349,9 @@ func validateSpeechModel(req SpeechRequest, cfg *providers.SpeechGenDef, model *
 			return &ValidationError{Field: "speakers", Message: fmt.Sprintf("exactly %d speakers are required, got %d", maxSpeakers, len(req.Speakers))}
 		}
 	}
-	if speechHasStyle(req) && (!cfg.CarriesSpeechStyle || style == providers.SupportNo) {
+	if speechHasStyle(req) && (!cfg.CarriesSpeechStyle ||
+		(req.Style != "" && statedFalseBlocks(cfg.IgnoresUnsupported, "Style", style)) ||
+		(speechHasStyledLine(req) && statedFalseBlocks(cfg.IgnoresUnsupported, "AddStyledLine", style))) {
 		return &ValidationError{Field: "style", Message: name + " does not support a speech style"}
 	}
 	return nil
@@ -363,9 +367,11 @@ func speakerDeclared(speakers []SpeechSpeaker, name string) bool {
 }
 
 func speechHasStyle(req SpeechRequest) bool {
-	if req.Style != "" {
-		return true
-	}
+	return req.Style != "" || speechHasStyledLine(req)
+}
+
+// speechHasStyledLine reports whether a line carries a style (AddStyledLine).
+func speechHasStyledLine(req SpeechRequest) bool {
 	for _, line := range req.Lines {
 		if line.Style != "" {
 			return true

@@ -13,8 +13,9 @@ const (
 )
 
 // Support is a catalogue fact with three states (decision 009): the zero
-// value SupportUnknown means no source states it, and only SupportNo
-// blocks a request before send.
+// value SupportUnknown means no source states it. Only SupportNo blocks a
+// request before send, and only for an option the config's
+// IgnoresUnsupported lists.
 type Support int
 
 const (
@@ -28,7 +29,8 @@ const (
 // MaxSpeakers is the speaker count the model takes (1 or 2); 0 means
 // unknown, and an unknown count sends the request. SupportsSpeechStyle
 // says whether the provider accepts a style (Style, AddStyledLine) for
-// the model; only SupportNo rejects one.
+// the model; only SupportNo rejects one, and only when the config's
+// IgnoresUnsupported lists the option.
 type SpeechModelDef struct {
 	ModelID             string
 	Label               string
@@ -54,6 +56,10 @@ type SpeechGenDef struct {
 	// MultiSpeaker: the config has a multi-speaker body, so it can carry
 	// speakers; false rejects speakers for every model of the config.
 	MultiSpeaker bool
+	// IgnoresUnsupported lists the options ("Style", "AddStyledLine") this
+	// provider silently ignores when the model lacks them; only for these
+	// does a model's SupportNo reject the request before send.
+	IgnoresUnsupported []string
 }
 
 // SpeechGenConfig returns the speech-generation config for a provider, or
@@ -315,6 +321,7 @@ func SpeechGenConfig(provider string) *SpeechGenDef {
 			BaseURL:            "",
 			CarriesSpeechStyle: false,
 			MultiSpeaker:       false,
+			IgnoresUnsupported: []string{"Style"},
 		}
 	default:
 		return nil
