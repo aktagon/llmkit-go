@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aktagon/llmkit-go/v3/providers"
+	internalproviders "github.com/aktagon/llmkit-go/v3/internal/providers"
 )
 
 // TranscriptionRequest is the canonical speech-to-text request (ADR-048). It
@@ -41,7 +41,7 @@ type TranscriptionOption func(*transcriptionOptions)
 
 type transcriptionOptions struct {
 	httpClient *http.Client
-	middleware []providers.MiddlewareFn
+	middleware []MiddlewareFn
 }
 
 // WithTranscriptionHTTPClient overrides the http.Client used for the
@@ -52,9 +52,9 @@ func WithTranscriptionHTTPClient(c *http.Client) TranscriptionOption {
 
 // WithTranscriptionMiddleware registers pre/post hooks that fire around the
 // OUTBOUND transcription request — the async Submit and the sync Transcribe.
-// Op is providers.OpTranscription. Wait/Poll only read job state and do not
+// Op is OpTranscription. Wait/Poll only read job state and do not
 // fire (mirrors video_generation / batch_submit). Pre-phase can veto.
-func WithTranscriptionMiddleware(fns ...providers.MiddlewareFn) TranscriptionOption {
+func WithTranscriptionMiddleware(fns ...MiddlewareFn) TranscriptionOption {
 	return func(o *transcriptionOptions) { o.middleware = append(o.middleware, fns...) }
 }
 
@@ -85,7 +85,7 @@ func submitTranscription(ctx context.Context, p Provider, req TranscriptionReque
 	if !ok {
 		return TranscriptionHandle{}, &ValidationError{Field: "provider", Message: "unknown: " + p.Name}
 	}
-	tcCfg := providers.TranscriptionConfig(p.Name)
+	tcCfg := internalproviders.TranscriptionConfig(p.Name)
 	if tcCfg == nil {
 		return TranscriptionHandle{}, &ValidationError{Field: "provider", Message: p.Name + " does not support transcription"}
 	}
@@ -110,8 +110,8 @@ func submitTranscription(ctx context.Context, p Provider, req TranscriptionReque
 	base := transcriptionBaseURL(p, cfg)
 	headers := buildAuthHeaders(p, cfg)
 
-	baseEvent := providers.Event{
-		Op:       providers.OpTranscription,
+	baseEvent := Event{
+		Op:       OpTranscription,
 		Provider: p.Name,
 		Model:    req.Model,
 	}
@@ -138,7 +138,7 @@ func dispatchTranscriptionSubmit(
 	ctx context.Context,
 	client *http.Client,
 	base string,
-	tcCfg *providers.TranscriptionDef,
+	tcCfg *internalproviders.TranscriptionDef,
 	headers map[string]string,
 	audioURL string,
 	audioBytes []byte,
@@ -219,7 +219,7 @@ type transcriptionAdapter struct {
 	client     *http.Client
 	headers    map[string]string
 	pollURLStr string
-	tcCfg      *providers.TranscriptionDef
+	tcCfg      *internalproviders.TranscriptionDef
 }
 
 func (a transcriptionAdapter) config() LifecycleConfig { return a.lc }
@@ -256,7 +256,7 @@ func newTranscriptionAdapter(h TranscriptionHandle, o *transcriptionOptions) (tr
 	if !ok {
 		return transcriptionAdapter{}, &ValidationError{Field: "provider", Message: "unknown: " + p.Name}
 	}
-	tcCfg := providers.TranscriptionConfig(p.Name)
+	tcCfg := internalproviders.TranscriptionConfig(p.Name)
 	if tcCfg == nil {
 		return transcriptionAdapter{}, &ValidationError{Field: "provider", Message: p.Name + " does not support transcription"}
 	}
@@ -297,7 +297,7 @@ func transcribeSync(ctx context.Context, p Provider, req TranscriptionRequest, o
 	if !ok {
 		return TranscriptionResponse{}, &ValidationError{Field: "provider", Message: "unknown: " + p.Name}
 	}
-	tcCfg := providers.TranscriptionConfig(p.Name)
+	tcCfg := internalproviders.TranscriptionConfig(p.Name)
 	if tcCfg == nil {
 		return TranscriptionResponse{}, &ValidationError{Field: "provider", Message: p.Name + " does not support transcription"}
 	}
@@ -323,8 +323,8 @@ func transcribeSync(ctx context.Context, p Provider, req TranscriptionRequest, o
 	}
 	headers["Content-Type"] = contentType
 
-	baseEvent := providers.Event{
-		Op:       providers.OpTranscription,
+	baseEvent := Event{
+		Op:       OpTranscription,
 		Provider: p.Name,
 		Model:    req.Model,
 	}
@@ -365,7 +365,7 @@ func transcribeSync(ctx context.Context, p Provider, req TranscriptionRequest, o
 // the generated boundary.
 func buildTranscriptionMultipart(wireShape, model string, ref *MediaRef) ([]byte, string, error) {
 	switch wireShape {
-	case providers.TranscriptionShapeOpenAI:
+	case internalproviders.TranscriptionShapeOpenAI:
 		return buildOpenAITranscriptionMultipart(model, "verbose_json", ref)
 	default:
 		return nil, "", fmt.Errorf("transcription: wire shape %q has no multipart encoder", wireShape)
@@ -479,9 +479,9 @@ func normalizeAudioBytesPart(parts []Part) (*MediaRef, error) {
 // transcriptionResult extracts the finished transcript per wire shape. Only the
 // result decode is wire-shape-keyed (STT-005); the submit/poll/status facts are
 // config.
-func transcriptionResult(tcCfg *providers.TranscriptionDef, raw map[string]any) (TranscriptionResponse, error) {
+func transcriptionResult(tcCfg *internalproviders.TranscriptionDef, raw map[string]any) (TranscriptionResponse, error) {
 	switch tcCfg.WireShape {
-	case providers.TranscriptionShapeAssemblyAI:
+	case internalproviders.TranscriptionShapeAssemblyAI:
 		return transcriptionResultFromAssemblyAI(raw), nil
 	default:
 		return TranscriptionResponse{}, fmt.Errorf("transcription: unsupported wire shape %q", tcCfg.WireShape)

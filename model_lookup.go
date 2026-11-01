@@ -4,8 +4,6 @@ import (
 	"errors"
 	"slices"
 	"strings"
-
-	"github.com/aktagon/llmkit-go/v3/providers"
 )
 
 // lookupModel finds modelID in one capability's compiled catalogue (ADR-102
@@ -50,8 +48,8 @@ func chatModelListed(provider, modelID string) bool {
 // blocks, and only on a config whose provider silently ignores the option
 // (ignored is the config's IgnoresUnsupported). Elsewhere the request is sent
 // and the provider answers; an unknown fact never blocks (decision 009).
-func statedFalseBlocks(ignored []string, option string, support providers.Support) bool {
-	return support == providers.SupportNo && slices.Contains(ignored, option)
+func statedFalseBlocks(ignored []string, option string, support Support) bool {
+	return support == SupportNo && slices.Contains(ignored, option)
 }
 
 // catalogueHint names the stated facts of a listed model that a request
