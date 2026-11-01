@@ -7,6 +7,7 @@ import (
 	"io"
 	"math"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/aktagon/llmkit-go/v3/providers"
@@ -261,29 +262,56 @@ func decodeInt(v any, dst **int) error {
 	return nil
 }
 
-// decodeInteger reads an integer option. JSON has one number type, so an
-// integral number in any notation (4096, 4096.0, 4.096e3) is an integer, and
-// a fraction is not (owner decision 3, HANDOFF-105 F3). A literal integer is
-// read exactly; any other notation is read as a float64, as TS and Rust read
-// it. A value outside int64 is out of range.
+// decodeInteger reads an integer option from its decimal text, exactly. JSON
+// has one number type, so an integral number in any notation (4096, 4096.0,
+// 4.096e3) is an integer, and a fraction is not (owner decision 3, HANDOFF-105
+// F3). The text is read as digits times a power of ten, never as a float64,
+// which rounds past 2^53: 9007199254740993.0 is that integer, and
+// 9007199254740991.5 is a fraction (owner, 2026-11-01, HANDOFF-111). TS and
+// Rust read the text the same way. A value outside int64 is out of range.
 func decodeInteger(v any) (int64, error) {
 	n, ok := v.(json.Number)
 	if !ok {
 		return 0, fmt.Errorf("must be an integer")
 	}
-	if i, err := n.Int64(); err == nil {
-		return i, nil
+	// The decoder checked the JSON grammar: -?int(.frac)?([eE][+-]?exp)?.
+	text, negative := strings.CutPrefix(string(n), "-")
+	mantissa, exponent := text, "0"
+	if i := strings.IndexAny(text, "eE"); i >= 0 {
+		mantissa, exponent = text[:i], text[i+1:]
 	}
-	f, err := n.Float64()
+	whole, fraction, _ := strings.Cut(mantissa, ".")
+	digits := strings.TrimLeft(whole+fraction, "0")
+	if digits == "" {
+		return 0, nil
+	}
+	significant := strings.TrimRight(digits, "0")
+	// The value is significant * 10^scale. ParseInt saturates an exponent
+	// past int64; the clamp keeps the sum below from overflowing, and any
+	// exponent near it is out of range or a fraction all the same.
+	exp, _ := strconv.ParseInt(exponent, 10, 64)
+	exp = max(min(exp, 1<<40), -1<<40)
+	scale := exp - int64(len(fraction)) + int64(len(digits)-len(significant))
 	switch {
-	case err != nil || math.IsInf(f, 0):
-		return 0, fmt.Errorf("is out of range")
-	case f != math.Trunc(f):
+	case scale < 0:
 		return 0, fmt.Errorf("must be an integer")
-	case f < math.MinInt64 || f >= math.MaxInt64:
+	case int64(len(significant))+scale > 19:
 		return 0, fmt.Errorf("is out of range")
 	}
-	return int64(f), nil
+	// At most 19 digits, so below 10^19, which fits a uint64.
+	u, _ := strconv.ParseUint(significant, 10, 64)
+	for ; scale > 0; scale-- {
+		u *= 10
+	}
+	switch {
+	case negative && u <= 1<<63:
+		// Two's complement: -u read as an int64 is the negative value, and
+		// 2^63 reads as math.MinInt64.
+		return int64(-u), nil
+	case !negative && u <= math.MaxInt64:
+		return int64(u), nil
+	}
+	return 0, fmt.Errorf("is out of range")
 }
 
 func decodeFloat(v any, dst **float64) error {
