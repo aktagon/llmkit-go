@@ -216,12 +216,13 @@ func submitVideo(ctx context.Context, p Provider, req VideoRequest, opts ...Vide
 	headers := buildAuthHeaders(p, cfg)
 
 	requestID, err := dispatchVideoSubmit(ctx, client, p, cfg, vgCfg, variant, req, parts, headers)
+	err = withHint(err, videoHint(model, imageCount, req))
 	postEv := baseEvent
 	postEv.Err = err
 	postEv.Duration = time.Since(start)
 	firePost(ctx, o.middleware, postEv)
 	if err != nil {
-		return VideoHandle{}, withHint(err, videoHint(model, imageCount, req))
+		return VideoHandle{}, err
 	}
 	return VideoHandle{ID: requestID, Provider: p, Raw: o.raw, Model: req.Model, KeepStored: o.keepStored}, nil
 }

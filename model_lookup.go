@@ -66,13 +66,14 @@ func catalogueHint(modelID string, facts []string) string {
 	return "catalogue: " + modelID + " lists " + strings.Join(facts, ", ")
 }
 
-// withHint returns err with hint attached when err is a 4xx *APIError; any
-// other error, and an empty hint, return err unchanged (ADR-102 MPT-008). It
-// attaches to a copy, so a middleware that kept the original error still
-// holds the error it was given.
+// withHint returns err with hint attached when err is an *APIError with
+// status 400 or 422; any other error or status, and an empty hint, return
+// err unchanged (ADR-102 MPT-008; owner, 2026-11-01). Callers attach it
+// before the post middleware event, so middleware sees the error the caller
+// gets. It attaches to a copy and leaves err as it was.
 func withHint(err error, hint string) error {
 	var apiErr *APIError
-	if hint == "" || !errors.As(err, &apiErr) || apiErr.StatusCode < 400 || apiErr.StatusCode >= 500 {
+	if hint == "" || !errors.As(err, &apiErr) || (apiErr.StatusCode != 400 && apiErr.StatusCode != 422) {
 		return err
 	}
 	hinted := *apiErr

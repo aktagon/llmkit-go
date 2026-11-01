@@ -118,13 +118,13 @@ func generateSpeech(ctx context.Context, p Provider, req SpeechRequest, opts ...
 
 	respBody, err := dispatchSpeechHTTP(ctx, client, p, cfg, sgCfg, req, headers)
 	if err != nil {
+		if apiErr, ok := err.(*APIError); ok && respBody != nil {
+			err = withHint(parseError(p.Name, apiErr.StatusCode, respBody, nil), speechHint(model, req))
+		}
 		postEv := baseEvent
 		postEv.Err = err
 		postEv.Duration = time.Since(start)
 		firePost(ctx, o.middleware, postEv)
-		if apiErr, ok := err.(*APIError); ok && respBody != nil {
-			return SpeechResponse{}, withHint(parseError(p.Name, apiErr.StatusCode, respBody, nil), speechHint(model, req))
-		}
 		return SpeechResponse{}, err
 	}
 
