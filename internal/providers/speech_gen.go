@@ -12,18 +12,6 @@ const (
 	SpeechShapeXAI     = "SpeechXAI"
 )
 
-// Support is a catalogue fact with three states (decision 009): the zero
-// value SupportUnknown means no source states it. Only SupportNo blocks a
-// request before send, and only for an option the config's
-// IgnoresUnsupported lists.
-type Support int
-
-const (
-	SupportUnknown Support = iota
-	SupportYes
-	SupportNo
-)
-
 // SpeechModelDef describes one speech-generation model. SampleRateHz is
 // an ADR-037 advisory fact (queryable, never gated); 0 when unverified.
 // MaxSpeakers is the speaker count the model takes (1 or 2); 0 means

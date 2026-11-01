@@ -2,28 +2,6 @@ package llmkit
 
 import internalproviders "github.com/aktagon/llmkit-go/v3/internal/providers"
 
-// FinishReason is why a chat response stopped, in one vocabulary shared by
-// every provider (ADR-099 CRF-001). The values are the
-//
-// providers package. Response.FinishReason holds one; the provider's own
-// string is in Response.ProviderFinishReason.
-type FinishReason = internalproviders.FinishReason
-
-// The canonical finish reasons.
-const (
-	// FinishStop: the model reached a natural stop point or a stop sequence.
-	FinishStop = internalproviders.FinishStop
-	// FinishLength: the response reached the output-token limit.
-	FinishLength = internalproviders.FinishLength
-	// FinishToolCalls: the model stopped to call one or more tools.
-	FinishToolCalls = internalproviders.FinishToolCalls
-	// FinishContentFilter: the provider's content filter withheld or cut the
-	// output.
-	FinishContentFilter = internalproviders.FinishContentFilter
-	// FinishOther: a provider value with no entry in the table (CRF-011).
-	FinishOther = internalproviders.FinishOther
-)
-
 // decodeFinishReason maps the provider's finish-reason string to its
 // canonical value through the chat wire shape's generated table (ADR-099
 // CRF-001). A string with no entry is FinishOther (CRF-011); no string at all

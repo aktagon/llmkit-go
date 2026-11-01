@@ -5,8 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"time"
-
-	internalproviders "github.com/aktagon/llmkit-go/v3/internal/providers"
 )
 
 // ErrPollTimeout is the sentinel a blocking Wait / waitBatch wraps when the
@@ -70,30 +68,6 @@ func (s JobState) String() string {
 		return "unknown"
 	}
 }
-
-// JobFailureCode says why an async job, or one batch item, failed (ADR-099
-//
-// generated into the providers package; JobFailure.Code holds one.
-type JobFailureCode = internalproviders.JobFailureCode
-
-// The job failure codes.
-const (
-	// FailureError: the provider reported a failure, or a failure status
-	// with no entry in the provider's table.
-	FailureError = internalproviders.FailureError
-	// FailureExpired: the job, or the batch that held the item, reached the
-	// end of its time window before the work ran.
-	FailureExpired = internalproviders.FailureExpired
-	// FailureCancelled: the job, or the batch that held the item, was
-	// cancelled before the work ran.
-	FailureCancelled = internalproviders.FailureCancelled
-	// FailureTimeout: the poll deadline passed while the provider still
-	// reported the job as running. Status is empty.
-	FailureTimeout = internalproviders.FailureTimeout
-	// FailureMissing: no result line came back for a batch item. Status is
-	// empty.
-	FailureMissing = internalproviders.FailureMissing
-)
 
 // JobFailure is the normalized failure detail carried by a JobFailed status
 // and by a failed batch item (ADR-099 CRF-015, CRF-016): the typed code, the

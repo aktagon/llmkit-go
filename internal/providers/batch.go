@@ -16,24 +16,6 @@ const (
 	BatchSlotError = FailureError
 )
 
-// JobFailureCode says why an async job, or one batch item, failed
-// (ADR-099 CRF-016). JobFailure.Code holds one.
-type JobFailureCode string
-
-// Job failure codes.
-const (
-	// FailureCancelled: The job, or the batch that held the item, was cancelled before the work ran.
-	FailureCancelled JobFailureCode = "cancelled"
-	// FailureError: The provider reported a failure. Also the code of a failure status that has no entry in the provider's table.
-	FailureError JobFailureCode = "error"
-	// FailureExpired: The job, or the batch that held the item, reached the end of its time window before the work ran.
-	FailureExpired JobFailureCode = "expired"
-	// FailureMissing: No result line came back for the batch item. It is a code, not a job state: a poll never returns it (ADR-063). JobFailure.Status is empty.
-	FailureMissing JobFailureCode = "missing"
-	// FailureTimeout: The SDK's poll deadline passed while the provider still reported the job as running. The provider reported no failure, so JobFailure.Status is empty.
-	FailureTimeout JobFailureCode = "timeout"
-)
-
 // Batch input mode discriminators.
 const (
 	BatchInlineRequests     = "InlineRequests"
