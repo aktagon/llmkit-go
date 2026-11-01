@@ -458,9 +458,10 @@ func catalogueHints(provider, modelID string) (image *ImageHints, video *VideoHi
 // caller cannot change the compiled facts.
 func imageHints(m *internalproviders.ImageModelDef) *ImageHints {
 	return &ImageHints{
-		AspectRatios: slices.Clone(m.AspectRatios),
-		Sizes:        slices.Clone(m.ImageSizes),
-		ImageInput:   m.SupportsImageInput,
+		AspectRatios:   slices.Clone(m.AspectRatios),
+		Sizes:          slices.Clone(m.ImageSizes),
+		ImageInput:     m.SupportsImageInput,
+		MaxInputImages: m.MaxInputImages,
 	}
 }
 
@@ -474,5 +475,6 @@ func videoHints(m *internalproviders.VideoModelDef) *VideoHints {
 		ImageToVideo:       m.SupportsImageToVideo,
 		LastFrame:          m.SupportsLastFrame,
 		ReferenceImages:    m.SupportsReferenceImages,
+		MaxInputImages:     m.MaxInputImages,
 	}
 }
