@@ -25,6 +25,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   pre and post middleware events. It is true when the SDK's model list does
   not hold the model for that provider, so no per-model check ran before the
   request was sent. It is not a telemetry attribute.
+- **`ImageHints.MaxInputImages` and `VideoHints.MaxInputImages` report the
+  input-image limit.** Each is the most input images the catalogue lists for
+  the model, and 0 when no source states a limit. `grok-imagine-video`
+  reports 1. Read it from the model's hints:
+  `p := llmkit.Provider{Name: "openai", APIKey: key}`, then
+  `info, err := c.Models.Provider(p).Get(ctx, "gpt-image-1")`, then
+  `info.Image.MaxInputImages` when `info.Image` is not nil.
+- **Package `llmkit` names the types a caller reaches.** `llmkit.Event`,
+  `MiddlewarePhase` (`PhasePre`, `PhasePost`), `MiddlewareOp` (every `Op*`
+  constant), `Support` (`SupportUnknown`, `SupportYes`, `SupportNo`) and
+  `ProviderInfo` alias the `providers` types, beside the existing `Usage`,
+  `MiddlewareFn`, `FinishReason` and `JobFailureCode` aliases. Each constant
+  is listed under its type in `go doc`. Code that names `providers.Event`
+  keeps compiling.
 
 - **`Response.Created` (`*int`).** The Unix time the provider reports, read
   from `created` (Chat Completions) or `created_at` (Responses); nil when the
@@ -48,9 +62,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `FailureExpired`, and `cancelled` has `FailureCancelled`. Replace
   `cause.TimedOut` with `cause.Code == llmkit.FailureTimeout`;
   `errors.Is(err, ErrPollTimeout)` still matches the poll deadline.
-- `providers.BatchSlotMissing` and `providers.BatchSlotError` are
-  `JobFailureCode` values: the `Cause.Code` of an item with no result line
-  and of a failure the provider gives no known status for.
 - Batch items carry `ID` and `Model` from the provider's response body.
 - **BREAKING — `Request.Tools` is `[]ToolDefinition`.** A `ToolDefinition`
   holds the name, description and input schema of a tool. `Tool`, with its
@@ -107,9 +118,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `*ValidationError` that names it, for example `messages[1].tool_calls`.
   Other wire shapes fail on field `chatWireShape`. Bytes after the body
   object fail on field `body`; trailing whitespace passes.
-- `providers.WireShapeRequiredParams(chatWireShape)` lists the generation
-  params a chat wire shape's API rejects a request without. Today that is
-  `OptionMaxTokens` on `ChatAnthropic`.
 - `Text.CacheTTL(d)` and `Agent.CacheTTL(d)` set how long the cache that
   `.Caching()` creates lives.
   Google resource caching sends it on the cache-create request; without it,
@@ -167,23 +175,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the call again and refills the cache; it carries through `Provider(p)`.
   Sends never read the cache. A list served from the cache fires no
   middleware event.
-- **BREAKING — video and image support facts have three states.**
-  `VideoModelDef.SupportsImageToVideo`, `SupportsLastFrame` and
-  `SupportsReferenceImages`, and `ImageModelDef.SupportsImageInput`, are
-  `providers.Support`, like `SpeechModelDef.SupportsSpeechStyle`:
-  `SupportUnknown` (no source states the fact), `SupportYes` or `SupportNo`.
-  Code that read them as `bool` no longer compiles; compare with
-  `providers.SupportNo`.
 - **BREAKING — a model that states it lacks a feature no longer blocks the
   request by itself.** A seed image, a last frame, reference images, image
   parts or a speech style sent to such a listed model now reaches the
   provider, which answers. The SDK still rejects it before sending where the
-  provider silently ignores the field: `ImageGenDef`, `VideoGenDef` and
-  `SpeechGenDef` gain `IgnoresUnsupported`, the options that provider
-  ignores, and OpenRouter speech lists `Style`. Where the provider's request
-  has no field for the input, the error now says so, for example
-  `zhipu has no WithSeedFrame request`. The speaker-count and image-count
-  limits are unchanged.
+  provider ignores the field without an error, such as a speech style on
+  OpenRouter. Where the provider's request has no field for the input, the
+  error says so, for example `zhipu has no seed frame request`. A request
+  with two such inputs reads `grok has no seed frame and last frame
+  request`. The speaker-count and image-count limits are unchanged.
 
 - **BREAKING — `DecodeRequest` reads an integer option's decimal text
   exactly.** `max_tokens`, `seed` and `top_k` are read as digits times a power
@@ -289,30 +289,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`.AddMiddleware`) and `WithMaxToolIterations`. `WithHTTPClient`
   and `WithPollTimeout` remain, for `BatchHandle.Wait` and `Poll`.
 
-- **BREAKING — image and video configs list request variants.**
-  `ImageGenDef.InputMode`, `ImageGenDef.GenEndpoint`,
-  `ImageGenDef.EditEndpoint`, the `ImageInput*` constants and
-  `VideoGenDef.GenEndpoint` are removed. Each config now has `Variants
-  []RequestVariant`: one `RequestVariant{Carries, Shape, Endpoint}` per wire
-  request, keyed by whether the request carries reference images. The request is
-  picked from the parts you pass, so builder calls do not change. Migration:
-  read the variant whose carried input matches your request from `Variants`
-  instead of the removed fields.
-
 - **A mask is accepted only on an OpenAI request with reference images.** A
   mask on any other image request is rejected before the request is sent.
 
 - **BREAKING — image input limits are per model, and the provider-level count is gone.**
-  `ImageGenDef.MaxInputCount` is removed. It mixed two kinds of number: wire limits, and
+  The provider-level count mixed two kinds of number: wire limits, and
   provider maxima (Google 14, OpenAI and Grok 16) that no source confirmed.
   When a provider raised its limit, image generation rejected calls the
-  provider would accept. Each image model now carries `ImageModelDef.SupportsImageInput`,
-  added as the last field. Image generation rejects image parts when it is
-  false (OpenRouter, Recraft and Vertex models), and rejects more than
-  `ImageModelDef.MaxInputImages` when that is not 0. Every
+  provider would accept. Image generation now rejects image parts for a
+  model that takes none (OpenRouter, Recraft and Vertex models). It rejects
+  more images than the model's limit when the catalogue states one. Every
   other model sends all image parts and lets the provider decide.
-  Migration: read `ImageModelDef.SupportsImageInput` and `ImageModelDef.MaxInputImages`
-  on the model instead of the provider-level count.
+  Migration: read `ModelInfo.Image.ImageInput` and
+  `ModelInfo.Image.MaxInputImages` instead of the provider-level count.
 
 - **BREAKING — the module path is now `github.com/aktagon/llmkit-go/v3`.**
   Go releases a major version under a new import path. Update `go.mod` and
@@ -342,10 +331,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Vertex image generation removed.** Google shut down the Imagen endpoints.
   Image generation on Vertex now fails with a validation error before any
   request is sent. Vertex music and video are unchanged, and the Vertex default
-  model is now `lyria-002`. The SafetyFilter options (`SafetyFilter`,
-  `WithImageSafetyFilter` and the `ImageSafetyFilter*` constants) are deprecated
-  and no longer accepted by any provider; they will be removed in a later major
-  version.
+  model is now `lyria-002`.
+- **BREAKING — the image safety filter is removed.** `Image.SafetyFilter`,
+  `WithImageSafetyFilter` and the `ImageSafetyFilter*` constants are gone.
+  No provider accepted a safety threshold, so every call returned a
+  validation error. Delete the call; `Image.SafetySettings` stays.
+- **BREAKING — `providers` holds only provider names, the roster and the
+  types a caller reaches.** It keeps `ProviderName`, the provider constants,
+  `Parse`, `ChatOpenAI` and the other chat wire-shape names, `Info`, `List`
+  and `ProviderInfo`. It also declares `Event`, `Usage`, `MiddlewareFn`,
+  `MiddlewarePhase`, `MiddlewareOp`, `FinishReason`, `JobFailureCode` and
+  `Support` with their constants, and package `llmkit` aliases them.
+  `llmkit.New(providers.Google, key)` keeps compiling.
+- **BREAKING — the config lookups and generated tables are no longer
+  public.** `providers.ImageGenConfig`, `VideoGenConfig`, `SpeechGenConfig`,
+  `MusicGenConfig`, `CachingConfig` and the other `*Config` functions are
+  gone. So are the types they return (`ImageGenDef`, `ImageModelDef`,
+  `VideoGenDef` and the rest), the option and usage tables
+  (`OptionOverrides`, `SupportedOptions`, `UsagePaths`), the `ImageInput*`
+  constants and the `Parse*ModelsResponse` functions. Read model facts from the `ModelInfo`
+  hints: `info, err := c.Models.Provider(p).Get(ctx, "gpt-image-1")`, then
+  `info.Image.MaxInputImages`. In place of
+  `CachingConfig`, ask `c.Supports(llmkit.CapCaching)`.
+- **BREAKING — `ImageOption`, `MusicOption`, `SpeechOption` and their
+  `With*` functions are removed.** No exported function took them. Set the
+  same values on the `c.Image`, `c.Music` and `c.Speech` builders:
+  `WithAspectRatio(r)` becomes `.AspectRatio(r)`, `WithImageSize(s)` becomes
+  `.ImageSize(s)`, and `WithIncludeText()` becomes `.IncludeText()`. The same
+  holds for the other `WithImage*`, `WithMusic*` and `WithSpeechMiddleware`
+  functions. `TranscriptionOption` and `VideoOption` stay, for
+  `TranscriptionHandle.Wait`, `Poll` and `VideoHandle.Wait`.
 - **Google video generation removed.** Google shut down the Gemini API Veo
   preview models. Video generation on the `google` provider now fails before
   any request is sent. Veo stays available on Vertex.
