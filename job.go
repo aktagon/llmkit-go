@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/aktagon/llmkit-go/v3/providers"
+	internalproviders "github.com/aktagon/llmkit-go/v3/internal/providers"
 )
 
 // ErrPollTimeout is the sentinel a blocking Wait / waitBatch wraps when the
@@ -74,25 +74,25 @@ func (s JobState) String() string {
 // JobFailureCode says why an async job, or one batch item, failed (ADR-099
 //
 // generated into the providers package; JobFailure.Code holds one.
-type JobFailureCode = providers.JobFailureCode
+type JobFailureCode = internalproviders.JobFailureCode
 
 // The job failure codes.
 const (
 	// FailureError: the provider reported a failure, or a failure status
 	// with no entry in the provider's table.
-	FailureError = providers.FailureError
+	FailureError = internalproviders.FailureError
 	// FailureExpired: the job, or the batch that held the item, reached the
 	// end of its time window before the work ran.
-	FailureExpired = providers.FailureExpired
+	FailureExpired = internalproviders.FailureExpired
 	// FailureCancelled: the job, or the batch that held the item, was
 	// cancelled before the work ran.
-	FailureCancelled = providers.FailureCancelled
+	FailureCancelled = internalproviders.FailureCancelled
 	// FailureTimeout: the poll deadline passed while the provider still
 	// reported the job as running. Status is empty.
-	FailureTimeout = providers.FailureTimeout
+	FailureTimeout = internalproviders.FailureTimeout
 	// FailureMissing: no result line came back for a batch item. Status is
 	// empty.
-	FailureMissing = providers.FailureMissing
+	FailureMissing = internalproviders.FailureMissing
 )
 
 // JobFailure is the normalized failure detail carried by a JobFailed status
@@ -242,7 +242,7 @@ func classifyByConfig(lc LifecycleConfig, raw pollBody) classification {
 
 // failureCode maps a failure status to its code through the provider's table.
 // A status with no entry is FailureError (ADR-099 CRF-016), the same rule a
-// batch item follows with providers.BatchSlotError.
+// batch item follows with internalproviders.BatchSlotError.
 func failureCode(codes map[string]JobFailureCode, status string) JobFailureCode {
 	if code, ok := codes[status]; ok {
 		return code

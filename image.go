@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aktagon/llmkit-go/v3/providers"
+	internalproviders "github.com/aktagon/llmkit-go/v3/internal/providers"
 )
 
 // ImageRequest is the canonical image-generation request.
@@ -55,7 +55,7 @@ type imageOptions struct {
 	safetyFilter   string
 	safetySettings []SafetySetting
 	extraFields    map[string]any
-	middleware     []providers.MiddlewareFn
+	middleware     []MiddlewareFn
 	httpClient     *http.Client
 	raw            bool
 }
@@ -85,8 +85,8 @@ func WithIncludeText() ImageOption {
 }
 
 // WithImageMiddleware registers pre/post hooks that fire around the image
-// generation request. Op is providers.OpImageGeneration. Pre-phase can veto.
-func WithImageMiddleware(fns ...providers.MiddlewareFn) ImageOption {
+// generation request. Op is OpImageGeneration. Pre-phase can veto.
+func WithImageMiddleware(fns ...MiddlewareFn) ImageOption {
 	return func(o *imageOptions) { o.middleware = append(o.middleware, fns...) }
 }
 
@@ -206,7 +206,7 @@ func generateImage(ctx context.Context, p Provider, req ImageRequest, opts ...Im
 	if !ok {
 		return ImageResponse{}, &ValidationError{Field: "provider", Message: "unknown: " + p.Name}
 	}
-	imgCfg := providers.ImageGenConfig(p.Name)
+	imgCfg := internalproviders.ImageGenConfig(p.Name)
 	if imgCfg == nil {
 		return ImageResponse{}, &ValidationError{Field: "provider", Message: p.Name + " does not support image generation"}
 	}
@@ -226,7 +226,7 @@ func generateImage(ctx context.Context, p Provider, req ImageRequest, opts ...Im
 
 	// ADR-096: the request's parts pick the wire request; a config with no
 	// variant for those inputs cannot send it.
-	variant, err := selectRequestVariant(p.Name, imgCfg.Variants, partsCarry(imageCount, providers.WithReferenceImages))
+	variant, err := selectRequestVariant(p.Name, imgCfg.Variants, partsCarry(imageCount, internalproviders.WithReferenceImages))
 	if err != nil {
 		return ImageResponse{}, err
 	}
@@ -235,8 +235,8 @@ func generateImage(ctx context.Context, p Provider, req ImageRequest, opts ...Im
 		return ImageResponse{}, err
 	}
 
-	baseEvent := providers.Event{
-		Op:            providers.OpImageGeneration,
+	baseEvent := Event{
+		Op:            OpImageGeneration,
 		Provider:      p.Name,
 		Model:         req.Model,
 		ModelUnlisted: !listed,
@@ -281,14 +281,14 @@ func generateImage(ctx context.Context, p Provider, req ImageRequest, opts ...Im
 // reject (or silently ignore) it. Mirrors llmkit.go sampling-knob
 // validation.
 func validateImageShapeOptions(providerName, shape string, o *imageOptions) error {
-	if o.mask != nil && shape != providers.MultipartForm {
-		if shape == providers.JSONGenerationsOpenAI {
+	if o.mask != nil && shape != internalproviders.MultipartForm {
+		if shape == internalproviders.JSONGenerationsOpenAI {
 			return &ValidationError{Field: "mask", Message: "requires at least one image part (edits branch only)"}
 		}
 		return &ValidationError{Field: "mask", Message: "not supported by " + providerName}
 	}
 	switch shape {
-	case providers.InlineParts: // Google
+	case internalproviders.InlineParts: // Google
 		if o.quality != "" {
 			return &ValidationError{Field: "quality", Message: "not supported by " + providerName}
 		}
@@ -305,7 +305,7 @@ func validateImageShapeOptions(providerName, shape string, o *imageOptions) erro
 			return &ValidationError{Field: "safety_filter", Message: "not supported by " + providerName + "; use SafetySettings for text-gen"}
 		}
 		// safetySettings valid for InlineParts (Google); wired in buildImageBody
-	case providers.JSONInlineRefs: // xAI Grok
+	case internalproviders.JSONInlineRefs: // xAI Grok
 		if o.quality != "" {
 			return &ValidationError{Field: "quality", Message: "not supported by " + providerName}
 		}
@@ -321,14 +321,14 @@ func validateImageShapeOptions(providerName, shape string, o *imageOptions) erro
 		if len(o.safetySettings) > 0 {
 			return &ValidationError{Field: "safety_settings", Message: "not supported by " + providerName}
 		}
-	case providers.JSONGenerationsOpenAI, providers.MultipartForm: // OpenAI
+	case internalproviders.JSONGenerationsOpenAI, internalproviders.MultipartForm: // OpenAI
 		if o.safetyFilter != "" {
 			return &ValidationError{Field: "safety_filter", Message: "not supported by " + providerName}
 		}
 		if len(o.safetySettings) > 0 {
 			return &ValidationError{Field: "safety_settings", Message: "not supported by " + providerName}
 		}
-	case providers.JSONGenerations, providers.JSONGenerationsInputRefs: // Recraft, OpenRouter
+	case internalproviders.JSONGenerations, internalproviders.JSONGenerationsInputRefs: // Recraft, OpenRouter
 		// Recraft's flat generations body carries only size (-> `size`) and
 		// count (-> `n`); aspect_ratio is not a Recraft wire field (it sizes
 		// by an explicit WxH `size`), and the gpt-image / safety knobs are
@@ -365,7 +365,7 @@ func validateImageShapeOptions(providerName, shape string, o *imageOptions) erro
 // SupportsImageInput blocks only on a config that ignores Image (ADR-102
 // MPT-006 G6). An unlisted model (nil) has no limits, so the caller's image
 // parts are sent (decision 009).
-func validateImageArity(cfg *providers.ImageGenDef, model *providers.ImageModelDef, imageCount int) error {
+func validateImageArity(cfg *internalproviders.ImageGenDef, model *internalproviders.ImageModelDef, imageCount int) error {
 	if model == nil {
 		return nil
 	}
@@ -388,12 +388,12 @@ func validateImageArity(cfg *providers.ImageGenDef, model *providers.ImageModelD
 // contradicts, in this order in every SDK: image input, aspect ratio, image
 // size (ADR-102 MPT-008). An unlisted model (nil) and an unknown fact give
 // none.
-func imageHint(model *providers.ImageModelDef, o *imageOptions, imageCount int) string {
+func imageHint(model *internalproviders.ImageModelDef, o *imageOptions, imageCount int) string {
 	if model == nil {
 		return ""
 	}
 	var facts []string
-	if imageCount > 0 && model.SupportsImageInput == providers.SupportNo {
+	if imageCount > 0 && model.SupportsImageInput == SupportNo {
 		facts = append(facts, "no image input")
 	}
 	if offList(model.AspectRatios, o.aspectRatio) {
@@ -429,7 +429,7 @@ func dispatchImageHTTP(
 	client *http.Client,
 	p Provider,
 	cfg providerSpec,
-	variant providers.RequestVariant,
+	variant internalproviders.RequestVariant,
 	model string,
 	parts []Part,
 	o *imageOptions,
@@ -446,19 +446,19 @@ func dispatchImageHTTP(
 
 	var body map[string]any
 	switch variant.Shape {
-	case providers.MultipartForm:
+	case internalproviders.MultipartForm:
 		files, fields := buildOpenAIEditMultipart(parts, model, o)
 		return doMultipartPostMulti(ctx, client, url, files, fields, headers)
-	case providers.JSONGenerationsOpenAI:
+	case internalproviders.JSONGenerationsOpenAI:
 		body = buildOpenAIGenBody(parts, model, o)
-	case providers.JSONInlineRefs:
+	case internalproviders.JSONInlineRefs:
 		body = buildXAIBody(parts, model, o)
-	case providers.JSONGenerations:
+	case internalproviders.JSONGenerations:
 		body = buildRecraftGenBody(parts, model, o)
-	case providers.JSONGenerationsInputRefs:
+	case internalproviders.JSONGenerationsInputRefs:
 		body = buildRecraftGenBody(parts, model, o)
 		body["input_references"] = imageURLContentParts(parts)
-	case providers.InlineParts:
+	case internalproviders.InlineParts:
 		body = buildImageBody(parts, o)
 	default:
 		return nil, fmt.Errorf("image request shape %q has no body builder", variant.Shape)
@@ -724,7 +724,7 @@ func normalizeImageParts(req ImageRequest) ([]Part, error) {
 	}
 }
 
-func imageModelID(m *providers.ImageModelDef) string { return m.ModelID }
+func imageModelID(m *internalproviders.ImageModelDef) string { return m.ModelID }
 
 // buildImageBody constructs the Google generateContent request body for image
 // generation. Walks the normalised []Part in order: text parts emit
@@ -787,7 +787,7 @@ func buildImageURL(p Provider, cfg providerSpec, model string) string {
 		base = cfg.BaseURL
 	}
 	endpoint := cfg.Endpoint
-	if cfg.AuthScheme == providers.AuthQueryParamKey {
+	if cfg.AuthScheme == internalproviders.AuthQueryParamKey {
 		endpoint = endpoint + "?" + cfg.AuthQueryParam + "=" + p.APIKey
 	}
 	endpoint = strings.ReplaceAll(endpoint, "{model}", model)
@@ -798,9 +798,9 @@ func buildImageURL(p Provider, cfg providerSpec, model string) string {
 func imageAuthHeaders(p Provider, cfg providerSpec) map[string]string {
 	headers := map[string]string{}
 	switch cfg.AuthScheme {
-	case providers.AuthBearerToken:
+	case internalproviders.AuthBearerToken:
 		headers[cfg.AuthHeader] = cfg.AuthPrefix + " " + p.APIKey
-	case providers.AuthHeaderAPIKey:
+	case internalproviders.AuthHeaderAPIKey:
 		headers[cfg.AuthHeader] = p.APIKey
 	}
 	if cfg.RequiredHeader != "" {
@@ -816,7 +816,7 @@ func imageAuthHeaders(p Provider, cfg providerSpec) map[string]string {
 // UsageInputPath/UsageOutputPath/UsageReasoningPath are dotted-from-root and empty when the
 // endpoint reports no usage. provider is still used for the Google-only
 // finish-signal paths in the GoogleParts branch.
-func parseImageResponse(imgCfg *providers.ImageGenDef, provider string, body []byte) (ImageResponse, error) {
+func parseImageResponse(imgCfg *internalproviders.ImageGenDef, provider string, body []byte) (ImageResponse, error) {
 	var raw map[string]any
 	if err := json.Unmarshal(body, &raw); err != nil {
 		return ImageResponse{}, fmt.Errorf("unmarshal image response: %w", err)

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/aktagon/llmkit-go/v3/providers"
+	internalproviders "github.com/aktagon/llmkit-go/v3/internal/providers"
 )
 
 // The response's assistant turn as ordered parts (owner decision 1,
@@ -92,9 +92,9 @@ func blockMatches(block map[string]any, markerPath, markerValue string) bool {
 // of the body, matched by index, so the two could name different blocks
 // (HANDOFF-105 F9).
 func decodeChatParts(body []byte, provider, chatWireShape string) ([]Part, error) {
-	textCfg := providers.ResponseTextConfig(chatWireShape)
-	toolCfg := providers.ToolCallResponseConfig(chatWireShape)
-	toolDef := providers.ToolCallConfig(provider)
+	textCfg := internalproviders.ResponseTextConfig(chatWireShape)
+	toolCfg := internalproviders.ToolCallResponseConfig(chatWireShape)
+	toolDef := internalproviders.ToolCallConfig(provider)
 
 	var parts []Part
 	if textCfg == nil {
@@ -102,7 +102,7 @@ func decodeChatParts(body []byte, provider, chatWireShape string) ([]Part, error
 		if err := json.Unmarshal(body, &raw); err != nil {
 			return nil, err
 		}
-		if text := extractPath(raw, providers.ResponseTextPath(provider)); text != "" {
+		if text := extractPath(raw, internalproviders.ResponseTextPath(provider)); text != "" {
 			parts = append(parts, Part{Text: text})
 		}
 	}
@@ -151,7 +151,7 @@ func rawArrayAt(body []byte, path string) []json.RawMessage {
 // otherToolCallType is the rejection for an element of a tool-call-only array
 // that is not a tool call of the kind the config marks (owner decision 1,
 // HANDOFF-105 F5): it is a call the caller cannot run, so it is not dropped.
-func otherToolCallType(path string, i int, elem any, cfg *providers.ToolCallResponseConfigDef) error {
+func otherToolCallType(path string, i int, elem any, cfg *internalproviders.ToolCallResponseConfigDef) error {
 	block, ok := elem.(map[string]any)
 	if !ok {
 		return malformedToolCall("%s[%d] is not an object", path, i)
@@ -161,7 +161,7 @@ func otherToolCallType(path string, i int, elem any, cfg *providers.ToolCallResp
 
 // blockArrayPaths lists the arrays the two configs scan, each once, text
 // first. On every block-array shape today both name the same array.
-func blockArrayPaths(textCfg *providers.ResponseTextConfigDef, toolCfg *providers.ToolCallResponseConfigDef) []string {
+func blockArrayPaths(textCfg *internalproviders.ResponseTextConfigDef, toolCfg *internalproviders.ToolCallResponseConfigDef) []string {
 	var paths []string
 	if textCfg != nil {
 		paths = append(paths, textCfg.BlocksPath)
@@ -195,7 +195,7 @@ func blockArrayPaths(textCfg *providers.ResponseTextConfigDef, toolCfg *provider
 // A map-format argument is read from rawArgs alone, for where it is and what
 // it is: one scan, so the parse cannot name other arguments than the text
 // (HANDOFF-105 F8).
-func readToolCall(block map[string]any, rawArgs []byte, cfg *providers.ToolCallResponseConfigDef, def *providers.ToolCallDef) (ToolCall, error) {
+func readToolCall(block map[string]any, rawArgs []byte, cfg *internalproviders.ToolCallResponseConfigDef, def *internalproviders.ToolCallDef) (ToolCall, error) {
 	call := ToolCall{Name: extractPath(block, cfg.NamePath)}
 	if call.Name == "" {
 		return ToolCall{}, malformedToolCall("no tool name at %s", cfg.NamePath)
@@ -254,9 +254,9 @@ func malformedToolCall(format string, args ...any) error {
 // provider with no tool-call config is a ValidationError on field
 // "toolCalls": there is nowhere to write it, and dropping it would lose it.
 func encodeChatParts(raw map[string]any, provider, chatWireShape string, parts []Part) error {
-	textCfg := providers.ResponseTextConfig(chatWireShape)
-	toolCfg := providers.ToolCallResponseConfig(chatWireShape)
-	toolDef := providers.ToolCallConfig(provider)
+	textCfg := internalproviders.ResponseTextConfig(chatWireShape)
+	toolCfg := internalproviders.ToolCallResponseConfig(chatWireShape)
+	toolDef := internalproviders.ToolCallConfig(provider)
 
 	arrays := map[string][]any{}
 	var order []string
@@ -283,7 +283,7 @@ func encodeChatParts(raw map[string]any, provider, chatWireShape string, parts [
 		}
 	}
 	if textCfg == nil {
-		setWirePath(raw, providers.ResponseTextPath(provider), Response{Parts: parts}.Text())
+		setWirePath(raw, internalproviders.ResponseTextPath(provider), Response{Parts: parts}.Text())
 	}
 	for _, path := range order {
 		setWirePath(raw, path, arrays[path])
@@ -303,7 +303,7 @@ func encodeChatParts(raw map[string]any, provider, chatWireShape string, parts [
 // JSON (map), where the body's encoder drops the spaces between tokens and
 // keeps every token. checkTurnParts has already rejected input that is not
 // JSON.
-func writeToolCall(call ToolCall, cfg *providers.ToolCallResponseConfigDef, def *providers.ToolCallDef) map[string]any {
+func writeToolCall(call ToolCall, cfg *internalproviders.ToolCallResponseConfigDef, def *internalproviders.ToolCallDef) map[string]any {
 	block := map[string]any{}
 	if cfg.MarkerValue != "" {
 		setWirePath(block, cfg.MarkerPath, cfg.MarkerValue)

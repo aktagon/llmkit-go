@@ -21,7 +21,6 @@ import (
 	"os"
 
 	llmkit "github.com/aktagon/llmkit-go/v3"
-	"github.com/aktagon/llmkit-go/v3/providers"
 )
 
 func main() {
@@ -57,7 +56,6 @@ func main() {
 		names = append(names, p.Slug)
 	}
 	fmt.Println("configured:", names)
-	fmt.Println("supported >= 1:", len(providers.List()) > 0)
 
 	// 3. Scoped to one provider.
 	p := llmkit.Provider{Name: "anthropic", APIKey: key}

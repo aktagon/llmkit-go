@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-
-	"github.com/aktagon/llmkit-go/v3/providers"
 )
 
 // MiddlewareVetoError wraps a pre-phase veto. Callers can errors.As against
@@ -24,12 +22,12 @@ func (e *MiddlewareVetoError) Unwrap() error {
 
 // firePre runs pre-phase middlewares in registration order. First non-nil
 // return aborts and is wrapped as MiddlewareVetoError.
-func firePre(ctx context.Context, mws []providers.MiddlewareFn, base providers.Event) error {
+func firePre(ctx context.Context, mws []MiddlewareFn, base Event) error {
 	if len(mws) == 0 {
 		return nil
 	}
 	ev := base
-	ev.Phase = providers.PhasePre
+	ev.Phase = PhasePre
 	for _, m := range mws {
 		if err := m(ctx, ev); err != nil {
 			return &MiddlewareVetoError{Cause: err}
@@ -40,12 +38,12 @@ func firePre(ctx context.Context, mws []providers.MiddlewareFn, base providers.E
 
 // firePost runs post-phase middlewares in registration order. Return values
 // are discarded — post-phase is strictly observational.
-func firePost(ctx context.Context, mws []providers.MiddlewareFn, base providers.Event) {
+func firePost(ctx context.Context, mws []MiddlewareFn, base Event) {
 	if len(mws) == 0 {
 		return
 	}
 	ev := base
-	ev.Phase = providers.PhasePost
+	ev.Phase = PhasePost
 	if ev.Err != nil && ev.ErrType == "" {
 		ev.ErrType = eventErrType(ev.Err)
 	}

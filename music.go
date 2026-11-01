@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aktagon/llmkit-go/v3/providers"
+	internalproviders "github.com/aktagon/llmkit-go/v3/internal/providers"
 )
 
 // MusicRequest is the canonical music-generation request (ADR-033).
@@ -40,7 +40,7 @@ type MusicRequest struct {
 type MusicOption func(*musicOptions)
 
 type musicOptions struct {
-	middleware []providers.MiddlewareFn
+	middleware []MiddlewareFn
 	httpClient *http.Client
 	raw        bool
 }
@@ -51,8 +51,8 @@ func WithMusicHTTPClient(c *http.Client) MusicOption {
 }
 
 // WithMusicMiddleware registers pre/post hooks that fire around the music
-// generation request. Op is providers.OpMusicGeneration. Pre-phase can veto.
-func WithMusicMiddleware(fns ...providers.MiddlewareFn) MusicOption {
+// generation request. Op is OpMusicGeneration. Pre-phase can veto.
+func WithMusicMiddleware(fns ...MiddlewareFn) MusicOption {
 	return func(o *musicOptions) { o.middleware = append(o.middleware, fns...) }
 }
 
@@ -100,7 +100,7 @@ func generateMusic(ctx context.Context, p Provider, req MusicRequest, opts ...Mu
 	if !ok {
 		return MusicResponse{}, &ValidationError{Field: "provider", Message: "unknown: " + p.Name}
 	}
-	mgCfg := providers.MusicGenConfig(p.Name)
+	mgCfg := internalproviders.MusicGenConfig(p.Name)
 	if mgCfg == nil {
 		return MusicResponse{}, &ValidationError{Field: "provider", Message: p.Name + " does not support music generation"}
 	}
@@ -110,8 +110,8 @@ func generateMusic(ctx context.Context, p Provider, req MusicRequest, opts ...Mu
 	// Lyrics on an instrumental-only model fold into the prompt (for the
 	// single-prompt Predict shape) and the model ignores or honors them.
 
-	baseEvent := providers.Event{
-		Op:            providers.OpMusicGeneration,
+	baseEvent := Event{
+		Op:            OpMusicGeneration,
 		Provider:      p.Name,
 		Model:         req.Model,
 		ModelUnlisted: !listed,
@@ -163,7 +163,7 @@ func dispatchMusicHTTP(
 	client *http.Client,
 	p Provider,
 	cfg providerSpec,
-	mgCfg *providers.MusicGenDef,
+	mgCfg *internalproviders.MusicGenDef,
 	model string,
 	parts []Part,
 	headers map[string]string,
@@ -179,7 +179,7 @@ func dispatchMusicHTTP(
 	base := musicBaseURL(p, cfg, mgCfg)
 
 	switch mgCfg.WireShape {
-	case providers.MusicShapePredict:
+	case internalproviders.MusicShapePredict:
 		body := buildVertexMusicBody(parts)
 		endpoint := mgCfg.GenEndpoint
 		if endpoint == "" {
@@ -188,11 +188,11 @@ func dispatchMusicHTTP(
 		endpoint = strings.ReplaceAll(endpoint, "{model}", model)
 		return postMusicJSON(ctx, client, base+endpoint, body, headers)
 
-	case providers.MusicShapeMinimax:
+	case internalproviders.MusicShapeMinimax:
 		body := buildMinimaxMusicBody(parts, model)
 		return postMusicJSON(ctx, client, base+mgCfg.GenEndpoint, body, headers)
 
-	case providers.MusicShapeGenerateContent:
+	case internalproviders.MusicShapeGenerateContent:
 		body := buildGeminiMusicBody(parts)
 		return postMusicJSON(ctx, client, buildMusicURL(p, cfg, mgCfg, model), body, headers)
 
@@ -211,7 +211,7 @@ func dispatchMusicHTTP(
 // not be pointed at a mock server, so the Go tests grew a host-rewriting
 // transport and the first music wire golden could not be minted at all until
 // the host became a fact and the endpoint a relative path.
-func musicBaseURL(p Provider, cfg providerSpec, mgCfg *providers.MusicGenDef) string {
+func musicBaseURL(p Provider, cfg providerSpec, mgCfg *internalproviders.MusicGenDef) string {
 	if p.BaseURL != "" {
 		return p.BaseURL
 	}
@@ -310,13 +310,13 @@ func joinLyricsText(parts []Part) string {
 // buildMusicURL substitutes the per-call model into the provider's endpoint
 // template (Gemini reuses the main generateContent endpoint) and appends the
 // query auth key for query-param-key providers (Google).
-func buildMusicURL(p Provider, cfg providerSpec, mgCfg *providers.MusicGenDef, model string) string {
+func buildMusicURL(p Provider, cfg providerSpec, mgCfg *internalproviders.MusicGenDef, model string) string {
 	base := musicBaseURL(p, cfg, mgCfg)
 	endpoint := mgCfg.GenEndpoint
 	if endpoint == "" {
 		endpoint = cfg.Endpoint
 	}
-	if cfg.AuthScheme == providers.AuthQueryParamKey {
+	if cfg.AuthScheme == internalproviders.AuthQueryParamKey {
 		endpoint = endpoint + "?" + cfg.AuthQueryParam + "=" + p.APIKey
 	}
 	endpoint = strings.ReplaceAll(endpoint, "{model}", model)
@@ -342,8 +342,8 @@ func normalizeMusicParts(req MusicRequest) ([]Part, error) {
 	}
 }
 
-func musicModelID(m *providers.MusicModelDef) string   { return m.ModelID }
-func musicModelMime(m *providers.MusicModelDef) string { return m.OutputMime }
+func musicModelID(m *internalproviders.MusicModelDef) string   { return m.ModelID }
+func musicModelMime(m *internalproviders.MusicModelDef) string { return m.OutputMime }
 
 // parseMusicResponse decodes the audio payloads per wire shape. Each shape's
 // response diverges enough (predictions[] vs candidates[] vs data.audio,
@@ -356,11 +356,11 @@ func parseMusicResponse(wireShape, fallbackMime string, cfg providerSpec, body [
 		return MusicResponse{}, fmt.Errorf("unmarshal music response: %w", err)
 	}
 	switch wireShape {
-	case providers.MusicShapePredict:
+	case internalproviders.MusicShapePredict:
 		return parseVertexMusicResponse(raw, fallbackMime, cfg), nil
-	case providers.MusicShapeMinimax:
+	case internalproviders.MusicShapeMinimax:
 		return parseMinimaxMusicResponse(raw, fallbackMime), nil
-	case providers.MusicShapeGenerateContent:
+	case internalproviders.MusicShapeGenerateContent:
 		return parseGeminiMusicResponse(raw, fallbackMime, cfg), nil
 	default:
 		return MusicResponse{}, fmt.Errorf("music: unsupported wire shape %q", wireShape)

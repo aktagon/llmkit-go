@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	internalproviders "github.com/aktagon/llmkit-go/v3/internal/providers"
 	"github.com/aktagon/llmkit-go/v3/providers"
 )
 
@@ -116,8 +117,8 @@ func decodeModel(req *Request, cfg providerSpec, body map[string]any, path strin
 // DecodeRequest reads what the client sent, which need not be what the named
 // provider takes; the target's encoder checks support (RQC-017). CQ-OPT-011
 // checks that no key maps to two options on one shape.
-func decodeOptionKeys(chatWireShape string) map[string]providers.OptionKey {
-	keys := map[string]providers.OptionKey{}
+func decodeOptionKeys(chatWireShape string) map[string]internalproviders.OptionKey {
+	keys := map[string]internalproviders.OptionKey{}
 	for name, cfg := range providerSpecs() {
 		if _, ok := withWireShape(cfg, chatWireShape); !ok {
 			continue
@@ -133,17 +134,17 @@ func decodeOptionKeys(chatWireShape string) map[string]providers.OptionKey {
 // (provider, wire shape) to that option (RQC-008): the wire shape's key, which
 // replaces the others for every model (BUG-075), else the provider's key and
 // each per-model override key (ADR-024).
-func providerOptionKeys(provider, chatWireShape string) map[string]providers.OptionKey {
-	supported := providers.SupportedOptions(provider)
-	shapeKeys := providers.WireShapeOptionOverrides(chatWireShape)
-	keys := map[string]providers.OptionKey{}
+func providerOptionKeys(provider, chatWireShape string) map[string]internalproviders.OptionKey {
+	supported := internalproviders.SupportedOptions(provider)
+	shapeKeys := internalproviders.WireShapeOptionOverrides(chatWireShape)
+	keys := map[string]internalproviders.OptionKey{}
 	for param, key := range supported {
 		if shapeKey, ok := shapeKeys[param]; ok {
 			key = shapeKey
 		}
 		keys[key] = param
 	}
-	for _, ov := range providers.ModelOptionOverrides(provider) {
+	for _, ov := range internalproviders.ModelOptionOverrides(provider) {
 		_, isSupported := supported[ov.Key]
 		_, shapeFixed := shapeKeys[ov.Key]
 		if isSupported && !shapeFixed {
@@ -173,7 +174,7 @@ func decodeOptions(req *Request, cfg providerSpec, body map[string]any) error {
 		keys = append(keys, key)
 	}
 	sort.Strings(keys)
-	seen := map[providers.OptionKey]bool{}
+	seen := map[internalproviders.OptionKey]bool{}
 	for _, key := range keys {
 		v, ok := takeNested(container, key)
 		if !ok {
@@ -199,35 +200,35 @@ func decodeOptions(req *Request, cfg providerSpec, body map[string]any) error {
 
 // setOption stores one decoded option value in its Request field, the
 // inverse of addOptions.
-func setOption(req *Request, param providers.OptionKey, v any) error {
+func setOption(req *Request, param internalproviders.OptionKey, v any) error {
 	switch param {
-	case providers.OptionMaxTokens:
+	case internalproviders.OptionMaxTokens:
 		return decodeInt(v, &req.MaxTokens)
-	case providers.OptionTopK:
+	case internalproviders.OptionTopK:
 		return decodeInt(v, &req.TopK)
-	case providers.OptionThinkingBudget:
+	case internalproviders.OptionThinkingBudget:
 		return decodeInt(v, &req.ThinkingBudget)
-	case providers.OptionSeed:
+	case internalproviders.OptionSeed:
 		seed, err := decodeInteger(v)
 		if err != nil {
 			return err
 		}
 		req.Seed = &seed
-	case providers.OptionTemperature:
+	case internalproviders.OptionTemperature:
 		return decodeFloat(v, &req.Temperature)
-	case providers.OptionTopP:
+	case internalproviders.OptionTopP:
 		return decodeFloat(v, &req.TopP)
-	case providers.OptionFrequencyPenalty:
+	case internalproviders.OptionFrequencyPenalty:
 		return decodeFloat(v, &req.FrequencyPenalty)
-	case providers.OptionPresencePenalty:
+	case internalproviders.OptionPresencePenalty:
 		return decodeFloat(v, &req.PresencePenalty)
-	case providers.OptionReasoningEffort:
+	case internalproviders.OptionReasoningEffort:
 		s, ok := v.(string)
 		if !ok {
 			return fmt.Errorf("must be a string")
 		}
 		req.ReasoningEffort = &s
-	case providers.OptionStopSequences:
+	case internalproviders.OptionStopSequences:
 		// A bare string is a one-item list (HANDOFF-105 R3b).
 		if s, ok := v.(string); ok {
 			req.Stop = []string{s}
@@ -414,7 +415,7 @@ func decodeTurns(req *Request, cfg providerSpec, v any) error {
 		}
 		switch roles[wireRole] {
 		case "system":
-			if i != 0 || cfg.SystemPlacement != providers.PlacementMessageInArray {
+			if i != 0 || cfg.SystemPlacement != internalproviders.PlacementMessageInArray {
 				return &ValidationError{Field: field + ".role", Message: "a system turn is decoded only as the first message"}
 			}
 			req.System = text

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aktagon/llmkit-go/v3/providers"
+	internalproviders "github.com/aktagon/llmkit-go/v3/internal/providers"
 )
 
 // SpeechRequest is the canonical text-to-speech request (ADR-049).
@@ -53,12 +53,12 @@ type SpeechLine struct {
 type SpeechOption func(*speechOptions)
 
 type speechOptions struct {
-	middleware []providers.MiddlewareFn
+	middleware []MiddlewareFn
 }
 
 // WithSpeechMiddleware registers pre/post hooks that fire around the speech
-// request. Op is providers.OpSpeechGeneration. Pre-phase can veto.
-func WithSpeechMiddleware(fns ...providers.MiddlewareFn) SpeechOption {
+// request. Op is OpSpeechGeneration. Pre-phase can veto.
+func WithSpeechMiddleware(fns ...MiddlewareFn) SpeechOption {
 	return func(o *speechOptions) { o.middleware = append(o.middleware, fns...) }
 }
 
@@ -93,7 +93,7 @@ func generateSpeech(ctx context.Context, p Provider, req SpeechRequest, opts ...
 	if !ok {
 		return SpeechResponse{}, &ValidationError{Field: "provider", Message: "unknown: " + p.Name}
 	}
-	sgCfg := providers.SpeechGenConfig(p.Name)
+	sgCfg := internalproviders.SpeechGenConfig(p.Name)
 	if sgCfg == nil {
 		return SpeechResponse{}, &ValidationError{Field: "provider", Message: p.Name + " does not support speech generation"}
 	}
@@ -102,8 +102,8 @@ func generateSpeech(ctx context.Context, p Provider, req SpeechRequest, opts ...
 		return SpeechResponse{}, err
 	}
 
-	baseEvent := providers.Event{
-		Op:            providers.OpSpeechGeneration,
+	baseEvent := Event{
+		Op:            OpSpeechGeneration,
 		Provider:      p.Name,
 		Model:         req.Model,
 		ModelUnlisted: !listed,
@@ -152,7 +152,7 @@ func dispatchSpeechHTTP(
 	client *http.Client,
 	p Provider,
 	cfg providerSpec,
-	sgCfg *providers.SpeechGenDef,
+	sgCfg *internalproviders.SpeechGenDef,
 	req SpeechRequest,
 	headers map[string]string,
 ) ([]byte, error) {
@@ -173,21 +173,21 @@ func dispatchSpeechHTTP(
 	if !strings.HasPrefix(url, "http") {
 		url = base + endpoint
 	}
-	if cfg.AuthScheme == providers.AuthQueryParamKey {
+	if cfg.AuthScheme == internalproviders.AuthQueryParamKey {
 		url += "?" + cfg.AuthQueryParam + "=" + p.APIKey
 	}
 
 	var body map[string]any
 	switch sgCfg.WireShape {
-	case providers.SpeechShapeOpenAI:
+	case internalproviders.SpeechShapeOpenAI:
 		body = buildOpenAISpeechBody(req, sgCfg.RequestedOutputFormat)
-	case providers.SpeechShapeGemini:
+	case internalproviders.SpeechShapeGemini:
 		body = buildGeminiSpeechBody(req)
-	case providers.SpeechShapeMiniMax:
+	case internalproviders.SpeechShapeMiniMax:
 		body = buildMiniMaxSpeechBody(req)
-	case providers.SpeechShapeXAI:
+	case internalproviders.SpeechShapeXAI:
 		body = buildXAISpeechBody(req, sgCfg.RequestedOutputFormat)
-	case providers.SpeechShapeInworld:
+	case internalproviders.SpeechShapeInworld:
 		body = buildInworldSpeechBody(req, sgCfg.RequestedOutputFormat)
 	default:
 		return nil, fmt.Errorf("speech: unsupported wire shape %q", sgCfg.WireShape)
@@ -336,8 +336,8 @@ func validateSpeechInputs(req SpeechRequest) error {
 // blocks only on a config that ignores the option (ADR-102 MPT-006 G6). An
 // unlisted model (nil) has no facts, so only the config checks run (ADR-102
 // MPT-001).
-func validateSpeechModel(req SpeechRequest, cfg *providers.SpeechGenDef, model *providers.SpeechModelDef) error {
-	name, maxSpeakers, style := req.Model, 0, providers.SupportUnknown
+func validateSpeechModel(req SpeechRequest, cfg *internalproviders.SpeechGenDef, model *internalproviders.SpeechModelDef) error {
+	name, maxSpeakers, style := req.Model, 0, SupportUnknown
 	if model != nil {
 		name, maxSpeakers, style = model.ModelID, model.MaxSpeakers, model.SupportsSpeechStyle
 	}
@@ -360,8 +360,8 @@ func validateSpeechModel(req SpeechRequest, cfg *providers.SpeechGenDef, model *
 // speechHint names the stated facts of a listed speech model the request
 // contradicts: a speech style (ADR-102 MPT-008). An unlisted model (nil) and
 // an unknown fact give none.
-func speechHint(model *providers.SpeechModelDef, req SpeechRequest) string {
-	if model == nil || !speechHasStyle(req) || model.SupportsSpeechStyle != providers.SupportNo {
+func speechHint(model *internalproviders.SpeechModelDef, req SpeechRequest) string {
+	if model == nil || !speechHasStyle(req) || model.SupportsSpeechStyle != SupportNo {
 		return ""
 	}
 	return catalogueHint(model.ModelID, []string{"no speech style"})
@@ -390,8 +390,8 @@ func speechHasStyledLine(req SpeechRequest) bool {
 	return false
 }
 
-func speechModelID(m *providers.SpeechModelDef) string   { return m.ModelID }
-func speechModelMime(m *providers.SpeechModelDef) string { return m.OutputMime }
+func speechModelID(m *internalproviders.SpeechModelDef) string   { return m.ModelID }
+func speechModelMime(m *internalproviders.SpeechModelDef) string { return m.OutputMime }
 
 // parseSpeechResponse decodes the synthesized audio per the wire shape's audio
 // response encoding (ADR-051 OAA-002). "rawBody" (OpenAI, xAI) takes the response

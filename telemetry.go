@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aktagon/llmkit-go/v3/providers"
+	internalproviders "github.com/aktagon/llmkit-go/v3/internal/providers"
 )
 
 // Telemetry is the opt-in observability config (ADR-059, superseding ADR-054's
@@ -62,9 +62,9 @@ func (c *Client) AddTelemetry(t Telemetry) *Client {
 // calls Export SYNCHRONOUSLY — no goroutine, no thread (TEL-013/016). A panicking
 // callback is recovered so telemetry never surfaces to the caller (fail-open).
 func makeTelemetryMiddleware(t Telemetry) MiddlewareFn {
-	return func(ctx context.Context, e providers.Event) error {
+	return func(ctx context.Context, e Event) error {
 		if t.Export == nil {
-			if e.Phase == providers.PhasePre {
+			if e.Phase == PhasePre {
 				return &ValidationError{
 					Field:   "telemetry.export",
 					Message: "export is required when telemetry is enabled (use HTTPExport for a batteries POST)",
@@ -72,7 +72,7 @@ func makeTelemetryMiddleware(t Telemetry) MiddlewareFn {
 			}
 			return nil
 		}
-		if e.Phase != providers.PhasePost {
+		if e.Phase != PhasePost {
 			return nil
 		}
 		defer func() { _ = recover() }()
@@ -86,8 +86,8 @@ func makeTelemetryMiddleware(t Telemetry) MiddlewareFn {
 // post-phase Event with fixed values. It reads e.ErrType verbatim — the kind
 // was stamped at the firePost seam, where the typed error still exists
 // (ADR-071); no classification happens here.
-func buildTelemetryPayloadAt(e providers.Event, traceID, spanID, startNano, endNano string) []byte {
-	op, ok := providers.TelemetryOperationName[e.Op]
+func buildTelemetryPayloadAt(e Event, traceID, spanID, startNano, endNano string) []byte {
+	op, ok := internalproviders.TelemetryOperationName[e.Op]
 	if !ok {
 		op = string(e.Op)
 	}
@@ -99,7 +99,7 @@ func buildTelemetryPayloadAt(e providers.Event, traceID, spanID, startNano, endN
 
 // buildTelemetryPayload is the production wrapper: fresh span identity + the
 // wall clock around the pure builder.
-func buildTelemetryPayload(e providers.Event) []byte {
+func buildTelemetryPayload(e Event) []byte {
 	now := strconv.FormatInt(time.Now().UnixNano(), 10)
 	return buildTelemetryPayloadAt(e, randHex(16), randHex(8), now, now)
 }
@@ -115,7 +115,7 @@ var telemetryHTTPClient = &http.Client{Timeout: 5 * time.Second}
 // volume, hand your own Export callback that enqueues into your OTEL SDK's batch
 // processor instead.
 func HTTPExport(endpoint string, headers map[string]string) func([]byte) {
-	url := strings.TrimRight(endpoint, "/") + providers.TelemetryTracesPath
+	url := strings.TrimRight(endpoint, "/") + internalproviders.TelemetryTracesPath
 	return func(payload []byte) {
 		h := map[string]string{"content-type": "application/json"}
 		for k, v := range headers {
@@ -204,25 +204,25 @@ func intAttr(key string, val int) otlpKeyValue {
 // genuinely observed zero and would have emitted an invented one.
 func buildOTLPTraces(operationName, provider, model string, inputTokens, outputTokens *int, errorType, traceID, spanID, startNano, endNano string) []byte {
 	attrs := []otlpKeyValue{
-		stringAttr(providers.OtelAttrOp, operationName),
-		stringAttr(providers.OtelAttrProvider, provider),
-		stringAttr(providers.OtelAttrModel, model),
+		stringAttr(internalproviders.OtelAttrOp, operationName),
+		stringAttr(internalproviders.OtelAttrProvider, provider),
+		stringAttr(internalproviders.OtelAttrModel, model),
 	}
 	if inputTokens != nil {
-		attrs = append(attrs, intAttr(providers.OtelUsageInput, *inputTokens))
+		attrs = append(attrs, intAttr(internalproviders.OtelUsageInput, *inputTokens))
 	}
 	if outputTokens != nil {
-		attrs = append(attrs, intAttr(providers.OtelUsageOutput, *outputTokens))
+		attrs = append(attrs, intAttr(internalproviders.OtelUsageOutput, *outputTokens))
 	}
 	var status *otlpStatus
 	if errorType != "" {
-		attrs = append(attrs, stringAttr(providers.OtelAttrErrType, errorType))
+		attrs = append(attrs, stringAttr(internalproviders.OtelAttrErrType, errorType))
 		status = &otlpStatus{Code: 2}
 	}
 	payload := otlpTraces{ResourceSpans: []otlpResourceSpans{{
 		Resource: otlpResource{Attributes: []otlpKeyValue{stringAttr("service.name", "llmkit")}},
 		ScopeSpans: []otlpScopeSpans{{
-			Scope: otlpScope{Name: "llmkit", Version: providers.TelemetrySemconvVersion},
+			Scope: otlpScope{Name: "llmkit", Version: internalproviders.TelemetrySemconvVersion},
 			Spans: []otlpSpan{{
 				TraceID:           traceID,
 				SpanID:            spanID,

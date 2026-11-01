@@ -8,6 +8,7 @@ import (
 	"os"
 
 	"github.com/aktagon/llmkit-go/v3"
+	internalproviders "github.com/aktagon/llmkit-go/v3/internal/providers"
 	"github.com/aktagon/llmkit-go/v3/providers"
 )
 
@@ -80,7 +81,7 @@ func main() {
 }
 
 func getAPIKey(id providers.ProviderName) string {
-	info := providers.Info(id)
+	info := internalproviders.Info(id)
 
 	key := os.Getenv(info.EnvVar)
 	if key == "" {

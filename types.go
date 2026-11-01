@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/aktagon/llmkit-go/v3/providers"
+	internalproviders "github.com/aktagon/llmkit-go/v3/internal/providers"
 )
 
 // Provider identifies an LLM provider with its API key and optional overrides.
@@ -41,15 +41,62 @@ const (
 	CapCatalogue       Capability = "catalogue"
 )
 
-// Usage holds token consumption metrics.
-// Aliased to providers.Usage so middleware events and the public API share
-// one type without conversion.
-type Usage = providers.Usage
+// Usage holds token consumption metrics. It aliases the generated type so
+// middleware events and the public API share one type without conversion.
+type Usage = internalproviders.Usage
 
 // MiddlewareFn is the user-supplied hook fired around capability calls.
-// Aliased to providers.MiddlewareFn so callers don't need to import the
-// providers subpackage just to declare a hook.
-type MiddlewareFn = providers.MiddlewareFn
+// Pre-phase non-nil error vetoes the operation; post-phase return value is
+// ignored.
+type MiddlewareFn = internalproviders.MiddlewareFn
+
+// Event carries middleware observation and veto data. Field population is
+// sparse: only fields relevant to (Op, Phase) are non-zero.
+type Event = internalproviders.Event
+
+// MiddlewarePhase indicates when a middleware fires relative to the operation.
+type MiddlewarePhase = internalproviders.MiddlewarePhase
+
+// The middleware phases.
+const (
+	// PhasePre fires before the operation; a non-nil return aborts it.
+	PhasePre = internalproviders.PhasePre
+	// PhasePost fires after the operation completes or errors.
+	PhasePost = internalproviders.PhasePost
+)
+
+// MiddlewareOp names the operation an Event describes.
+type MiddlewareOp = internalproviders.MiddlewareOp
+
+// The middleware operations.
+const (
+	OpLLMRequest       = internalproviders.OpLLMRequest
+	OpToolCall         = internalproviders.OpToolCall
+	OpCacheCreate      = internalproviders.OpCacheCreate
+	OpUpload           = internalproviders.OpUpload
+	OpBatchSubmit      = internalproviders.OpBatchSubmit
+	OpImageGeneration  = internalproviders.OpImageGeneration
+	OpMusicGeneration  = internalproviders.OpMusicGeneration
+	OpVideoGeneration  = internalproviders.OpVideoGeneration
+	OpModelsList       = internalproviders.OpModelsList
+	OpSpeechGeneration = internalproviders.OpSpeechGeneration
+	OpTranscription    = internalproviders.OpTranscription
+)
+
+// Support is a three-state catalogue fact: yes, no, or unknown when no
+// source states it (ADR-102 MPT-008).
+type Support = internalproviders.Support
+
+// The Support values.
+const (
+	SupportUnknown = internalproviders.SupportUnknown
+	SupportYes     = internalproviders.SupportYes
+	SupportNo      = internalproviders.SupportNo
+)
+
+// ProviderInfo is the secret-free metadata of one provider, as returned by
+// Client.Providers.List (ADR-040 PSR-005).
+type ProviderInfo = internalproviders.ProviderInfo
 
 // Tool is a callable function for the agent: its definition, which the
 // request carries as a ToolDefinition, plus Run, which the Agent keeps beside
@@ -115,7 +162,7 @@ type options struct {
 	maxToolIterations int
 	caching           bool
 	cacheTTL          *time.Duration // nil: the provider default
-	middleware        []providers.MiddlewareFn
+	middleware        []MiddlewareFn
 	raw               bool
 	pollTimeout       time.Duration
 }

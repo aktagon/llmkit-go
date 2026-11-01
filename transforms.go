@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 
+	internalproviders "github.com/aktagon/llmkit-go/v3/internal/providers"
 	"github.com/aktagon/llmkit-go/v3/providers"
 )
 
@@ -55,14 +56,14 @@ func selectToolDefTransform(cfg providerSpec) toolDefTransformFunc {
 		// (ADR-025): "parametersJsonSchema" to accept native JSON Schema
 		// verbatim, vs the OpenAPI-3.0-subset "parameters" default.
 		field := "parameters"
-		if tc := providers.ToolCallConfig(cfg.Name); tc != nil && tc.ParamsWireField != "" {
+		if tc := internalproviders.ToolCallConfig(cfg.Name); tc != nil && tc.ParamsWireField != "" {
 			field = tc.ParamsWireField
 		}
 		return func(body map[string]any, tools []ToolDefinition) {
 			transformGoogleFunctionDeclarations(body, tools, field)
 		}
 	}
-	tc := providers.ToolCallConfig(cfg.Name)
+	tc := internalproviders.ToolCallConfig(cfg.Name)
 	if tc != nil && tc.ArgsFormat == "map" {
 		return transformAnthropicTools
 	}
@@ -427,7 +428,7 @@ func appendFlatReplayedTurn(out []any, turn msgTurn, cfg providerSpec) []any {
 func buildFlatMessageArray(msgs []msg, req Request, cfg providerSpec) []any {
 	out := []any{}
 
-	if cfg.SystemPlacement == providers.PlacementMessageInArray && req.System != "" {
+	if cfg.SystemPlacement == internalproviders.PlacementMessageInArray && req.System != "" {
 		out = append(out, map[string]any{
 			"role":    mapRole("system", cfg.RoleMappings),
 			"content": req.System,
@@ -591,7 +592,7 @@ func transformGoogleFunctionDeclarations(body map[string]any, tools []ToolDefini
 // null.
 func requestToolCall(tc ToolCall, cfg providerSpec) map[string]any {
 	tc.Input = requestToolInput(tc.Input)
-	return writeToolCall(tc, providers.ToolCallResponseConfig(cfg.ChatWireShape), providers.ToolCallConfig(cfg.Name))
+	return writeToolCall(tc, internalproviders.ToolCallResponseConfig(cfg.ChatWireShape), internalproviders.ToolCallConfig(cfg.Name))
 }
 
 // requestToolInput is the argument text a request sends for a tool call, on
@@ -615,7 +616,7 @@ func checkRequestToolCalls(msgs []msg, cfg providerSpec) error {
 	if cfg.ChatWireShape == providers.ChatResponsesOpenAI {
 		return nil
 	}
-	if providers.ToolCallResponseConfig(cfg.ChatWireShape) != nil && providers.ToolCallConfig(cfg.Name) != nil {
+	if internalproviders.ToolCallResponseConfig(cfg.ChatWireShape) != nil && internalproviders.ToolCallConfig(cfg.Name) != nil {
 		return nil
 	}
 	for i, m := range msgs {
