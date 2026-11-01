@@ -1,5 +1,11 @@
 package llmkit
 
+import (
+	"slices"
+
+	"github.com/aktagon/llmkit-go/v3/providers"
+)
+
 // lookupModel finds modelID in one capability's compiled catalogue (ADR-102
 // MPT-001, G4). It never errors: an unlisted model returns nil and false.
 // The caller then sends the request with the fields the caller set and skips
@@ -27,4 +33,13 @@ func fallbackMime[M any](models []M, model *M, mimeOf func(*M) string) string {
 		return mimeOf(&models[0])
 	}
 	return ""
+}
+
+// statedFalseBlocks reports whether a listed model's support fact rejects
+// option before send (ADR-102 MPT-006 G6, MPT-007). Only a stated SupportNo
+// blocks, and only on a config whose provider silently ignores the option
+// (ignored is the config's IgnoresUnsupported). Elsewhere the request is sent
+// and the provider answers; an unknown fact never blocks (decision 009).
+func statedFalseBlocks(ignored []string, option string, support providers.Support) bool {
+	return support == providers.SupportNo && slices.Contains(ignored, option)
 }

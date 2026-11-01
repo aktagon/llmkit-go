@@ -9,6 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **BREAKING — video and image support facts have three states.**
+  `VideoModelDef.SupportsImageToVideo`, `SupportsLastFrame` and
+  `SupportsReferenceImages`, and `ImageModelDef.SupportsImageInput`, are
+  `providers.Support`, like `SpeechModelDef.SupportsSpeechStyle`:
+  `SupportUnknown` (no source states the fact), `SupportYes` or `SupportNo`.
+  Code that read them as `bool` no longer compiles; compare with
+  `providers.SupportNo`.
+- **BREAKING — a model that states it lacks a feature no longer blocks the
+  request by itself.** A seed image, a last frame, reference images, image
+  parts or a speech style sent to such a listed model now reaches the
+  provider, which answers. The SDK still rejects it before sending where the
+  provider silently ignores the field: `ImageGenDef`, `VideoGenDef` and
+  `SpeechGenDef` gain `IgnoresUnsupported`, the options that provider
+  ignores, and OpenRouter speech lists `Style`. Where the provider's request
+  has no field for the input, the error now says so, for example
+  `zhipu has no WithSeedFrame request`. The speaker-count and image-count
+  limits are unchanged.
+
 - **BREAKING — `DecodeRequest` reads an integer option's decimal text
   exactly.** `max_tokens`, `seed` and `top_k` are read as digits times a power
   of ten, never as a `float64`. `9007199254740993.0` and

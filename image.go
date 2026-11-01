@@ -220,7 +220,7 @@ func generateImage(ctx context.Context, p Provider, req ImageRequest, opts ...Im
 			imageCount++
 		}
 	}
-	if err := validateImageArity(model, imageCount); err != nil {
+	if err := validateImageArity(imgCfg, model, imageCount); err != nil {
 		return ImageResponse{}, err
 	}
 
@@ -360,13 +360,15 @@ func validateImageShapeOptions(providerName, shape string, o *imageOptions) erro
 
 // validateImageArity rejects image parts the model does not take.
 // BUG-096: both limits are llmkit wire facts per model. MaxInputImages 0
-// means no llmkit limit; the provider decides volume. An unlisted model (nil)
-// has no limits, so the caller's image parts are sent (decision 009).
-func validateImageArity(model *providers.ImageModelDef, imageCount int) error {
+// means no llmkit limit; the provider decides volume. A stated-false
+// SupportsImageInput blocks only on a config that ignores Image (ADR-102
+// MPT-006 G6). An unlisted model (nil) has no limits, so the caller's image
+// parts are sent (decision 009).
+func validateImageArity(cfg *providers.ImageGenDef, model *providers.ImageModelDef, imageCount int) error {
 	if model == nil {
 		return nil
 	}
-	if imageCount > 0 && !model.SupportsImageInput {
+	if imageCount > 0 && statedFalseBlocks(cfg.IgnoresUnsupported, "Image", model.SupportsImageInput) {
 		return &ValidationError{
 			Field:   "parts",
 			Message: model.ModelID + " takes no image parts",
