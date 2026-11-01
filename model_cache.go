@@ -12,8 +12,9 @@ import (
 const modelCacheTTL = time.Hour
 
 // modelCache holds each provider's last successful live model list, keyed
-// by provider name. It stores the parsed records, before enrichment, so the
-// chain's Raw and WithCapability settings apply on every read. Only the
+// by provider name, base URL and API key (ScopedModels.cacheKey). It stores
+// the parsed records, before enrichment, so the chain's Raw and
+// WithCapability settings apply on every read. Only the
 // catalogue runtime reads it; sends never do.
 type modelCache struct {
 	mu      sync.Mutex
@@ -30,12 +31,12 @@ func newModelCache() *modelCache {
 	return &modelCache{now: time.Now, entries: map[string]modelCacheEntry{}}
 }
 
-// get returns the provider's cached records when they are younger than
+// get returns the cached records for key when they are younger than
 // modelCacheTTL.
-func (c *modelCache) get(provider string) ([]providers.ParsedModelRecord, bool) {
+func (c *modelCache) get(key string) ([]providers.ParsedModelRecord, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	e, ok := c.entries[provider]
+	e, ok := c.entries[key]
 	if !ok || c.now().Sub(e.fetchedAt) >= modelCacheTTL {
 		return nil, false
 	}
@@ -43,8 +44,8 @@ func (c *modelCache) get(provider string) ([]providers.ParsedModelRecord, bool) 
 }
 
 // put stores a successful live list. Failed calls never reach it.
-func (c *modelCache) put(provider string, records []providers.ParsedModelRecord) {
+func (c *modelCache) put(key string, records []providers.ParsedModelRecord) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.entries[provider] = modelCacheEntry{records: records, fetchedAt: c.now()}
+	c.entries[key] = modelCacheEntry{records: records, fetchedAt: c.now()}
 }

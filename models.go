@@ -2,6 +2,7 @@ package llmkit
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -114,7 +115,7 @@ func (b *ScopedModels) runList(ctx context.Context) ([]ModelInfo, error) {
 		if records, err = b.fetchList(ctx); err != nil {
 			return nil, err
 		}
-		b.client.modelCache.put(b.target.Name, records)
+		b.client.modelCache.put(b.cacheKey(), records)
 	}
 	return filterByCapability(b.enrich(records), b.capFilter), nil
 }
@@ -125,7 +126,20 @@ func (b *ScopedModels) cached() ([]providers.ParsedModelRecord, bool) {
 	if b.fresh {
 		return nil, false
 	}
-	return b.client.modelCache.get(b.target.Name)
+	return b.client.modelCache.get(b.cacheKey())
+}
+
+// cacheKey names the cached list by the provider and the base URL and API
+// key the live call is sent with (owner, 2026-11-01), so a client pointed
+// at another endpoint or key never reads a list fetched for the old one.
+// The key stays in memory only.
+func (b *ScopedModels) cacheKey() string {
+	p := b.client.provider.toProvider("")
+	base := p.BaseURL
+	if base == "" {
+		base = providerSpecs()[b.target.Name].BaseURL
+	}
+	return b.target.Name + "\x00" + base + "\x00" + p.APIKey
 }
 
 // fetchList performs the single-provider live HTTP call. Paginates per the
@@ -407,7 +421,9 @@ func (b *ScopedModels) enrich(records []providers.ParsedModelRecord) []ModelInfo
 			Created:       int(rec.Created),
 		}
 		if b.raw {
-			info.Raw = rec.Raw
+			// A copy: the record may be the cached one, which other
+			// calls read.
+			info.Raw = append(json.RawMessage(nil), rec.Raw...)
 		}
 		out = append(out, info)
 	}
