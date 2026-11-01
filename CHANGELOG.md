@@ -58,20 +58,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   file-upload metadata and the telemetry export write `<`, `>` and `&` as they
   are, the bytes the TS and Rust SDKs send. They used to go out as
   `\u003c`, `\u003e` and `\u0026`.
-- **U+2028 and U+2029 are written as `\u2028` and `\u2029` everywhere**,
-  a provider's own text included, such as a tool call's arguments or a
-  replayed turn. The escape keeps the same JSON value. Built with a Go older
-  than 1.27, or with `GOEXPERIMENT=nojsonv2`, the SDK used to send the
-  characters inside that text.
+- **BREAKING — U+2028 and U+2029 are written as `\u2028` and `\u2029`
+  everywhere**, a provider's own text included, such as a tool call's
+  arguments or a replayed turn. The escape keeps the same JSON value. The
+  bytes change only on a Go older than 1.27 or with
+  `GOEXPERIMENT=nojsonv2`, where the SDK used to send the characters inside
+  that text.
 - A tool call with an empty `Input` sends `{}` in every request, as nil and
-  `null` do. It used to fail with a `ValidationError`. A provider's
-  `"input": ""` in an Anthropic, Google or Bedrock reply is an argument
-  value: the call's `Input` is `""`, and the next request sends it. Only
-  `null` reads as no input.
+  `null` do. It used to fail with a `ValidationError`.
+- **BREAKING — a provider's `"input": ""` is an argument value.** In an
+  Anthropic, Google or Bedrock reply, the call's `Input` is `""`, and the
+  next request sends it. It used to decode as no input. Only `null` reads as
+  no input.
 - **BREAKING — `SaveHistory` rejects a tool call whose `Input` is empty but
   not nil.** It returns a `*ValidationError` on `messages[i].parts[j]`, as
   for any `Input` that is not JSON. It used to save the call with no input.
-  Set `Input` to nil for a call with no input.
+  Set `Input` to nil for a call with no input. A non-nil `Input` that is not
+  JSON now returns that `*ValidationError` too; it used to return a
+  `*json.MarshalerError`.
 - **BREAKING — a saved provider turn must be one JSON value of its format's
   kind.** `LoadHistory` and every request (`Text`, stream, batch, the Agent,
   `EncodeRequest`) return a `ValidationError` on
@@ -79,17 +83,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   object where the format replays an array (Anthropic, Responses) or an array
   where it replays an object (OpenAI Chat Completions, Google). Such a turn
   used to be sent as it was, or to fail when the body was written.
-- **BREAKING — behavior changes whose commits carry no `!`.** A change
-  that rejects input the SDK used to accept, or that changes a value callers
-  already get, is breaking. These are such changes:
-  - A provider's `"input": ""` in an Anthropic, Google or Bedrock reply
-    decodes as the `Input` `""`, not as no input.
-  - U+2028 and U+2029 in a provider's own text are sent as escapes, also
-    from a Go older than 1.27 or with `GOEXPERIMENT=nojsonv2`.
-  - `EncodeRequest` rejects a provider with no chat wire shape, such as
-    `assemblyai`, on `chatWireShape`, instead of returning a chat body.
-  - `DecodeRequest` rejects bytes after the body object, instead of
-    ignoring them.
+- **BREAKING — `EncodeRequest` rejects a provider with no chat wire
+  shape,** such as `assemblyai`, with a `*ValidationError` on
+  `chatWireShape`. It used to return a chat body.
 
 ### Added
 
@@ -175,7 +171,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   integral number in any notation, such as `4096.0`, and rejects a fraction.
   A number out of range, such as `1e999`, fails on its own field. Any other field, such as `"stream": true`, `tools`, `response_format` or a content list, fails with a
   `*ValidationError` that names it, for example `messages[1].tool_calls`.
-  Other wire shapes fail on field `chatWireShape`.
+  Other wire shapes fail on field `chatWireShape`. Bytes after the body
+  object fail on field `body`; trailing whitespace passes.
 - `providers.WireShapeRequiredParams(chatWireShape)` lists the generation
   params a chat wire shape's API rejects a request without. Today that is
   `OptionMaxTokens` on `ChatAnthropic`.
