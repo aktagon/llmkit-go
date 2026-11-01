@@ -79,6 +79,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   object where the format replays an array (Anthropic, Responses) or an array
   where it replays an object (OpenAI Chat Completions, Google). Such a turn
   used to be sent as it was, or to fail when the body was written.
+- **BREAKING — behavior changes whose commits carry no `!`.** ADR-044
+  VER-001 now counts a change that rejects input the SDK used to accept, or
+  that changes a value callers already get, as breaking (owner, 2026-10-31,
+  HANDOFF-111). These HANDOFF-105 commits made such a change without the
+  marker:
+  - `04ad8ba7`: a provider's `"input": ""` in an Anthropic, Google or
+    Bedrock reply decodes as the `Input` `""`. It used to decode as no
+    input.
+  - `fd6a32bc`: U+2028 and U+2029 inside a provider's own text are written
+    as escapes. Only a build with a Go older than 1.27, or with
+    `GOEXPERIMENT=nojsonv2`, sent other bytes before.
+  - `cd07e5fd`: `EncodeRequest` returns a `*ValidationError` on
+    `chatWireShape` for a provider with no chat wire shape, such as
+    `assemblyai`. It used to return a chat body.
+  - `292ef56b`: `DecodeRequest` rejects bytes after the body object. It
+    used to decode the first object and ignore the rest.
 
 ### Added
 
