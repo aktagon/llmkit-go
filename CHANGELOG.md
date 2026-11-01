@@ -296,7 +296,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`.AddMiddleware`) and `WithMaxToolIterations`. `WithHTTPClient`
   and `WithPollTimeout` remain, for `BatchHandle.Wait` and `Poll`.
 
-- **A mask is accepted only on an OpenAI request with reference images.** A
+- **BREAKING — a mask is accepted only on an OpenAI request with reference images.** A
   mask on any other image request is rejected before the request is sent.
 
 - **BREAKING — image input limits are per model, and the provider-level count is gone.**
@@ -335,7 +335,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
-- **Vertex image generation removed.** Google shut down the Imagen endpoints.
+- **BREAKING — Vertex image generation removed.** Google shut down the Imagen endpoints.
   Image generation on Vertex now fails with a validation error before any
   request is sent. Vertex music and video are unchanged, and the Vertex default
   model is now `lyria-002`.
@@ -368,11 +368,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   holds for the other `WithImage*`, `WithMusic*` and `WithSpeechMiddleware`
   functions. `TranscriptionOption` and `VideoOption` stay, for
   `TranscriptionHandle.Wait`, `Poll` and `VideoHandle.Wait`.
-- **Google video generation removed.** Google shut down the Gemini API Veo
+- **BREAKING — Google video generation removed.** Google shut down the Gemini API Veo
   preview models. Video generation on the `google` provider now fails before
   any request is sent. Veo stays available on Vertex.
+- **BREAKING — nine types that no exported function takes are unexported.**
+  `ImageRequest`, `MusicRequest`, `SpeechRequest`, `SpeechLine`,
+  `SpeechSpeaker`, `TranscriptionRequest`, `VideoRequest`, `LifecycleConfig`
+  and `StreamCallback` are gone. No exported function, method or field took
+  or returned them. Build each request on the `c.Image`, `c.Music`,
+  `c.Speech`, `c.Transcription` and `c.Video` builders.
 
 ### Fixed
+
+- **The `OpModelsList` and `Support` docs are correct.** The `OpModelsList`
+  doc named `Models().Live()`, which this release removes. It now names
+  `Models.Provider(p).List` and `Get`. The `Support` doc named an internal
+  config field. It now states when `SupportNo` blocks a request.
 
 - `Agent.Prompt` leaves the history unchanged when it rejects the request,
   for example an option the provider does not take. The rejected user turn
