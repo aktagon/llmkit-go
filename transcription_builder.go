@@ -10,7 +10,7 @@ import (
 // slice 1): parts.Audio(url) or parts.AudioBytes(mime, raw). Poll the returned
 // handle with Wait.
 func (b *Transcription) Submit(ctx context.Context, audioParts ...Part) (TranscriptionHandle, error) {
-	req := TranscriptionRequest{Model: b.model, Parts: audioParts}
+	req := transcriptionRequest{Model: b.model, Parts: audioParts}
 
 	var opts []TranscriptionOption
 	if len(b.middleware) > 0 {
@@ -28,7 +28,7 @@ func (b *Transcription) Submit(ctx context.Context, audioParts ...Part) (Transcr
 // for sync providers (OpenAI); async providers (AssemblyAI) reject it pre-flight
 // in favor of Submit/Wait.
 func (b *Transcription) Transcribe(ctx context.Context, audioParts ...Part) (TranscriptionResponse, error) {
-	req := TranscriptionRequest{Model: b.model, Parts: audioParts}
+	req := transcriptionRequest{Model: b.model, Parts: audioParts}
 
 	var opts []TranscriptionOption
 	if len(b.middleware) > 0 {
