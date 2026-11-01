@@ -216,6 +216,7 @@ func submitVideo(ctx context.Context, p Provider, req VideoRequest, opts ...Vide
 	headers := buildAuthHeaders(p, cfg)
 
 	requestID, err := dispatchVideoSubmit(ctx, client, p, cfg, vgCfg, variant, req, parts, headers)
+	err = withHint(err, videoHint(model, imageCount, req))
 	postEv := baseEvent
 	postEv.Err = err
 	postEv.Duration = time.Since(start)
@@ -1232,6 +1233,36 @@ func validateVideoFrames(cfg *providers.VideoGenDef, model *providers.VideoModel
 		return &ValidationError{Field: "last_frame", Message: "requires a first frame"}
 	}
 	return nil
+}
+
+// videoHint names the stated facts of a listed video model the request
+// contradicts, in this order in every SDK: image-to-video, last frame,
+// reference images, maximum duration, resolution, aspect ratio (ADR-102
+// MPT-008). An unlisted model (nil) and an unknown fact give none.
+func videoHint(model *providers.VideoModelDef, imageCount int, req VideoRequest) string {
+	if model == nil {
+		return ""
+	}
+	var facts []string
+	if imageCount > 0 && model.SupportsImageToVideo == providers.SupportNo {
+		facts = append(facts, "no image-to-video")
+	}
+	if req.LastFrame != nil && model.SupportsLastFrame == providers.SupportNo {
+		facts = append(facts, "no last frame")
+	}
+	if len(req.ReferenceImages) > 0 && model.SupportsReferenceImages == providers.SupportNo {
+		facts = append(facts, "no reference images")
+	}
+	if model.MaxDurationSeconds > 0 && req.DurationSeconds > model.MaxDurationSeconds {
+		facts = append(facts, fmt.Sprintf("at most %d seconds", model.MaxDurationSeconds))
+	}
+	if offList(model.Resolutions, req.Resolution) {
+		facts = append(facts, "no resolution "+req.Resolution)
+	}
+	if offList(model.AspectRatios, req.AspectRatio) {
+		facts = append(facts, "no aspect ratio "+req.AspectRatio)
+	}
+	return catalogueHint(model.ModelID, facts)
 }
 
 // setRootVideoOptions sets the body-root duration, aspect_ratio and

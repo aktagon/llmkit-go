@@ -1,7 +1,9 @@
 package llmkit
 
 import (
+	"errors"
 	"slices"
+	"strings"
 
 	"github.com/aktagon/llmkit-go/v3/providers"
 )
@@ -50,4 +52,37 @@ func chatModelListed(provider, modelID string) bool {
 // and the provider answers; an unknown fact never blocks (decision 009).
 func statedFalseBlocks(ignored []string, option string, support providers.Support) bool {
 	return support == providers.SupportNo && slices.Contains(ignored, option)
+}
+
+// catalogueHint names the stated facts of a listed model that a request
+// contradicts (ADR-102 MPT-008), for example "catalogue:
+// heygen/heygen-video-1 lists no last frame, at most 15 seconds". The
+// facts keep the order the caller gives; every SDK uses the same order. No
+// facts give no hint.
+func catalogueHint(modelID string, facts []string) string {
+	if len(facts) == 0 {
+		return ""
+	}
+	return "catalogue: " + modelID + " lists " + strings.Join(facts, ", ")
+}
+
+// withHint returns err with hint attached when err is an *APIError with
+// status 400 or 422; any other error or status, and an empty hint, return
+// err unchanged (ADR-102 MPT-008; owner, 2026-11-01). Callers attach it
+// before the post middleware event, so middleware sees the error the caller
+// gets. It attaches to a copy and leaves err as it was.
+func withHint(err error, hint string) error {
+	var apiErr *APIError
+	if hint == "" || !errors.As(err, &apiErr) || (apiErr.StatusCode != 400 && apiErr.StatusCode != 422) {
+		return err
+	}
+	hinted := *apiErr
+	hinted.Hint = hint
+	return &hinted
+}
+
+// offList reports whether value is set and outside a model's non-empty list.
+// An empty list states no fixed set, so no value is off it.
+func offList(list []string, value string) bool {
+	return value != "" && len(list) > 0 && !slices.Contains(list, value)
 }

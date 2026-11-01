@@ -251,13 +251,13 @@ func generateImage(ctx context.Context, p Provider, req ImageRequest, opts ...Im
 
 	respBody, err := dispatchImageHTTP(ctx, client, p, cfg, variant, req.Model, parts, o, headers)
 	if err != nil {
+		if apiErr, ok := err.(*APIError); ok && respBody != nil {
+			err = withHint(parseError(p.Name, apiErr.StatusCode, respBody, nil), imageHint(model, o, imageCount))
+		}
 		postEv := baseEvent
 		postEv.Err = err
 		postEv.Duration = time.Since(start)
 		firePost(ctx, o.middleware, postEv)
-		if apiErr, ok := err.(*APIError); ok && respBody != nil {
-			return ImageResponse{}, parseError(p.Name, apiErr.StatusCode, respBody, nil)
-		}
 		return ImageResponse{}, err
 	}
 
@@ -382,6 +382,27 @@ func validateImageArity(cfg *providers.ImageGenDef, model *providers.ImageModelD
 		}
 	}
 	return nil
+}
+
+// imageHint names the stated facts of a listed image model the request
+// contradicts, in this order in every SDK: image input, aspect ratio, image
+// size (ADR-102 MPT-008). An unlisted model (nil) and an unknown fact give
+// none.
+func imageHint(model *providers.ImageModelDef, o *imageOptions, imageCount int) string {
+	if model == nil {
+		return ""
+	}
+	var facts []string
+	if imageCount > 0 && model.SupportsImageInput == providers.SupportNo {
+		facts = append(facts, "no image input")
+	}
+	if offList(model.AspectRatios, o.aspectRatio) {
+		facts = append(facts, "no aspect ratio "+o.aspectRatio)
+	}
+	if offList(model.ImageSizes, o.imageSize) {
+		facts = append(facts, "no image size "+o.imageSize)
+	}
+	return catalogueHint(model.ModelID, facts)
 }
 
 // dispatchImageHTTP sends the request variant the parts selected (ADR-096),
