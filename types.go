@@ -83,17 +83,6 @@ const (
 	HarmBlockThresholdHighOnly       = "BLOCK_ONLY_HIGH"
 )
 
-// Image safety filter threshold constants for SafetyFilter.
-//
-// Deprecated: no provider accepts these since 2026-10-15 (Vertex Imagen shut
-// down, BUG-101); removed at the next major.
-const (
-	ImageSafetyFilterBlockFew      = "block_few"
-	ImageSafetyFilterBlockSome     = "block_some"
-	ImageSafetyFilterBlockMost     = "block_most"
-	ImageSafetyFilterBlockOnlyHigh = "block_only_high"
-)
-
 // Option configures the transport and poll policy of a BatchHandle Wait or
 // Poll call. Request-shaping settings live on Request (ADR-098).
 type Option func(*options)

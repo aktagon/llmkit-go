@@ -52,7 +52,6 @@ type imageOptions struct {
 	background     string
 	count          *int
 	mask           *MediaRef
-	safetyFilter   string
 	safetySettings []SafetySetting
 	extraFields    map[string]any
 	middleware     []MiddlewareFn
@@ -140,15 +139,6 @@ func withImageMask(mime string, data []byte) imageOption {
 	return func(o *imageOptions) {
 		o.mask = &MediaRef{MimeType: mime, Bytes: append([]byte(nil), data...)}
 	}
-}
-
-// withImageSafetyFilter sets a global image safety threshold. Every image
-// provider returns ValidationError for it.
-//
-// Deprecated: no provider accepts this since 2026-10-15 (Vertex Imagen shut
-// down, BUG-101); removed at the next major.
-func withImageSafetyFilter(threshold string) imageOption {
-	return func(o *imageOptions) { o.safetyFilter = threshold }
 }
 
 // withImageSafetySettings sets per-category safety thresholds for Google
@@ -301,9 +291,6 @@ func validateImageShapeOptions(providerName, shape string, o *imageOptions) erro
 		if o.count != nil {
 			return &ValidationError{Field: "count", Message: "not supported by " + providerName}
 		}
-		if o.safetyFilter != "" {
-			return &ValidationError{Field: "safety_filter", Message: "not supported by " + providerName + "; use SafetySettings for text-gen"}
-		}
 		// safetySettings valid for InlineParts (Google); wired in buildImageBody
 	case internalproviders.JSONInlineRefs: // xAI Grok
 		if o.quality != "" {
@@ -315,16 +302,10 @@ func validateImageShapeOptions(providerName, shape string, o *imageOptions) erro
 		if o.background != "" {
 			return &ValidationError{Field: "background", Message: "not supported by " + providerName}
 		}
-		if o.safetyFilter != "" {
-			return &ValidationError{Field: "safety_filter", Message: "not supported by " + providerName}
-		}
 		if len(o.safetySettings) > 0 {
 			return &ValidationError{Field: "safety_settings", Message: "not supported by " + providerName}
 		}
 	case internalproviders.JSONGenerationsOpenAI, internalproviders.MultipartForm: // OpenAI
-		if o.safetyFilter != "" {
-			return &ValidationError{Field: "safety_filter", Message: "not supported by " + providerName}
-		}
 		if len(o.safetySettings) > 0 {
 			return &ValidationError{Field: "safety_settings", Message: "not supported by " + providerName}
 		}
@@ -346,9 +327,6 @@ func validateImageShapeOptions(providerName, shape string, o *imageOptions) erro
 		}
 		if o.background != "" {
 			return &ValidationError{Field: "background", Message: "not supported by " + providerName}
-		}
-		if o.safetyFilter != "" {
-			return &ValidationError{Field: "safety_filter", Message: "not supported by " + providerName}
 		}
 		if len(o.safetySettings) > 0 {
 			return &ValidationError{Field: "safety_settings", Message: "not supported by " + providerName}
