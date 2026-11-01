@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **BREAKING — `Models.List(ctx)` lists models live, and the compiled-in
+  list is gone.** `c.Models.List(ctx)` calls each configured provider's
+  models endpoint and returns a `LiveResult`: the models from every provider
+  that answered, plus a per-provider `Errors` map. It takes the place of
+  `Models.Live(ctx)`, which is removed. The synchronous `Models.List()` and
+  `Models.Get(id)`, which read a list compiled into the SDK, are removed. Use
+  `c.Models.Provider(p).Get(ctx, id)` to look up one model. Vertex and
+  Bedrock still report `ErrModelsNotSupported` in `LiveResult.Errors`.
+- **Each client caches the live model list for one hour.** A repeat
+  `Models.List(ctx)` or `Provider(p).List(ctx)` within the hour makes no HTTP
+  call, and `Provider(p).Get(ctx, id)` answers from the cached list when it
+  holds the ID. A failed call is not cached. Each list is kept per provider, base URL
+  and API key, so a call sent to another endpoint or with another key
+  makes its own request. The new `Models.Fresh()` makes
+  the call again and refills the cache; it carries through `Provider(p)`.
+  Sends never read the cache. A list served from the cache fires no
+  middleware event.
 - **BREAKING — video and image support facts have three states.**
   `VideoModelDef.SupportsImageToVideo`, `SupportsLastFrame` and
   `SupportsReferenceImages`, and `ImageModelDef.SupportsImageInput`, are
@@ -115,6 +132,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `chatWireShape`. It used to return a chat body.
 
 ### Added
+
+- **`providers.Event.ModelUnlisted` marks a model the SDK does not list.**
+  Image, speech, music, video, chat, stream, agent and batch set it on their
+  pre and post middleware events. It is true when the SDK's model list does
+  not hold the model for that provider, so no per-model check ran before the
+  request was sent. It is not a telemetry attribute.
 
 - **`Response.Created` (`*int`).** The Unix time the provider reports, read
   from `created` (Chat Completions) or `created_at` (Responses); nil when the

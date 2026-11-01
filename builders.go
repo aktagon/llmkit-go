@@ -45,7 +45,10 @@ type Client struct {
 	// middleware is the client-scoped hook list (ADR-054): AddTelemetry
 	// appends here so paths without a per-builder middleware seam (the
 	// models/catalogue runtime, HANDOFF-036 A3) still fire client hooks.
-	middleware    []MiddlewareFn
+	middleware []MiddlewareFn
+	// modelCache holds each provider's live model list for one hour
+	// (ADR-102 MPT-005). Sends never read it.
+	modelCache    *modelCache
 	Text          *Text
 	Image         *Image
 	Music         *Music
@@ -59,7 +62,7 @@ type Client struct {
 }
 
 func newClient(p providers.ProviderName, apiKey string) *Client {
-	c := &Client{provider: providerConfig{name: string(p), apiKey: apiKey, timeout: defaultTimeout}}
+	c := &Client{provider: providerConfig{name: string(p), apiKey: apiKey, timeout: defaultTimeout}, modelCache: newModelCache()}
 	c.Text = &Text{client: c}
 	c.Image = &Image{client: c}
 	c.Music = &Music{client: c}
