@@ -18,8 +18,31 @@ func selectRequestVariant(provider string, variants []internalproviders.RequestV
 	}
 	return internalproviders.RequestVariant{}, &ValidationError{
 		Field:   "parts",
-		Message: provider + " has no " + strings.Join(carries, "+") + " request",
+		Message: provider + " has no " + carriedInputWords(carries) + " request",
 	}
+}
+
+// carriedInputNames are the carried inputs in the words an error message
+// uses; the constant names are internal (ADR-103 PUB-005).
+var carriedInputNames = map[string]string{
+	internalproviders.TextOnly:            "text-only",
+	internalproviders.WithReferenceImages: "reference image",
+	internalproviders.WithSeedFrame:       "seed frame",
+	internalproviders.WithLastFrame:       "last frame",
+}
+
+// carriedInputWords names carries in words, such as "seed frame and last
+// frame". An input with no entry keeps its constant name.
+func carriedInputWords(carries []string) string {
+	words := make([]string, len(carries))
+	for i, c := range carries {
+		if w, ok := carriedInputNames[c]; ok {
+			words[i] = w
+		} else {
+			words[i] = c
+		}
+	}
+	return strings.Join(words, " and ")
 }
 
 // partsCarry is the carried input of a request with imageCount image parts:
