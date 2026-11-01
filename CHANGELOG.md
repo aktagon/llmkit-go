@@ -138,6 +138,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **BREAKING — a `Message` is a role plus ordered `Parts`.** Text, images,
+  files, tool calls and tool results are parts of `Message.Parts`. One
+  assistant turn can carry text and tool calls together. `Message.Content`,
+  `Message.ToolCalls`, `Message.ToolResult`, `Request.Files`,
+  `Request.Images` and `InputImage` are removed; put the same content in
+  `Message.Parts`. `SaveHistory` writes version 2, and `LoadHistory` rejects
+  a version 1 document.
 - **BREAKING — every request times out after 600 seconds without data.**
   The client waits at most 600 seconds for the response headers, and for
   each next chunk of the body. A long stream that keeps sending does not time
