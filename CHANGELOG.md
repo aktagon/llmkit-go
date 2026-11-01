@@ -135,6 +135,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **BREAKING — every request times out after 600 seconds without data.**
+  The client waits at most 600 seconds for the response headers, and for
+  each next chunk of the body. A long stream that keeps sending does not time
+  out. Before, a request waited with no limit. The new `c.Timeout(d)` sets
+  another limit, and `c.Timeout(0)` turns it off. A timeout error matches
+  `context.DeadlineExceeded`.
+
 - **BREAKING — a rejected request for a listed model names the facts it
   contradicts.** When the provider answers 400 or 422, `APIError.Hint` names the
   stated facts the request contradicts, for example `catalogue:
@@ -358,11 +365,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   for example an option the provider does not take. The rejected user turn
   used to stay in the history, so the next prompt sent two user turns.
 
-- `Text.History(...).Prompt(ctx, text)` now sends `text` as the last user
-  turn, after the history. Before, the request ended at the history and the
-  prompt was never sent. Images and files attached to the prompt are sent on
-  that turn too.
-
 - **OpenAI batch failures show the provider's error.** Waiting on an OpenAI
   batch now also reads its error file. A failed request's finish reason is the
   provider's error code (for example `batch_expired`), and its finish message
@@ -392,6 +394,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Parallel tool results on AWS Bedrock.** After a reply with several tool
   calls, the agent sent one user message per result, and Bedrock rejected the
   request with 400. The results now go in one user message, in call order.
+
+## [2.2.3] — 2026-10-27
+
+### Fixed
+- `Text.History(...).Prompt(ctx, text)` now sends `text` as the last user
+  turn, after the history. Before, the request ended at the history and the
+  prompt was never sent. Images and files attached to the prompt are sent on
+  that turn too.
+
+## [2.2.2] — 2026-10-07
+
+### Changed
+- Source and doc comments ship again, so `go doc` and pkg.go.dev show descriptions.
+- The error for a chat protocol on a terminal other than `Prompt` no longer ends with an internal reference.
+- The video example no longer shows a keychain command; set `XAI_API_KEY` in your environment.
+
+## [2.2.1] — 2026-10-04
+
+### Fixed
+
+- OpenAI Responses protocol: gpt-5 and o-series models now send the output-token cap as `max_output_tokens`. They sent `max_completion_tokens`, which the Responses API rejects with HTTP 400.
+- Anthropic requests no longer send `anthropic-beta: files-api-2025-04-14`. The Files API left beta, and with that header an upload returned the older response shape, without `expires_at`.
+
+## [2.2.0] — 2026-07-25
+
+### Added
+
+- `DecodeResponse(provider, chatWireShape, body)` turns a provider's chat response body into a `Response`, the same way the client reads it. `EncodeResponse(provider, chatWireShape, resp)` writes a `Response` back into that provider's body shape. Both are pure functions: no client, no key, no network. `EncodeResponse` returns a `*ValidationError` for a field it cannot write back faithfully.
+
+## [2.1.0] — 2026-07-22
+
+### Fixed
+
+- Middleware now runs for speech generation and transcription requests, as the new `speech_generation` and `transcription` operations, and its pre phase can veto them. Before, these requests ran no middleware, so a policy hook could not block them. For transcription it runs on the sync and async calls, not on waits or polls.
 
 ## [2.0.1] — 2026-07-19
 
