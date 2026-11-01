@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -425,7 +426,53 @@ func (b *ScopedModels) enrich(records []providers.ParsedModelRecord) []ModelInfo
 			// calls read.
 			info.Raw = append(json.RawMessage(nil), rec.Raw...)
 		}
+		info.Image, info.Video, info.Speech = catalogueHints(b.target.Name, rec.ID)
 		out = append(out, info)
 	}
 	return out
+}
+
+// catalogueHints is what the compiled catalogue states about modelID for
+// image, video and speech generation (ADR-102 MPT-008). Each is nil when
+// the capability's catalogue does not list the model.
+func catalogueHints(provider, modelID string) (image *ImageHints, video *VideoHints, speech *SpeechHints) {
+	if cfg := providers.ImageGenConfig(provider); cfg != nil {
+		if m, ok := lookupModel(cfg.Models, modelID, imageModelID); ok {
+			image = imageHints(m)
+		}
+	}
+	if cfg := providers.VideoGenConfig(provider); cfg != nil {
+		if m, ok := lookupModel(cfg.Models, modelID, videoModelID); ok {
+			video = videoHints(m)
+		}
+	}
+	if cfg := providers.SpeechGenConfig(provider); cfg != nil {
+		if m, ok := lookupModel(cfg.Models, modelID, speechModelID); ok {
+			speech = &SpeechHints{Style: m.SupportsSpeechStyle}
+		}
+	}
+	return image, video, speech
+}
+
+// imageHints copies one image model's facts. The lists are copies, so a
+// caller cannot change the compiled facts.
+func imageHints(m *providers.ImageModelDef) *ImageHints {
+	return &ImageHints{
+		AspectRatios: slices.Clone(m.AspectRatios),
+		Sizes:        slices.Clone(m.ImageSizes),
+		ImageInput:   m.SupportsImageInput,
+	}
+}
+
+// videoHints copies one video model's facts. The lists are copies, so a
+// caller cannot change the compiled facts.
+func videoHints(m *providers.VideoModelDef) *VideoHints {
+	return &VideoHints{
+		Resolutions:        slices.Clone(m.Resolutions),
+		AspectRatios:       slices.Clone(m.AspectRatios),
+		MaxDurationSeconds: m.MaxDurationSeconds,
+		ImageToVideo:       m.SupportsImageToVideo,
+		LastFrame:          m.SupportsLastFrame,
+		ReferenceImages:    m.SupportsReferenceImages,
+	}
 }

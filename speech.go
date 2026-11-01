@@ -118,13 +118,13 @@ func generateSpeech(ctx context.Context, p Provider, req SpeechRequest, opts ...
 
 	respBody, err := dispatchSpeechHTTP(ctx, client, p, cfg, sgCfg, req, headers)
 	if err != nil {
+		if apiErr, ok := err.(*APIError); ok && respBody != nil {
+			err = withHint(parseError(p.Name, apiErr.StatusCode, respBody, nil), speechHint(model, req))
+		}
 		postEv := baseEvent
 		postEv.Err = err
 		postEv.Duration = time.Since(start)
 		firePost(ctx, o.middleware, postEv)
-		if apiErr, ok := err.(*APIError); ok && respBody != nil {
-			return SpeechResponse{}, parseError(p.Name, apiErr.StatusCode, respBody, nil)
-		}
 		return SpeechResponse{}, err
 	}
 
@@ -355,6 +355,16 @@ func validateSpeechModel(req SpeechRequest, cfg *providers.SpeechGenDef, model *
 		return &ValidationError{Field: "style", Message: name + " does not support a speech style"}
 	}
 	return nil
+}
+
+// speechHint names the stated facts of a listed speech model the request
+// contradicts: a speech style (ADR-102 MPT-008). An unlisted model (nil) and
+// an unknown fact give none.
+func speechHint(model *providers.SpeechModelDef, req SpeechRequest) string {
+	if model == nil || !speechHasStyle(req) || model.SupportsSpeechStyle != providers.SupportNo {
+		return ""
+	}
+	return catalogueHint(model.ModelID, []string{"no speech style"})
 }
 
 func speakerDeclared(speakers []SpeechSpeaker, name string) bool {
