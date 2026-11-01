@@ -202,9 +202,10 @@ func submitVideo(ctx context.Context, p Provider, req VideoRequest, opts ...Vide
 	}
 
 	baseEvent := providers.Event{
-		Op:       providers.OpVideoGeneration,
-		Provider: p.Name,
-		Model:    req.Model,
+		Op:            providers.OpVideoGeneration,
+		Provider:      p.Name,
+		Model:         req.Model,
+		ModelUnlisted: !listed,
 	}
 	start := time.Now()
 	if err := firePre(ctx, o.middleware, baseEvent); err != nil {
