@@ -16,10 +16,18 @@ type APIError struct {
 	Message    string
 	Retryable  bool
 	RetryAfter time.Duration
+	// Hint names the stated catalogue facts a rejected request for a listed
+	// model contradicts, for example "catalogue: heygen/heygen-video-1 lists
+	// no last frame". It is set only on a 4xx reply; empty otherwise.
+	Hint string
 }
 
 func (e *APIError) Error() string {
-	return fmt.Sprintf("%s: %s (%d)", e.Provider, e.Message, e.StatusCode)
+	text := fmt.Sprintf("%s: %s (%d)", e.Provider, e.Message, e.StatusCode)
+	if e.Hint != "" {
+		text += "; " + e.Hint
+	}
+	return text
 }
 
 // ValidationError represents a request validation error.
