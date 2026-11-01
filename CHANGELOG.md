@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **BREAKING — a rejected request for a listed model names the facts it
+  contradicts.** When the provider answers a 4xx, `APIError.Hint` names the
+  stated facts the request contradicts, for example `catalogue:
+  heygen/heygen-video-1 lists no last frame, at most 15 seconds`. It covers
+  image input, aspect ratio and image size on image; image-to-video, last
+  frame, reference images, maximum duration, resolution and aspect ratio on
+  video; and speech style on speech. `Error()` appends `; ` and the hint, so
+  code that matched the whole error text sees new text. The hint is empty
+  for a model the SDK does not list, for a fact no source states, and for
+  any other status.
 - **BREAKING — `Models.List(ctx)` lists models live, and the compiled-in
   list is gone.** `c.Models.List(ctx)` calls each configured provider's
   models endpoint and returns a `LiveResult`: the models from every provider
