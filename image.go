@@ -40,8 +40,8 @@ type ImageRequest struct {
 
 // ImageData and ImageResponse are declared in go/structs.go (ADR-018, API-PDS-002).
 
-// ImageOption configures GenerateImage.
-type ImageOption func(*imageOptions)
+// imageOption configures GenerateImage.
+type imageOption func(*imageOptions)
 
 type imageOptions struct {
 	aspectRatio    string
@@ -60,43 +60,43 @@ type imageOptions struct {
 	raw            bool
 }
 
-// WithImageHTTPClient overrides the http.Client used for the GenerateImage call.
-func WithImageHTTPClient(c *http.Client) ImageOption {
+// withImageHTTPClient overrides the http.Client used for the GenerateImage call.
+func withImageHTTPClient(c *http.Client) imageOption {
 	return func(o *imageOptions) { o.httpClient = c }
 }
 
-// WithAspectRatio constrains the output aspect ratio (e.g., "16:9").
+// withAspectRatio constrains the output aspect ratio (e.g., "16:9").
 // The value must appear in ImageGenConfig(provider).Models[].AspectRatios for
 // the requested model, otherwise GenerateImage returns ValidationError.
-func WithAspectRatio(ratio string) ImageOption {
+func withAspectRatio(ratio string) imageOption {
 	return func(o *imageOptions) { o.aspectRatio = ratio }
 }
 
-// WithImageSize sets the output resolution (e.g., "1K", "2K", "4K", "512").
-// Same per-model whitelist enforcement as WithAspectRatio.
-func WithImageSize(size string) ImageOption {
+// withImageSize sets the output resolution (e.g., "1K", "2K", "4K", "512").
+// Same per-model whitelist enforcement as withAspectRatio.
+func withImageSize(size string) imageOption {
 	return func(o *imageOptions) { o.imageSize = size }
 }
 
-// WithIncludeText asks the model to also emit text parts (captions, refusals)
+// withIncludeText asks the model to also emit text parts (captions, refusals)
 // alongside images. Defaults to off — most callers want pure image output.
-func WithIncludeText() ImageOption {
+func withIncludeText() imageOption {
 	return func(o *imageOptions) { o.includeText = true }
 }
 
-// WithImageMiddleware registers pre/post hooks that fire around the image
+// withImageMiddleware registers pre/post hooks that fire around the image
 // generation request. Op is OpImageGeneration. Pre-phase can veto.
-func WithImageMiddleware(fns ...MiddlewareFn) ImageOption {
+func withImageMiddleware(fns ...MiddlewareFn) imageOption {
 	return func(o *imageOptions) { o.middleware = append(o.middleware, fns...) }
 }
 
-// WithImageExtraFields adds caller-supplied keys to the wire body (JSON for
+// withImageExtraFields adds caller-supplied keys to the wire body (JSON for
 // the generations branch; form fields for the edits branch). Reserved for
 // provider-specific knobs that don't yet have typed chain methods (OpenAI:
 // output_compression, moderation). Knobs covered by typed methods (quality,
 // output_format, background, n) should use those — typed methods are
 // validated per provider; ExtraFields is not.
-func WithImageExtraFields(extras map[string]any) ImageOption {
+func withImageExtraFields(extras map[string]any) imageOption {
 	return func(o *imageOptions) {
 		if o.extraFields == nil {
 			o.extraFields = map[string]any{}
@@ -107,67 +107,67 @@ func WithImageExtraFields(extras map[string]any) ImageOption {
 	}
 }
 
-// WithImageQuality sets the OpenAI gpt-image-* quality enum
+// withImageQuality sets the OpenAI gpt-image-* quality enum
 // (low|medium|high|auto). ValidationError on Google and xAI Grok.
-func WithImageQuality(s string) ImageOption {
+func withImageQuality(s string) imageOption {
 	return func(o *imageOptions) { o.quality = s }
 }
 
-// WithImageOutputFormat sets the OpenAI gpt-image-* output MIME format
+// withImageOutputFormat sets the OpenAI gpt-image-* output MIME format
 // (png|webp|jpeg). ValidationError on Google and xAI Grok.
-func WithImageOutputFormat(s string) ImageOption {
+func withImageOutputFormat(s string) imageOption {
 	return func(o *imageOptions) { o.outputFormat = s }
 }
 
-// WithImageBackground sets the OpenAI gpt-image-* background treatment
+// withImageBackground sets the OpenAI gpt-image-* background treatment
 // (transparent|opaque|auto). ValidationError on other providers.
-func WithImageBackground(s string) ImageOption {
+func withImageBackground(s string) imageOption {
 	return func(o *imageOptions) { o.background = s }
 }
 
-// WithImageCount sets the number of images to generate (wire field `n`).
+// withImageCount sets the number of images to generate (wire field `n`).
 // Accepted by OpenAI gpt-image-* and xAI Grok; ValidationError on Google
 // (where output count is bound to the model's per-aspect-ratio default).
-func WithImageCount(n int) ImageOption {
+func withImageCount(n int) imageOption {
 	return func(o *imageOptions) { v := n; o.count = &v }
 }
 
-// WithImageMask attaches a PNG mask to the request (transparent pixels mark
+// withImageMask attaches a PNG mask to the request (transparent pixels mark
 // the region to edit). OpenAI gpt-image-* /v1/images/edits only — Google,
 // xAI Grok, and the OpenAI generations branch (no image parts) all return
 // ValidationError.
-func WithImageMask(mime string, data []byte) ImageOption {
+func withImageMask(mime string, data []byte) imageOption {
 	return func(o *imageOptions) {
 		o.mask = &MediaRef{MimeType: mime, Bytes: append([]byte(nil), data...)}
 	}
 }
 
-// WithImageSafetyFilter sets a global image safety threshold. Every image
+// withImageSafetyFilter sets a global image safety threshold. Every image
 // provider returns ValidationError for it.
 //
 // Deprecated: no provider accepts this since 2026-10-15 (Vertex Imagen shut
 // down, BUG-101); removed at the next major.
-func WithImageSafetyFilter(threshold string) ImageOption {
+func withImageSafetyFilter(threshold string) imageOption {
 	return func(o *imageOptions) { o.safetyFilter = threshold }
 }
 
-// WithImageSafetySettings sets per-category safety thresholds for Google
+// withImageSafetySettings sets per-category safety thresholds for Google
 // image generation (the same safetySettings top-level field as text-gen).
 // Wire field: safetySettings[]. Use SafetySetting{Category, Threshold} with
 // the HarmCategory* / HarmBlockThreshold* constants. ValidationError on all
 // non-Google image-gen providers (safetySettingsWirePath must be non-empty).
-func WithImageSafetySettings(s ...SafetySetting) ImageOption {
+func withImageSafetySettings(s ...SafetySetting) imageOption {
 	return func(o *imageOptions) { o.safetySettings = append(o.safetySettings, s...) }
 }
 
 // withImageRaw opts the call into populating ImageResponse.Raw with
 // the parsed provider response body (ADR-014). Internal — typed-builder
 // users reach this via *Image.Raw().
-func withImageRaw() ImageOption {
+func withImageRaw() imageOption {
 	return func(o *imageOptions) { o.raw = true }
 }
 
-func resolveImageOptions(opts []ImageOption) *imageOptions {
+func resolveImageOptions(opts []imageOption) *imageOptions {
 	o := &imageOptions{}
 	for _, fn := range opts {
 		fn(o)
@@ -184,7 +184,7 @@ func resolveImageOptions(opts []ImageOption) *imageOptions {
 //
 // Internal helper as of plan-018 D1.3c — public surface is
 // (*Image).Generate in image_builder.go.
-func generateImage(ctx context.Context, p Provider, req ImageRequest, opts ...ImageOption) (ImageResponse, error) {
+func generateImage(ctx context.Context, p Provider, req ImageRequest, opts ...imageOption) (ImageResponse, error) {
 	o := resolveImageOptions(opts)
 
 	if err := validateProvider(p); err != nil {
