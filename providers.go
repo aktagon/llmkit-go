@@ -4,7 +4,7 @@ import (
 	"github.com/aktagon/llmkit-go/v3/providers"
 )
 
-// eligible returns the providers eligible for *Models.Live(ctx), carrying
+// eligible returns the providers eligible for *Models.List(ctx), carrying
 // this Client's credentials. Per ADR-019 the eligibility test is:
 //
 //	credentials configured on this Client AND
