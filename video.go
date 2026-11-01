@@ -166,10 +166,10 @@ func submitVideo(ctx context.Context, p Provider, req VideoRequest, opts ...Vide
 		return VideoHandle{}, err
 	}
 	for i, part := range parts {
-		// Image-to-video seed frame (BUG-010): accepted only by models whose
-		// VideoModelDef sets SupportsImageToVideo; text-to-video-only models
-		// reject it pre-flight rather than silently dropping it at wire time.
-		if part.Image != nil && listed && !model.SupportsImageToVideo {
+		// Image-to-video seed frame (BUG-010): a model that states
+		// SupportsImageToVideo SupportNo rejects it pre-flight only on a
+		// config whose provider silently ignores it (ADR-102 MPT-006 G6).
+		if part.Image != nil && listed && statedFalseBlocks(vgCfg.IgnoresUnsupported, "Image", model.SupportsImageToVideo) {
 			return VideoHandle{}, &ValidationError{
 				Field:   fmt.Sprintf("parts[%d]", i),
 				Message: req.Model + " is a text-to-video-only model and does not accept image parts",
@@ -182,7 +182,7 @@ func submitVideo(ctx context.Context, p Provider, req VideoRequest, opts ...Vide
 			imageCount++
 		}
 	}
-	if err := validateVideoFrames(model, imageCount, req); err != nil {
+	if err := validateVideoFrames(vgCfg, model, imageCount, req); err != nil {
 		return VideoHandle{}, err
 	}
 	if err := validateVideoOptions(p.Name, vgCfg, req); err != nil {
@@ -1211,13 +1211,15 @@ func veoImage(img *MediaRef) map[string]any {
 // validateVideoFrames rejects a last frame or reference images the model or
 // the request cannot carry, before any HTTP call (BUG-089). The rules run in
 // this order in every SDK, so a request that breaks two gets the same error.
-// An unlisted model (nil) skips the two per-model rules (ADR-102 MPT-001).
-func validateVideoFrames(model *providers.VideoModelDef, imageCount int, req VideoRequest) error {
+// The two per-model rules block a stated SupportNo only on a config whose
+// provider ignores the option (ADR-102 MPT-006 G6); an unlisted model (nil)
+// skips them (ADR-102 MPT-001).
+func validateVideoFrames(cfg *providers.VideoGenDef, model *providers.VideoModelDef, imageCount int, req VideoRequest) error {
 	refs := len(req.ReferenceImages)
 	switch {
-	case req.LastFrame != nil && model != nil && !model.SupportsLastFrame:
+	case req.LastFrame != nil && model != nil && statedFalseBlocks(cfg.IgnoresUnsupported, "LastFrame", model.SupportsLastFrame):
 		return &ValidationError{Field: "last_frame", Message: model.ModelID + " does not accept a last frame"}
-	case refs > 0 && model != nil && !model.SupportsReferenceImages:
+	case refs > 0 && model != nil && statedFalseBlocks(cfg.IgnoresUnsupported, "AddReferenceImage", model.SupportsReferenceImages):
 		return &ValidationError{Field: "reference_images", Message: model.ModelID + " does not accept reference images"}
 	case refs > maxVideoReferenceImages:
 		return &ValidationError{Field: "reference_images", Message: fmt.Sprintf("at most %d reference images, got %d", maxVideoReferenceImages, refs)}
