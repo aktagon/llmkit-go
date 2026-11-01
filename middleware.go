@@ -83,7 +83,7 @@ func resolveModel(p Provider, cfg providerSpec) (string, error) {
 	if cfg.DefaultModel == "" {
 		return "", &ValidationError{
 			Field:   "model",
-			Message: "no model chosen and \"" + p.Name + "\" declares no default; pick one (Models.Live() lists what the daemon serves)",
+			Message: "no model chosen and \"" + p.Name + "\" declares no default; pick one (Models.List(ctx) lists what the daemon serves)",
 		}
 	}
 	return cfg.DefaultModel, nil
