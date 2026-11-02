@@ -182,6 +182,7 @@ type Text struct {
 	system           string
 	temperature      *float64
 	thinkingBudget   *int
+	thinkingType     *string
 	topK             *int
 	topP             *float64
 }
@@ -273,8 +274,19 @@ func (b *Text) Text(s string) *Text {
 	return &out
 }                                          // ordered
 func (b *Text) ThinkingBudget(n int) *Text { out := *b; v := n; out.thinkingBudget = &v; return &out }
-func (b *Text) TopK(n int) *Text           { out := *b; v := n; out.topK = &v; return &out }
-func (b *Text) TopP(v float64) *Text       { out := *b; x := v; out.topP = &x; return &out }
+
+// ThinkingType sets the thinking mode: adaptive, enabled, disabled or between_tools.
+// Anthropic sends it as thinking.type, and it wins over the type that
+// ReasoningEffort or ThinkingBudget would send. Which model accepts which
+// mode is the provider's call; an unknown mode fails before send.
+func (b *Text) ThinkingType(mode string) *Text {
+	out := *b
+	v := mode
+	out.thinkingType = &v
+	return &out
+}
+func (b *Text) TopK(n int) *Text     { out := *b; v := n; out.topK = &v; return &out }
+func (b *Text) TopP(v float64) *Text { out := *b; x := v; out.topP = &x; return &out }
 
 // === *Image — ImageGeneration builder ===
 
@@ -538,6 +550,7 @@ type Agent struct {
 	system            string
 	temperature       *float64
 	thinkingBudget    *int
+	thinkingType      *string
 	topK              *int
 	topP              *float64
 	state             *agentState
@@ -646,6 +659,18 @@ func (b *Agent) ThinkingBudget(n int) *Agent {
 	out := *b
 	v := n
 	out.thinkingBudget = &v
+	out.state = nil
+	return &out
+}
+
+// ThinkingType sets the thinking mode: adaptive, enabled, disabled or between_tools.
+// Anthropic sends it as thinking.type, and it wins over the type that
+// ReasoningEffort or ThinkingBudget would send. Which model accepts which
+// mode is the provider's call; an unknown mode fails before send.
+func (b *Agent) ThinkingType(mode string) *Agent {
+	out := *b
+	v := mode
+	out.thinkingType = &v
 	out.state = nil
 	return &out
 }
