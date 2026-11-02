@@ -14,6 +14,7 @@ import (
 	"time"
 
 	internalproviders "github.com/aktagon/llmkit-go/v3/internal/providers"
+	"github.com/aktagon/llmkit-go/v3/providers"
 )
 
 // Catalogue error sentinels (ADR-019). Provider live calls map to:
@@ -411,31 +412,82 @@ func mapCatalogueHTTPErr(status int, body []byte, herr error) error {
 func (b *ScopedModels) enrich(records []internalproviders.ParsedModelRecord) []ModelInfo {
 	out := make([]ModelInfo, 0, len(records))
 	for _, rec := range records {
-		info := ModelInfo{
-			ID:            rec.ID,
-			Provider:      Provider{Name: b.target.Name},
-			Capabilities:  ontologyCapabilities[b.target.Name][rec.ID],
-			DisplayName:   rec.DisplayName,
-			Description:   rec.Description,
-			ContextWindow: rec.ContextWindow,
-			MaxOutput:     rec.MaxOutput,
-			Created:       int(rec.Created),
-		}
+		info := catalogueModelInfo(b.target.Name, rec.ID)
+		info.DisplayName = rec.DisplayName
+		info.Description = rec.Description
+		info.ContextWindow = rec.ContextWindow
+		info.MaxOutput = rec.MaxOutput
+		info.Created = int(rec.Created)
 		if b.raw {
 			// A copy: the record may be the cached one, which other
 			// calls read.
 			info.Raw = append(json.RawMessage(nil), rec.Raw...)
 		}
-		info.Image, info.Video, info.Speech = catalogueHints(b.target.Name, rec.ID)
 		out = append(out, info)
 	}
 	return out
 }
 
+// Catalogue returns every model this SDK version states facts for under
+// name, with the capabilities and hints the compiled catalogue holds
+// (ADR-102 MPT-010). It needs no client, no API key and no network. The
+// list is not proof that the provider serves a model; use
+// Client.Models.Provider(p).List for that. The live fields (DisplayName,
+// ContextWindow, Raw and the rest) are empty, and Provider carries no API
+// key. Sorted by ID.
+func Catalogue(name providers.ProviderName) []ModelInfo {
+	provider := string(name)
+	var ids []string
+	for id := range ontologyCapabilities[provider] {
+		ids = append(ids, id)
+	}
+	if cfg := internalproviders.ImageGenConfig(provider); cfg != nil {
+		for _, m := range cfg.Models {
+			ids = append(ids, m.ModelID)
+		}
+	}
+	if cfg := internalproviders.VideoGenConfig(provider); cfg != nil {
+		for _, m := range cfg.Models {
+			ids = append(ids, m.ModelID)
+		}
+	}
+	if cfg := internalproviders.SpeechGenConfig(provider); cfg != nil {
+		for _, m := range cfg.Models {
+			ids = append(ids, m.ModelID)
+		}
+	}
+	if cfg := internalproviders.MusicGenConfig(provider); cfg != nil {
+		for _, m := range cfg.Models {
+			ids = append(ids, m.ModelID)
+		}
+	}
+	slices.Sort(ids)
+	ids = slices.Compact(ids)
+	out := make([]ModelInfo, 0, len(ids))
+	for _, id := range ids {
+		out = append(out, catalogueModelInfo(provider, id))
+	}
+	return out
+}
+
+// catalogueModelInfo is the one ModelInfo builder for a live list (enrich)
+// and the keyless Catalogue: the ID, the provider without a key, and what
+// the compiled catalogue states about the model. The live fields are left
+// empty.
+func catalogueModelInfo(provider, modelID string) ModelInfo {
+	info := ModelInfo{
+		ID:           modelID,
+		Provider:     Provider{Name: provider},
+		Capabilities: ontologyCapabilities[provider][modelID],
+	}
+	info.Image, info.Video, info.Speech, info.Music = catalogueHints(provider, modelID)
+	return info
+}
+
 // catalogueHints is what the compiled catalogue states about modelID for
-// image, video and speech generation (ADR-102 MPT-008). Each is nil when
-// the capability's catalogue does not list the model.
-func catalogueHints(provider, modelID string) (image *ImageHints, video *VideoHints, speech *SpeechHints) {
+// image, video, speech and music generation (ADR-102 MPT-008, MPT-010).
+// Each is nil when the capability's catalogue does not list the model.
+func catalogueHints(provider, modelID string) (image *ImageHints, video *VideoHints, speech *SpeechHints, music *MusicHints) {
 	if cfg := internalproviders.ImageGenConfig(provider); cfg != nil {
 		if m, ok := lookupModel(cfg.Models, modelID, imageModelID); ok {
 			image = imageHints(m)
@@ -448,10 +500,49 @@ func catalogueHints(provider, modelID string) (image *ImageHints, video *VideoHi
 	}
 	if cfg := internalproviders.SpeechGenConfig(provider); cfg != nil {
 		if m, ok := lookupModel(cfg.Models, modelID, speechModelID); ok {
-			speech = &SpeechHints{Style: m.SupportsSpeechStyle}
+			speech = speechHints(cfg, m)
 		}
 	}
-	return image, video, speech
+	if cfg := internalproviders.MusicGenConfig(provider); cfg != nil {
+		if m, ok := lookupModel(cfg.Models, modelID, musicModelID); ok {
+			music = musicHints(m)
+		}
+	}
+	return image, video, speech, music
+}
+
+// speechHints applies the provider's request body to every model: a body
+// with no style field makes Style SupportNo, and a body with no
+// multi-speaker form makes MaxSpeakers 1. These are the config checks
+// validateSpeechModel runs before send (ADR-102 MPT-010).
+func speechHints(cfg *internalproviders.SpeechGenDef, m *internalproviders.SpeechModelDef) *SpeechHints {
+	hints := &SpeechHints{Style: m.SupportsSpeechStyle, MaxSpeakers: m.MaxSpeakers}
+	if !cfg.CarriesSpeechStyle {
+		hints.Style = SupportNo
+	}
+	if !cfg.MultiSpeaker {
+		hints.MaxSpeakers = 1
+	}
+	return hints
+}
+
+// musicHints copies one music model's facts. The list is a copy, so a
+// caller cannot change the compiled facts.
+func musicHints(m *internalproviders.MusicModelDef) *MusicHints {
+	return &MusicHints{
+		Lyrics:             supportOf(m.SupportsLyrics),
+		MaxDurationSeconds: m.MaxDurationSeconds,
+		OutputFormats:      slices.Clone(m.AvailableOutputFormats),
+		ImageInput:         supportOf(m.SupportsImageInput),
+	}
+}
+
+// supportOf maps a stated boolean fact to SupportYes or SupportNo.
+func supportOf(stated bool) providers.Support {
+	if stated {
+		return SupportYes
+	}
+	return SupportNo
 }
 
 // imageHints copies one image model's facts. The lists are copies, so a
