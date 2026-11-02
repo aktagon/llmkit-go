@@ -6,6 +6,23 @@
 
 package llmkit
 
+// capabilityOrder lists every Capability in declaration order; the
+// catalogue sorts a model's capabilities by it.
+var capabilityOrder = []Capability{
+	CapChatCompletion,
+	CapImageGeneration,
+	CapToolCalling,
+	CapFileUpload,
+	CapBatching,
+	CapCaching,
+	CapReasoning,
+	CapCatalogue,
+	CapSpeechGeneration,
+	CapMusicGeneration,
+	CapVideoGeneration,
+	CapTranscription,
+}
+
 // compiledInModels is the SDK's built-in catalogue, sorted by
 // (Provider, ID). The runtime reads its capabilities through
 // ontologyCapabilities.

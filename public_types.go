@@ -119,9 +119,9 @@ const (
 
 // Capability names one of the SDK's modelled capabilities. ModelInfo.Capabilities
 // and ProviderInfo.Capabilities hold these; they are never read from provider
-// wire data. A model lists CapSpeechGeneration, CapMusicGeneration or
-// CapVideoGeneration when the provider's speech, music or video model list
-// holds it (ADR-102 MPT-010).
+// wire data. A model lists CapImageGeneration, CapSpeechGeneration,
+// CapMusicGeneration or CapVideoGeneration when the provider's image, speech,
+// music or video model list holds it (ADR-102 MPT-010).
 // It is providers.Capability.
 type Capability = providers.Capability
 
