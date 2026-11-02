@@ -121,5 +121,23 @@ const (
 	SupportNo      = pub.SupportNo
 )
 
+// Capability is the public type, aliased.
+type Capability = pub.Capability
+
+const (
+	CapChatCompletion   = pub.CapChatCompletion
+	CapImageGeneration  = pub.CapImageGeneration
+	CapToolCalling      = pub.CapToolCalling
+	CapFileUpload       = pub.CapFileUpload
+	CapBatching         = pub.CapBatching
+	CapCaching          = pub.CapCaching
+	CapReasoning        = pub.CapReasoning
+	CapCatalogue        = pub.CapCatalogue
+	CapSpeechGeneration = pub.CapSpeechGeneration
+	CapMusicGeneration  = pub.CapMusicGeneration
+	CapVideoGeneration  = pub.CapVideoGeneration
+	CapTranscription    = pub.CapTranscription
+)
+
 // ProviderInfo is the public type, aliased.
 type ProviderInfo = pub.ProviderInfo

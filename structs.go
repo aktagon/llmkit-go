@@ -170,7 +170,7 @@ type MusicHints struct {
 	// OutputFormats are the audio MIME types the model can return, such as "audio/mpeg".
 	OutputFormats []string
 
-	// ImageInput is whether the model takes image parts: yes, no, or unknown when no source states it.
+	// ImageInput is whether llmkit sends image parts to the model: yes or no. Every music model states it.
 	ImageInput Support
 }
 
