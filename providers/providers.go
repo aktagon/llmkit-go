@@ -2,6 +2,17 @@
 
 package providers
 
+// Chat wire shapes — the request/response transform family selected
+// per chat protocol (ADR-055). The runtime switches on ChatWireShape
+// instead of inferring the family from SystemPlacement/auth (ADR-047).
+const (
+	ChatOpenAI          = "ChatOpenAI"
+	ChatAnthropic       = "ChatAnthropic"
+	ChatGoogle          = "ChatGoogle"
+	ChatBedrock         = "ChatBedrock"
+	ChatResponsesOpenAI = "ChatResponsesOpenAI"
+)
+
 // ProviderName is the typed provider identity (ADR-040). Client
 // constructors take it; an untrusted slug crosses into it exactly once
 // via Parse. The string value of each constant is its slug.

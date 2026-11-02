@@ -6,11 +6,7 @@
 
 package llmkit
 
-import (
-	"context"
-
-	"github.com/aktagon/llmkit-go/v3/providers"
-)
+import "context"
 
 // Models is the catalogue builder. Chain methods are immutable;
 // List(ctx) fans out HTTP across configured providers, served from
@@ -88,14 +84,13 @@ func (b *ScopedModels) Get(ctx context.Context, id string) (ModelInfo, error) {
 
 // Providers is the providers-namespace prototype. List() returns the
 // providers with both credentials configured and hasModelsEndpoint
-// declared, as secret-free ProviderInfo (ADR-040 PSR-005). The static
-// roster of every supported provider is providers.List().
+// declared, as secret-free ProviderInfo (ADR-040 PSR-005).
 type Providers struct {
 	client *Client
 }
 
 // List returns the providers eligible for *Models.List(ctx) as secret-free
 // ProviderInfo metadata (ADR-040 PSR-005).
-func (b *Providers) List() []providers.ProviderInfo {
+func (b *Providers) List() []ProviderInfo {
 	return b.runList()
 }

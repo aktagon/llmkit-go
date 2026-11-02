@@ -1,28 +1,6 @@
 package llmkit
 
-import "github.com/aktagon/llmkit-go/v3/providers"
-
-// FinishReason is why a chat response stopped, in one vocabulary shared by
-// every provider (ADR-099 CRF-001). The values are the
-//
-// providers package. Response.FinishReason holds one; the provider's own
-// string is in Response.ProviderFinishReason.
-type FinishReason = providers.FinishReason
-
-// The canonical finish reasons.
-const (
-	// FinishStop: the model reached a natural stop point or a stop sequence.
-	FinishStop = providers.FinishStop
-	// FinishLength: the response reached the output-token limit.
-	FinishLength = providers.FinishLength
-	// FinishToolCalls: the model stopped to call one or more tools.
-	FinishToolCalls = providers.FinishToolCalls
-	// FinishContentFilter: the provider's content filter withheld or cut the
-	// output.
-	FinishContentFilter = providers.FinishContentFilter
-	// FinishOther: a provider value with no entry in the table (CRF-011).
-	FinishOther = providers.FinishOther
-)
+import internalproviders "github.com/aktagon/llmkit-go/v3/internal/providers"
 
 // decodeFinishReason maps the provider's finish-reason string to its
 // canonical value through the chat wire shape's generated table (ADR-099
@@ -34,7 +12,7 @@ func decodeFinishReason(chatWireShape string, wire *string, raw map[string]any) 
 	if wire == nil {
 		return ""
 	}
-	for _, e := range providers.WireShapeFinishReasons(chatWireShape) {
+	for _, e := range internalproviders.WireShapeFinishReasons(chatWireShape) {
 		if e.WireValue != *wire {
 			continue
 		}
@@ -60,11 +38,11 @@ func decodeFinishReason(chatWireShape string, wire *string, raw map[string]any) 
 //
 // ok is false only when resp reports no finish reason, or the shape declares
 // no table: there is nothing to write.
-func encodeFinishReason(chatWireShape string, resp Response) (entry providers.FinishReasonEntry, ok bool) {
+func encodeFinishReason(chatWireShape string, resp Response) (entry internalproviders.FinishReasonEntry, ok bool) {
 	if resp.FinishReason == "" {
 		return entry, false
 	}
-	table := providers.WireShapeFinishReasons(chatWireShape)
+	table := internalproviders.WireShapeFinishReasons(chatWireShape)
 	if resp.ProviderFinishReason != nil {
 		for _, e := range table {
 			if e.WireValue == *resp.ProviderFinishReason && e.Canonical == resp.FinishReason {
@@ -73,7 +51,7 @@ func encodeFinishReason(chatWireShape string, resp Response) (entry providers.Fi
 		}
 		// After the table, so a fused entry (CRF-007) keeps its detail.
 		if resp.ChatWireShape != nil && *resp.ChatWireShape == chatWireShape {
-			return providers.FinishReasonEntry{WireValue: *resp.ProviderFinishReason, Canonical: resp.FinishReason}, true
+			return internalproviders.FinishReasonEntry{WireValue: *resp.ProviderFinishReason, Canonical: resp.FinishReason}, true
 		}
 	}
 	for _, e := range table {
@@ -81,8 +59,8 @@ func encodeFinishReason(chatWireShape string, resp Response) (entry providers.Fi
 			return e, true
 		}
 	}
-	if fallback := providers.WireShapeFinishReasonFallback(chatWireShape, resp.FinishReason); fallback != "" {
-		return providers.FinishReasonEntry{WireValue: fallback, Canonical: resp.FinishReason}, true
+	if fallback := internalproviders.WireShapeFinishReasonFallback(chatWireShape, resp.FinishReason); fallback != "" {
+		return internalproviders.FinishReasonEntry{WireValue: fallback, Canonical: resp.FinishReason}, true
 	}
 	return entry, false
 }

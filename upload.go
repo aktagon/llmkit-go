@@ -7,7 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/aktagon/llmkit-go/v3/providers"
+	internalproviders "github.com/aktagon/llmkit-go/v3/internal/providers"
 )
 
 // Run uploads the configured file to the client's provider and
@@ -37,7 +37,7 @@ func (b *Upload) Run(ctx context.Context) (File, error) {
 	if _, ok := providerSpecs()[provider.Name]; !ok {
 		return File{}, &ValidationError{Field: "provider", Message: "unknown: " + provider.Name}
 	}
-	if providers.FileUploadConfig(provider.Name) == nil {
+	if internalproviders.FileUploadConfig(provider.Name) == nil {
 		return File{}, &ValidationError{Field: "provider", Message: "file upload not supported: " + provider.Name}
 	}
 

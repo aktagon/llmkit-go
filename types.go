@@ -3,8 +3,6 @@ package llmkit
 import (
 	"net/http"
 	"time"
-
-	"github.com/aktagon/llmkit-go/v3/providers"
 )
 
 // Provider identifies an LLM provider with its API key and optional overrides.
@@ -40,16 +38,6 @@ const (
 	CapReasoning       Capability = "reasoning"
 	CapCatalogue       Capability = "catalogue"
 )
-
-// Usage holds token consumption metrics.
-// Aliased to providers.Usage so middleware events and the public API share
-// one type without conversion.
-type Usage = providers.Usage
-
-// MiddlewareFn is the user-supplied hook fired around capability calls.
-// Aliased to providers.MiddlewareFn so callers don't need to import the
-// providers subpackage just to declare a hook.
-type MiddlewareFn = providers.MiddlewareFn
 
 // Tool is a callable function for the agent: its definition, which the
 // request carries as a ToolDefinition, plus Run, which the Agent keeps beside
@@ -95,17 +83,6 @@ const (
 	HarmBlockThresholdHighOnly       = "BLOCK_ONLY_HIGH"
 )
 
-// Image safety filter threshold constants for SafetyFilter.
-//
-// Deprecated: no provider accepts these since 2026-10-15 (Vertex Imagen shut
-// down, BUG-101); removed at the next major.
-const (
-	ImageSafetyFilterBlockFew      = "block_few"
-	ImageSafetyFilterBlockSome     = "block_some"
-	ImageSafetyFilterBlockMost     = "block_most"
-	ImageSafetyFilterBlockOnlyHigh = "block_only_high"
-)
-
 // Option configures the transport and poll policy of a BatchHandle Wait or
 // Poll call. Request-shaping settings live on Request (ADR-098).
 type Option func(*options)
@@ -115,7 +92,7 @@ type options struct {
 	maxToolIterations int
 	caching           bool
 	cacheTTL          *time.Duration // nil: the provider default
-	middleware        []providers.MiddlewareFn
+	middleware        []MiddlewareFn
 	raw               bool
 	pollTimeout       time.Duration
 }

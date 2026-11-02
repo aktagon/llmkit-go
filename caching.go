@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/aktagon/llmkit-go/v3/providers"
+	internalproviders "github.com/aktagon/llmkit-go/v3/internal/providers"
 )
 
 // applyCaching mutates the request body to enable caching based on the provider's mode.
@@ -15,20 +15,20 @@ import (
 // model is the request's resolved model (prepareRequest); a cached resource is
 // created for it.
 func applyCaching(ctx context.Context, body map[string]any, p Provider, model string, o *options, cfg providerSpec) error {
-	cc := providers.CachingConfig(p.Name)
+	cc := internalproviders.CachingConfig(p.Name)
 	if cc == nil {
 		return &ValidationError{Field: "caching", Message: "not supported by " + p.Name}
 	}
 
 	switch cc.Mode {
-	case providers.CachingAutomatic:
+	case internalproviders.CachingAutomatic:
 		// No request mutation needed — provider handles caching automatically.
 		return nil
 
-	case providers.CachingExplicit:
+	case internalproviders.CachingExplicit:
 		return applyExplicitCaching(body, cc, cfg)
 
-	case providers.CachingResource:
+	case internalproviders.CachingResource:
 		return applyResourceCaching(ctx, body, p, model, o, cc, cfg)
 
 	default:
@@ -41,9 +41,9 @@ func applyCaching(ctx context.Context, body map[string]any, p Provider, model st
 //  1. Find the last content block in the system message array.
 //  2. Add cache_control: {type: CachingDef.ControlType} to that block.
 //  3. If no system message, skip silently.
-func applyExplicitCaching(body map[string]any, cc *providers.CachingDef, cfg providerSpec) error {
+func applyExplicitCaching(body map[string]any, cc *internalproviders.CachingDef, cfg providerSpec) error {
 	switch cfg.SystemPlacement {
-	case providers.PlacementTopLevelField:
+	case internalproviders.PlacementTopLevelField:
 		// Anthropic: system is a top-level string. Wrap it as content blocks with cache_control.
 		sys, ok := body["system"]
 		if !ok || sys == "" {
@@ -64,7 +64,7 @@ func applyExplicitCaching(body map[string]any, cc *providers.CachingDef, cfg pro
 		}
 		return nil
 
-	case providers.PlacementMessageInArray:
+	case internalproviders.PlacementMessageInArray:
 		// System in messages array: find the system message and annotate its content.
 		msgs, ok := body["messages"].([]any)
 		if !ok || len(msgs) == 0 {
@@ -104,14 +104,14 @@ func applyExplicitCaching(body map[string]any, cc *providers.CachingDef, cfg pro
 //  2. Extract resource ID from response at Lifecycle.ResponseIdPath.
 //  3. Set body[Lifecycle.ReferenceField] = resource ID.
 //  4. Remove system prompt from main request body.
-func applyResourceCaching(ctx context.Context, body map[string]any, p Provider, model string, o *options, cc *providers.CachingDef, cfg providerSpec) error {
+func applyResourceCaching(ctx context.Context, body map[string]any, p Provider, model string, o *options, cc *internalproviders.CachingDef, cfg providerSpec) error {
 	lc := cc.Lifecycle
 	if lc == nil {
 		return fmt.Errorf("resource caching requires lifecycle config")
 	}
 
-	baseEvent := providers.Event{
-		Op:       providers.OpCacheCreate,
+	baseEvent := Event{
+		Op:       OpCacheCreate,
 		Provider: p.Name,
 		Model:    model,
 	}
@@ -157,14 +157,14 @@ func applyResourceCaching(ctx context.Context, body map[string]any, p Provider, 
 		base = cfg.BaseURL
 	}
 	createURL := base + lc.CreateEndpoint
-	if cfg.AuthScheme == providers.AuthQueryParamKey {
+	if cfg.AuthScheme == internalproviders.AuthQueryParamKey {
 		createURL += "?" + cfg.AuthQueryParam + "=" + p.APIKey
 	}
 
 	headers := map[string]string{}
-	if cfg.AuthScheme == providers.AuthBearerToken {
+	if cfg.AuthScheme == internalproviders.AuthBearerToken {
 		headers[cfg.AuthHeader] = cfg.AuthPrefix + " " + p.APIKey
-	} else if cfg.AuthScheme == providers.AuthHeaderAPIKey {
+	} else if cfg.AuthScheme == internalproviders.AuthHeaderAPIKey {
 		headers[cfg.AuthHeader] = p.APIKey
 	}
 	mergeCallerHeaders(headers, p) // ADR-052: additive; never clobbers provider auth above.
@@ -219,7 +219,7 @@ func applyResourceCaching(ctx context.Context, body map[string]any, p Provider, 
 
 // extractCacheUsage extracts cache token counts from a provider response.
 func extractCacheUsage(raw map[string]any, provider string) (creation, read *int) {
-	creationPath, readPath := providers.CacheUsagePaths(provider)
+	creationPath, readPath := internalproviders.CacheUsagePaths(provider)
 	return optIntPath(raw, creationPath), optIntPath(raw, readPath)
 }
 
