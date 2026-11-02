@@ -14,6 +14,7 @@ const (
 	OptionStopSequences    OptionKey = "stop_sequences"
 	OptionTemperature      OptionKey = "temperature"
 	OptionThinkingBudget   OptionKey = "thinking_budget"
+	OptionThinkingType     OptionKey = "thinking_type"
 	OptionTopK             OptionKey = "top_k"
 	OptionTopP             OptionKey = "top_p"
 )
@@ -44,6 +45,7 @@ func AllOptions() []OptionDef {
 		{Key: OptionStopSequences, GoType: "[]string", JSONKey: "stop_sequences"},
 		{Key: OptionTemperature, GoType: "float64", JSONKey: "temperature"},
 		{Key: OptionThinkingBudget, GoType: "int", JSONKey: "thinking_budget"},
+		{Key: OptionThinkingType, GoType: "string", JSONKey: "thinking_type"},
 		{Key: OptionTopK, GoType: "int", JSONKey: "top_k"},
 		{Key: OptionTopP, GoType: "float64", JSONKey: "top_p"},
 	}
@@ -67,6 +69,7 @@ func SupportedOptions(provider string) map[OptionKey]string {
 			OptionStopSequences:   "stop_sequences",
 			OptionTemperature:     "temperature",
 			OptionThinkingBudget:  "thinking.budget_tokens",
+			OptionThinkingType:    "thinking.type",
 			OptionTopK:            "top_k",
 			OptionTopP:            "top_p",
 		}
@@ -365,6 +368,12 @@ func OptionOverrides(provider string) map[OptionKey]OptionOverrideDef {
 				JSONKey:         "thinking.budget_tokens",
 				AllowedValues:   "",
 				ExtraFields:     `{"type":"enabled"}`,
+				RootExtraFields: ``,
+			},
+			OptionThinkingType: {
+				JSONKey:         "thinking.type",
+				AllowedValues:   "adaptive,enabled,disabled,between_tools",
+				ExtraFields:     ``,
 				RootExtraFields: ``,
 			},
 		}

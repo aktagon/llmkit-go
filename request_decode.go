@@ -228,6 +228,12 @@ func setOption(req *Request, param internalproviders.OptionKey, v any) error {
 			return fmt.Errorf("must be a string")
 		}
 		req.ReasoningEffort = &s
+	case internalproviders.OptionThinkingType:
+		s, ok := v.(string)
+		if !ok {
+			return fmt.Errorf("must be a string")
+		}
+		req.ThinkingType = &s
 	case internalproviders.OptionStopSequences:
 		// A bare string is a one-item list (HANDOFF-105 R3b).
 		if s, ok := v.(string); ok {
