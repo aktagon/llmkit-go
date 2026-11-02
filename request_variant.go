@@ -23,7 +23,7 @@ func selectRequestVariant(provider string, variants []internalproviders.RequestV
 }
 
 // carriedInputNames are the carried inputs in the words an error message
-// uses; the constant names are internal (ADR-103 PUB-005).
+// uses; the constant names are internal (ADR-104 PUB-005).
 var carriedInputNames = map[string]string{
 	internalproviders.TextOnly:            "text-only",
 	internalproviders.WithReferenceImages: "reference image",
