@@ -396,21 +396,35 @@ func validateOptions(provider string, req Request) error {
 			return &ValidationError{Field: "reasoning_effort", Message: "not supported by " + provider}
 		}
 	}
-
-	//
-	overrides := internalproviders.OptionOverrides(provider)
-	if req.ReasoningEffort != nil && overrides != nil {
-		if ov, ok := overrides[internalproviders.OptionReasoningEffort]; ok && ov.AllowedValues != "" {
-			if !containsValue(ov.AllowedValues, *req.ReasoningEffort) {
-				return &ValidationError{
-					Field:   "reasoning_effort",
-					Message: fmt.Sprintf("invalid value %q, must be one of: %s", *req.ReasoningEffort, ov.AllowedValues),
-				}
-			}
+	if req.ThinkingType != nil {
+		if _, ok := supported[internalproviders.OptionThinkingType]; !ok {
+			return &ValidationError{Field: "thinking_type", Message: "not supported by " + provider}
 		}
 	}
 
-	return nil
+	//
+	overrides := internalproviders.OptionOverrides(provider)
+	if err := checkAllowedValue(overrides, internalproviders.OptionReasoningEffort, "reasoning_effort", req.ReasoningEffort); err != nil {
+		return err
+	}
+	return checkAllowedValue(overrides, internalproviders.OptionThinkingType, "thinking_type", req.ThinkingType)
+}
+
+// checkAllowedValue rejects a set string option whose value is not in the
+// provider override's allowedValues. An unset option, or an override with no
+// allowedValues, passes.
+func checkAllowedValue(overrides map[internalproviders.OptionKey]internalproviders.OptionOverrideDef, key internalproviders.OptionKey, field string, value *string) error {
+	if value == nil {
+		return nil
+	}
+	ov, ok := overrides[key]
+	if !ok || ov.AllowedValues == "" || containsValue(ov.AllowedValues, *value) {
+		return nil
+	}
+	return &ValidationError{
+		Field:   field,
+		Message: fmt.Sprintf("invalid value %q, must be one of: %s", *value, ov.AllowedValues),
+	}
 }
 
 // containsValue checks if a CSV string contains the given value.
@@ -839,6 +853,13 @@ func addOptions(root, target map[string]any, req Request, provider, model, chatW
 	}
 	if req.ReasoningEffort != nil {
 		apply(internalproviders.OptionReasoningEffort, *req.ReasoningEffort)
+	}
+	// ThinkingType is applied last, after every option that merges extras,
+	// so its value is the body's final thinking.type (ADR-105 THT-002): it
+	// wins over ReasoningEffort's root-merged adaptive type and over
+	// ThinkingBudget's type enabled.
+	if req.ThinkingType != nil {
+		apply(internalproviders.OptionThinkingType, *req.ThinkingType)
 	}
 }
 
