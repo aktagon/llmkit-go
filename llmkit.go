@@ -22,7 +22,8 @@ type streamCallback func(chunk string)
 
 // Supports reports whether an explicit request for cap will not
 // hard-fail pre-flight on this client's provider (ADR-030). Gated
-// capabilities (caching, batching, file upload, image generation)
+// capabilities (caching, batching, file upload, and image, speech, music,
+// video generation and transcription)
 // dispatch the same generated lookups their strict validation paths
 // use — never a parallel table — so the query and the error cannot
 // drift. Capabilities with no provider-level pre-flight gate return
@@ -39,6 +40,14 @@ func (c *Client) Supports(cap Capability) bool {
 		return internalproviders.FileUploadConfig(c.provider.name) != nil
 	case CapImageGeneration:
 		return internalproviders.ImageGenConfig(c.provider.name) != nil
+	case CapSpeechGeneration:
+		return internalproviders.SpeechGenConfig(c.provider.name) != nil
+	case CapMusicGeneration:
+		return internalproviders.MusicGenConfig(c.provider.name) != nil
+	case CapVideoGeneration:
+		return internalproviders.VideoGenConfig(c.provider.name) != nil
+	case CapTranscription:
+		return internalproviders.TranscriptionConfig(c.provider.name) != nil
 	default:
 		return true
 	}
