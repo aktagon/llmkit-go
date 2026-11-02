@@ -27,7 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `"speakers"` and `"style"`, sorted.
 - **`Capability` gains `CapSpeechGeneration`, `CapMusicGeneration`,
   `CapVideoGeneration` and `CapTranscription`.** A model in a provider's
-  speech, music or video model list carries that capability in
+  image, speech, music or video model list carries that capability in
   `ModelInfo.Capabilities`, from both `KnownModels` and the live list, so
   `c.Models.WithCapability(llmkit.CapSpeechGeneration)` finds speech
   models. `Client.Supports` answers the four from the provider's
