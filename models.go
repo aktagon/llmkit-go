@@ -487,7 +487,7 @@ func knownModelInfo(provider, modelID string) ModelInfo {
 		DisplayName: catalogueLabel(provider, modelID),
 	}
 	info.Image, info.Video, info.Speech, info.Music = catalogueHints(provider, modelID)
-	// A model in the provider's speech, music or video list has that
+	// A model in the provider's image, speech, music or video list has that
 	// capability (ADR-102 MPT-010); the hints are present exactly then. The
 	// copy keeps the shared compiled slice unchanged.
 	compiled := ontologyCapabilities[provider][modelID]
@@ -496,6 +496,7 @@ func knownModelInfo(provider, modelID string) ModelInfo {
 		member bool
 		cap    Capability
 	}{
+		{info.Image != nil, CapImageGeneration},
 		{info.Speech != nil, CapSpeechGeneration},
 		{info.Music != nil, CapMusicGeneration},
 		{info.Video != nil, CapVideoGeneration},
@@ -505,6 +506,9 @@ func knownModelInfo(provider, modelID string) ModelInfo {
 			caps = append(caps, d.cap)
 		}
 	}
+	slices.SortStableFunc(caps, func(a, b Capability) int {
+		return slices.Index(capabilityOrder, a) - slices.Index(capabilityOrder, b)
+	})
 	if compiled != nil || len(caps) > 0 {
 		info.Capabilities = caps
 	}
