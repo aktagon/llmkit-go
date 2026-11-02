@@ -122,13 +122,13 @@ type ModelInfo struct {
 	// ID is the provider-scoped model identifier (e.g. claude-opus-4-7, gpt-5, gemini-2.5-flash). Round-tripped to provider endpoints verbatim.
 	ID string
 
-	// Provider is the Provider value that exposes this model. Used by Models.Provider(m.Provider).Get(ctx, m.ID) to round-trip back to live data when needed.
+	// Provider is the provider that exposes this model. It carries the provider name only, with no API key; pass a Provider with a key to Models.Provider(p).Get(ctx, m.ID) to read live data.
 	Provider Provider
 
 	//
 	Capabilities []Capability
 
-	// DisplayName is the human-readable name when the provider supplies one (Anthropic display_name, Google displayName). Empty when the provider's wire shape does not carry one.
+	// DisplayName is the human-readable name: the provider's when its wire shape carries one (Anthropic display_name, Google displayName), else the catalogue's label for the model. Empty when neither states one.
 	DisplayName string
 
 	// Description is the provider's free-text description (Google description). Empty for providers that do not publish a description field.
@@ -161,7 +161,7 @@ type ModelInfo struct {
 
 // MusicHints is what the SDK's catalogue states about one music-generation model (ADR-102 MPT-010). The values are hints: a request outside them is still sent, and the provider answers.
 type MusicHints struct {
-	// Lyrics is whether the model takes lyrics. No means the model makes instrumental music only.
+	// Lyrics is whether the model takes lyrics: yes, no, or unknown when no source states it. No means the model makes instrumental music only.
 	Lyrics Support
 
 	// MaxDurationSeconds is the longest track the catalogue lists for the model, in seconds. Zero when it states none.
@@ -170,7 +170,7 @@ type MusicHints struct {
 	// OutputFormats are the audio MIME types the model can return, such as "audio/mpeg".
 	OutputFormats []string
 
-	// ImageInput is whether llmkit sends image parts to the model.
+	// ImageInput is whether the model takes image parts: yes, no, or unknown when no source states it.
 	ImageInput Support
 }
 
@@ -317,11 +317,14 @@ type SafetySetting struct {
 
 // SpeechHints is what the SDK's catalogue states about one speech-generation model (ADR-102 MPT-008). The values are hints: a request outside them is still sent, and the provider answers.
 type SpeechHints struct {
-	// Style is whether the model takes a speech style: yes, no, or unknown when no source states it. No when the provider's request body carries no style, whatever the model states (ADR-102 MPT-010).
+	// Style is whether the model takes a speech style: yes, no, or unknown when no source states it.
 	Style Support
 
-	// MaxSpeakers is the number of speakers the model takes. 1 when the provider's request body has no multi-speaker form, whatever the model states. Zero or absent when no source states it (ADR-102 MPT-010).
+	// MaxSpeakers is the number of speakers the catalogue lists for the model. Zero or absent when no source states it (ADR-102 MPT-010).
 	MaxSpeakers int
+
+	// Rejects are the request options the SDK rejects before send for this model, because the provider's request has no place for them: "speakers", "style". Sorted; empty when it rejects none (ADR-102 MPT-010).
+	Rejects []string
 }
 
 // SpeechResponse is the universal text-to-speech response container returned by Speech.Generate. Carries the synthesized audio (a single clip), the provider-reported usage, and an optional finish reason — reusing the music pipeline's AudioData container unchanged (ADR-049).

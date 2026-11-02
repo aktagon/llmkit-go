@@ -16,17 +16,17 @@ var compiledInModels = []ModelInfo{
 	{ID: "claude-opus-4-7", Provider: Provider{Name: "anthropic"}, Capabilities: []Capability{CapChatCompletion, CapToolCalling}, DisplayName: "Claude Opus 4.7", ContextWindow: 1000000, MaxOutput: 128000},
 	{ID: "claude-sonnet-4-5-20250929", Provider: Provider{Name: "anthropic"}, Capabilities: []Capability{CapChatCompletion, CapToolCalling}, DisplayName: "Claude Sonnet 4.5", ContextWindow: 1000000, MaxOutput: 64000},
 	{ID: "claude-sonnet-4-6", Provider: Provider{Name: "anthropic"}, Capabilities: []Capability{CapChatCompletion, CapToolCalling}, DisplayName: "Claude Sonnet 4.6", ContextWindow: 1000000, MaxOutput: 128000},
-	{ID: "gemini-2.5-flash", Provider: Provider{Name: "google"}, Capabilities: []Capability{CapChatCompletion, CapReasoning, CapToolCalling}, DisplayName: "Gemini 2.5 Flash", Description: "Stable version of Gemini 2.5 Flash", ContextWindow: 1048576, MaxOutput: 65536},
+	{ID: "gemini-2.5-flash", Provider: Provider{Name: "google"}, Capabilities: []Capability{CapChatCompletion, CapToolCalling, CapReasoning}, DisplayName: "Gemini 2.5 Flash", Description: "Stable version of Gemini 2.5 Flash", ContextWindow: 1048576, MaxOutput: 65536},
 	{ID: "gemini-2.5-flash-lite", Provider: Provider{Name: "google"}, Capabilities: []Capability{CapChatCompletion, CapToolCalling}, DisplayName: "Gemini 2.5 Flash-Lite", Description: "Stable version of Gemini 2.5 Flash-Lite", ContextWindow: 1048576, MaxOutput: 65536},
-	{ID: "gemini-2.5-pro", Provider: Provider{Name: "google"}, Capabilities: []Capability{CapChatCompletion, CapReasoning, CapToolCalling}, DisplayName: "Gemini 2.5 Pro", Description: "Stable release of Gemini 2.5 Pro", ContextWindow: 1048576, MaxOutput: 65536},
+	{ID: "gemini-2.5-pro", Provider: Provider{Name: "google"}, Capabilities: []Capability{CapChatCompletion, CapToolCalling, CapReasoning}, DisplayName: "Gemini 2.5 Pro", Description: "Stable release of Gemini 2.5 Pro", ContextWindow: 1048576, MaxOutput: 65536},
 	{ID: "gemini-nano-banana-2.1", Provider: Provider{Name: "google"}, Capabilities: []Capability{CapImageGeneration}, DisplayName: "Nano Banana 2.1", Description: "Gemini Nano Banana 2.1", ContextWindow: 131072, MaxOutput: 32768},
 	{ID: "gpt-4o", Provider: Provider{Name: "openai"}, Capabilities: []Capability{CapChatCompletion, CapToolCalling}},
 	{ID: "gpt-4o-mini", Provider: Provider{Name: "openai"}, Capabilities: []Capability{CapChatCompletion, CapToolCalling}},
-	{ID: "gpt-5", Provider: Provider{Name: "openai"}, Capabilities: []Capability{CapChatCompletion, CapReasoning, CapToolCalling}},
+	{ID: "gpt-5", Provider: Provider{Name: "openai"}, Capabilities: []Capability{CapChatCompletion, CapToolCalling, CapReasoning}},
 	{ID: "gpt-image-1", Provider: Provider{Name: "openai"}, Capabilities: []Capability{CapImageGeneration}},
 	{ID: "o1", Provider: Provider{Name: "openai"}, Capabilities: []Capability{CapChatCompletion, CapReasoning}},
-	{ID: "o3", Provider: Provider{Name: "openai"}, Capabilities: []Capability{CapChatCompletion, CapReasoning, CapToolCalling}},
-	{ID: "o4-mini", Provider: Provider{Name: "openai"}, Capabilities: []Capability{CapChatCompletion, CapReasoning, CapToolCalling}},
+	{ID: "o3", Provider: Provider{Name: "openai"}, Capabilities: []Capability{CapChatCompletion, CapToolCalling, CapReasoning}},
+	{ID: "o4-mini", Provider: Provider{Name: "openai"}, Capabilities: []Capability{CapChatCompletion, CapToolCalling, CapReasoning}},
 }
 
 // ontologyCapabilities maps (provider name, model id) -> capabilities
@@ -45,19 +45,19 @@ var ontologyCapabilities = map[string]map[string][]Capability{
 		"claude-sonnet-4-6":          []Capability{CapChatCompletion, CapToolCalling},
 	},
 	"google": {
-		"gemini-2.5-flash":       []Capability{CapChatCompletion, CapReasoning, CapToolCalling},
+		"gemini-2.5-flash":       []Capability{CapChatCompletion, CapToolCalling, CapReasoning},
 		"gemini-2.5-flash-lite":  []Capability{CapChatCompletion, CapToolCalling},
-		"gemini-2.5-pro":         []Capability{CapChatCompletion, CapReasoning, CapToolCalling},
+		"gemini-2.5-pro":         []Capability{CapChatCompletion, CapToolCalling, CapReasoning},
 		"gemini-nano-banana-2.1": []Capability{CapImageGeneration},
 	},
 	"openai": {
 		"gpt-4o":      []Capability{CapChatCompletion, CapToolCalling},
 		"gpt-4o-mini": []Capability{CapChatCompletion, CapToolCalling},
-		"gpt-5":       []Capability{CapChatCompletion, CapReasoning, CapToolCalling},
+		"gpt-5":       []Capability{CapChatCompletion, CapToolCalling, CapReasoning},
 		"gpt-image-1": []Capability{CapImageGeneration},
 		"o1":          []Capability{CapChatCompletion, CapReasoning},
-		"o3":          []Capability{CapChatCompletion, CapReasoning, CapToolCalling},
-		"o4-mini":     []Capability{CapChatCompletion, CapReasoning, CapToolCalling},
+		"o3":          []Capability{CapChatCompletion, CapToolCalling, CapReasoning},
+		"o4-mini":     []Capability{CapChatCompletion, CapToolCalling, CapReasoning},
 	},
 }
 
