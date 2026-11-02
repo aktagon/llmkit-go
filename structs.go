@@ -260,11 +260,11 @@ type Request struct {
 	// ThinkingBudget is the token budget for extended thinking.
 	ThinkingBudget *int
 
-	// ThinkingType is the thinking mode, such as "adaptive" or "disabled". When set it wins over the thinking type that the reasoning effort or the thinking budget would send. Unset sends none.
-	ThinkingType *string
-
 	// SafetySettings are the per-category safety filters for Gemini providers. Empty sets none.
 	SafetySettings []SafetySetting
+
+	// ThinkingType is the thinking mode, such as "adaptive" or "disabled". When set it wins over the thinking type that the reasoning effort or the thinking budget would send. Unset sends none.
+	ThinkingType *string
 }
 
 // Response is the universal response container returned by text-generation terminals (Text.Prompt, Agent.Prompt). Every field is core (no per-capability augmentation).
