@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`llmkit.Catalogue(name)` lists the models this SDK version states facts
+  for, with no client, no API key and no network.** It returns a
+  `[]ModelInfo` sorted by ID, with `Capabilities` and the hints filled. The
+  live fields (`DisplayName`, `ContextWindow`, `Raw` and the rest) are
+  empty. The list is not proof that the provider serves a model; use
+  `c.Models.Provider(p).List(ctx)` for that.
+- **`ModelInfo.Music` holds a `*MusicHints`** for a model the SDK lists for
+  music generation: whether it takes lyrics, the maximum duration in
+  seconds, the audio formats it can return, and whether it takes image
+  parts.
+- **`SpeechHints.MaxSpeakers`** is the number of speakers the model takes,
+  or 0 when no source states it. It is 1 when the provider's request has no
+  multi-speaker form.
+
+### Changed
+
+- **`SpeechHints.Style` is `SupportNo` when the provider's request carries no
+  style**, whatever the model states. The SDK already rejected a style on
+  those providers before send.
+
 ## [3.0.0] — 2026-11-02
 
 ### Added
