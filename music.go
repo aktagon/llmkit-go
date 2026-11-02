@@ -79,36 +79,11 @@ func resolveMusicOptions(opts []musicOption) *musicOptions {
 //
 // Internal helper — the public surface is (*Music).Generate in music_builder.go.
 func generateMusic(ctx context.Context, p Provider, req musicRequest, opts ...musicOption) (MusicResponse, error) {
-	o := resolveMusicOptions(opts)
-
-	if err := validateProvider(p); err != nil {
-		return MusicResponse{}, err
-	}
-	if req.Model == "" {
-		return MusicResponse{}, &ValidationError{Field: "model", Message: "required for music generation"}
-	}
-
-	parts, err := normalizeMusicParts(req)
+	plan, err := planMusic(p, req, opts)
 	if err != nil {
 		return MusicResponse{}, err
 	}
-	if err := checkPartKinds("music_generation", parts); err != nil {
-		return MusicResponse{}, err
-	}
-
-	cfg, ok := providerSpecs()[p.Name]
-	if !ok {
-		return MusicResponse{}, &ValidationError{Field: "provider", Message: "unknown: " + p.Name}
-	}
-	mgCfg := internalproviders.MusicGenConfig(p.Name)
-	if mgCfg == nil {
-		return MusicResponse{}, &ValidationError{Field: "provider", Message: p.Name + " does not support music generation"}
-	}
-	// ADR-102 MPT-001: an unlisted model (nil) is sent as given.
-	model, listed := lookupModel(mgCfg.Models, req.Model, musicModelID)
-	// ADR-037 (MUS-008): supportsLyrics is advisory metadata, not a gate.
-	// Lyrics on an instrumental-only model fold into the prompt (for the
-	// single-prompt Predict shape) and the model ignores or honors them.
+	o, cfg, mgCfg, model, listed, parts := plan.o, plan.cfg, plan.mgCfg, plan.model, plan.listed, plan.parts
 
 	baseEvent := Event{
 		Op:            OpMusicGeneration,
@@ -148,6 +123,62 @@ func generateMusic(ctx context.Context, p Provider, req musicRequest, opts ...mu
 	return resp, parseErr
 }
 
+// musicPlan is what generateMusic's validation resolves before the send.
+type musicPlan struct {
+	o      *musicOptions
+	cfg    providerSpec
+	mgCfg  *internalproviders.MusicGenDef
+	model  *internalproviders.MusicModelDef
+	listed bool
+	parts  []Part
+}
+
+// planMusic runs every pre-flight check of a music request. generateMusic and
+// previewMusic share it, so a preview fails exactly where a send would.
+func planMusic(p Provider, req musicRequest, opts []musicOption) (musicPlan, error) {
+	o := resolveMusicOptions(opts)
+
+	if err := validateProvider(p); err != nil {
+		return musicPlan{}, err
+	}
+	if req.Model == "" {
+		return musicPlan{}, &ValidationError{Field: "model", Message: "required for music generation"}
+	}
+
+	parts, err := normalizeMusicParts(req)
+	if err != nil {
+		return musicPlan{}, err
+	}
+	if err := checkPartKinds("music_generation", parts); err != nil {
+		return musicPlan{}, err
+	}
+
+	cfg, ok := providerSpecs()[p.Name]
+	if !ok {
+		return musicPlan{}, &ValidationError{Field: "provider", Message: "unknown: " + p.Name}
+	}
+	mgCfg := internalproviders.MusicGenConfig(p.Name)
+	if mgCfg == nil {
+		return musicPlan{}, &ValidationError{Field: "provider", Message: p.Name + " does not support music generation"}
+	}
+	// ADR-102 MPT-001: an unlisted model (nil) is sent as given.
+	model, listed := lookupModel(mgCfg.Models, req.Model, musicModelID)
+	// ADR-037 (MUS-008): supportsLyrics is advisory metadata, not a gate.
+	// Lyrics on an instrumental-only model fold into the prompt (for the
+	// single-prompt Predict shape) and the model ignores or honors them.
+	return musicPlan{o: o, cfg: cfg, mgCfg: mgCfg, model: model, listed: listed, parts: parts}, nil
+}
+
+// previewMusic returns the body generateMusic would send (ADR-106).
+func previewMusic(p Provider, req musicRequest, opts ...musicOption) ([]byte, error) {
+	plan, err := planMusic(p, req, opts)
+	if err != nil {
+		return nil, err
+	}
+	_, body, err := buildMusicWire(p, plan.cfg, plan.mgCfg, req.Model, plan.parts)
+	return body, err
+}
+
 // dispatchMusicHTTP picks a wire shape per provider config (never by provider
 // name — the wire shape is the single discriminator):
 //
@@ -176,29 +207,46 @@ func dispatchMusicHTTP(
 	// resolve it once for all shapes. No wire fixture could catch that
 	// divergence either, since the request-wire drivers override the base URL
 	// before dispatch.
+	url, body, err := buildMusicWire(p, cfg, mgCfg, model, parts)
+	if err != nil {
+		return nil, err
+	}
+	return doPost(ctx, client, url, body, headers)
+}
+
+// buildMusicWire resolves the URL and serializes the body of a music request.
+// The send and PreviewRequest both call it, so a preview carries the sent
+// bytes (ADR-106).
+func buildMusicWire(p Provider, cfg providerSpec, mgCfg *internalproviders.MusicGenDef, model string, parts []Part) (string, []byte, error) {
 	base := musicBaseURL(p, cfg, mgCfg)
 
+	var url string
+	var body map[string]any
 	switch mgCfg.WireShape {
 	case internalproviders.MusicShapePredict:
-		body := buildVertexMusicBody(parts)
+		body = buildVertexMusicBody(parts)
 		endpoint := mgCfg.GenEndpoint
 		if endpoint == "" {
 			endpoint = cfg.Endpoint
 		}
-		endpoint = strings.ReplaceAll(endpoint, "{model}", model)
-		return postMusicJSON(ctx, client, base+endpoint, body, headers)
+		url = base + strings.ReplaceAll(endpoint, "{model}", model)
 
 	case internalproviders.MusicShapeMinimax:
-		body := buildMinimaxMusicBody(parts, model)
-		return postMusicJSON(ctx, client, base+mgCfg.GenEndpoint, body, headers)
+		body = buildMinimaxMusicBody(parts, model)
+		url = base + mgCfg.GenEndpoint
 
 	case internalproviders.MusicShapeGenerateContent:
-		body := buildGeminiMusicBody(parts)
-		return postMusicJSON(ctx, client, buildMusicURL(p, cfg, mgCfg, model), body, headers)
+		body = buildGeminiMusicBody(parts)
+		url = buildMusicURL(p, cfg, mgCfg, model)
 
 	default:
-		return nil, fmt.Errorf("music: unsupported wire shape %q", mgCfg.WireShape)
+		return "", nil, fmt.Errorf("music: unsupported wire shape %q", mgCfg.WireShape)
 	}
+	jsonBody, err := marshalWire(body)
+	if err != nil {
+		return "", nil, fmt.Errorf("marshal music request: %w", err)
+	}
+	return url, jsonBody, nil
 }
 
 // musicBaseURL resolves the base for the music API (Option D): an explicit
@@ -219,14 +267,6 @@ func musicBaseURL(p Provider, cfg providerSpec, mgCfg *internalproviders.MusicGe
 		return mgCfg.BaseURL
 	}
 	return cfg.BaseURL
-}
-
-func postMusicJSON(ctx context.Context, client *http.Client, url string, body map[string]any, headers map[string]string) ([]byte, error) {
-	jsonBody, err := marshalWire(body)
-	if err != nil {
-		return nil, fmt.Errorf("marshal music request: %w", err)
-	}
-	return doPost(ctx, client, url, jsonBody, headers)
 }
 
 // buildVertexMusicBody assembles the Vertex AI Lyria :predict request body.
