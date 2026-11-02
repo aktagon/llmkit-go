@@ -80,6 +80,7 @@ func APIOptions() []APIOptionDef {
 		{GoFunc: "WithTemperature", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithText", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithThinkingBudget", SubOptions: []APISubOptionDef{}},
+		{GoFunc: "WithThinkingType", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithTopK", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithTopP", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithVoice", SubOptions: []APISubOptionDef{}},
