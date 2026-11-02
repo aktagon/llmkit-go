@@ -13,6 +13,22 @@ import (
 // ADR-008, imageRequest already speaks Parts natively, so the
 // translation is just chain → imageRequest{Model, Parts} + options.
 func (b *Image) Generate(ctx context.Context, finalText string) (ImageResponse, error) {
+	provider, req, opts := b.call(finalText)
+	return generateImage(ctx, provider, req, opts...)
+}
+
+// PreviewRequest returns the request body bytes Generate would send for
+// finalText. It runs Generate's validation, opens no connection and fires no
+// middleware. It returns the body only: the URL and headers can carry the key.
+// A multipart body (OpenAI image edits) returns a ValidationError (ADR-106).
+func (b *Image) PreviewRequest(finalText string) ([]byte, error) {
+	provider, req, opts := b.call(finalText)
+	return previewImage(provider, req, opts...)
+}
+
+// call translates the chain into the provider, request and options that
+// Generate and PreviewRequest share.
+func (b *Image) call(finalText string) (Provider, imageRequest, []imageOption) {
 	parts := b.parts
 	if finalText != "" {
 		parts = append(parts, Part{Text: finalText})
@@ -61,8 +77,7 @@ func (b *Image) Generate(ctx context.Context, finalText string) (ImageResponse, 
 		opts = append(opts, withImageRaw())
 	}
 
-	provider := b.client.provider.toProvider(b.model)
-	return generateImage(ctx, provider, req, opts...)
+	return b.client.provider.toProvider(b.model), req, opts
 }
 
 // ExtraFields stages caller-supplied keys for the wire body. Use it to

@@ -133,73 +133,11 @@ func resolveVideoOptions(opts []VideoOption) *videoOptions {
 //
 // Internal helper — the public surface is (*Video).Submit in video_builder.go.
 func submitVideo(ctx context.Context, p Provider, req videoRequest, opts ...VideoOption) (VideoHandle, error) {
-	o := resolveVideoOptions(opts)
-
-	if err := validateProvider(p); err != nil {
-		return VideoHandle{}, err
-	}
-	if req.Model == "" {
-		return VideoHandle{}, &ValidationError{Field: "model", Message: "required for video generation"}
-	}
-
-	parts, err := normalizeVideoParts(req)
+	plan, err := planVideo(p, req, opts)
 	if err != nil {
 		return VideoHandle{}, err
 	}
-
-	cfg, ok := providerSpecs()[p.Name]
-	if !ok {
-		return VideoHandle{}, &ValidationError{Field: "provider", Message: "unknown: " + p.Name}
-	}
-	vgCfg := internalproviders.VideoGenConfig(p.Name)
-	if vgCfg == nil {
-		return VideoHandle{}, &ValidationError{Field: "provider", Message: p.Name + " does not support video generation"}
-	}
-	// ADR-102 MPT-001: an unlisted model (nil) skips the per-model checks;
-	// the config checks below still run.
-	model, listed := lookupModel(vgCfg.Models, req.Model, videoModelID)
-	if err := validateGeminiOmniInputs(vgCfg, parts, req); err != nil {
-		return VideoHandle{}, err
-	}
-
-	if err := checkPartKinds("video_generation", parts); err != nil {
-		return VideoHandle{}, err
-	}
-	for i, part := range parts {
-		// Image-to-video seed frame (BUG-010): a model that states
-		// SupportsImageToVideo SupportNo rejects it pre-flight only on a
-		// config whose provider silently ignores it (ADR-102 MPT-006 G6).
-		if part.Image != nil && listed && statedFalseBlocks(vgCfg.IgnoresUnsupported, "Image", model.SupportsImageToVideo) {
-			return VideoHandle{}, &ValidationError{
-				Field:   fmt.Sprintf("parts[%d]", i),
-				Message: req.Model + " is a text-to-video-only model and does not accept image parts",
-			}
-		}
-	}
-	imageCount := 0
-	for _, part := range parts {
-		if part.Image != nil {
-			imageCount++
-		}
-	}
-	if err := validateVideoFrames(vgCfg, model, imageCount, req); err != nil {
-		return VideoHandle{}, err
-	}
-	if err := validateVideoOptions(p.Name, vgCfg, req); err != nil {
-		return VideoHandle{}, err
-	}
-	// ADR-096: the carried inputs select the submit request; a config with
-	// no such variant cannot send it.
-	variant, err := selectRequestVariant(p.Name, vgCfg.Variants, videoCarries(imageCount, req))
-	if err != nil {
-		return VideoHandle{}, err
-	}
-	// VID-005: output-uri providers (Bedrock Nova Reel) write the video to the
-	// caller's own S3 bucket, so the submit MUST carry a destination URI. Reject
-	// pre-flight rather than letting the provider 400.
-	if vgCfg.RequiresOutputURI && req.OutputURI == "" {
-		return VideoHandle{}, &ValidationError{Field: "output_uri", Message: p.Name + " requires a caller output S3 URI; set OutputURI on the request"}
-	}
+	o, cfg, vgCfg, model, listed, parts, imageCount, variant := plan.o, plan.cfg, plan.vgCfg, plan.model, plan.listed, plan.parts, plan.imageCount, plan.variant
 
 	baseEvent := Event{
 		Op:            OpVideoGeneration,
@@ -225,6 +163,101 @@ func submitVideo(ctx context.Context, p Provider, req videoRequest, opts ...Vide
 		return VideoHandle{}, err
 	}
 	return VideoHandle{ID: requestID, Provider: p, Raw: o.raw, Model: req.Model, KeepStored: o.keepStored}, nil
+}
+
+// videoPlan is what submitVideo's validation resolves before the send.
+type videoPlan struct {
+	o          *videoOptions
+	cfg        providerSpec
+	vgCfg      *internalproviders.VideoGenDef
+	model      *internalproviders.VideoModelDef
+	listed     bool
+	parts      []Part
+	imageCount int
+	variant    internalproviders.RequestVariant
+}
+
+// planVideo runs every pre-flight check of a video submit. submitVideo and
+// previewVideo share it, so a preview fails exactly where a send would.
+func planVideo(p Provider, req videoRequest, opts []VideoOption) (videoPlan, error) {
+	o := resolveVideoOptions(opts)
+
+	if err := validateProvider(p); err != nil {
+		return videoPlan{}, err
+	}
+	if req.Model == "" {
+		return videoPlan{}, &ValidationError{Field: "model", Message: "required for video generation"}
+	}
+
+	parts, err := normalizeVideoParts(req)
+	if err != nil {
+		return videoPlan{}, err
+	}
+
+	cfg, ok := providerSpecs()[p.Name]
+	if !ok {
+		return videoPlan{}, &ValidationError{Field: "provider", Message: "unknown: " + p.Name}
+	}
+	vgCfg := internalproviders.VideoGenConfig(p.Name)
+	if vgCfg == nil {
+		return videoPlan{}, &ValidationError{Field: "provider", Message: p.Name + " does not support video generation"}
+	}
+	// ADR-102 MPT-001: an unlisted model (nil) skips the per-model checks;
+	// the config checks below still run.
+	model, listed := lookupModel(vgCfg.Models, req.Model, videoModelID)
+	if err := validateGeminiOmniInputs(vgCfg, parts, req); err != nil {
+		return videoPlan{}, err
+	}
+
+	if err := checkPartKinds("video_generation", parts); err != nil {
+		return videoPlan{}, err
+	}
+	for i, part := range parts {
+		// Image-to-video seed frame (BUG-010): a model that states
+		// SupportsImageToVideo SupportNo rejects it pre-flight only on a
+		// config whose provider silently ignores it (ADR-102 MPT-006 G6).
+		if part.Image != nil && listed && statedFalseBlocks(vgCfg.IgnoresUnsupported, "Image", model.SupportsImageToVideo) {
+			return videoPlan{}, &ValidationError{
+				Field:   fmt.Sprintf("parts[%d]", i),
+				Message: req.Model + " is a text-to-video-only model and does not accept image parts",
+			}
+		}
+	}
+	imageCount := 0
+	for _, part := range parts {
+		if part.Image != nil {
+			imageCount++
+		}
+	}
+	if err := validateVideoFrames(vgCfg, model, imageCount, req); err != nil {
+		return videoPlan{}, err
+	}
+	if err := validateVideoOptions(p.Name, vgCfg, req); err != nil {
+		return videoPlan{}, err
+	}
+	// ADR-096: the carried inputs select the submit request; a config with
+	// no such variant cannot send it.
+	variant, err := selectRequestVariant(p.Name, vgCfg.Variants, videoCarries(imageCount, req))
+	if err != nil {
+		return videoPlan{}, err
+	}
+	// VID-005: output-uri providers (Bedrock Nova Reel) write the video to the
+	// caller's own S3 bucket, so the submit MUST carry a destination URI. Reject
+	// pre-flight rather than letting the provider 400.
+	if vgCfg.RequiresOutputURI && req.OutputURI == "" {
+		return videoPlan{}, &ValidationError{Field: "output_uri", Message: p.Name + " requires a caller output S3 URI; set OutputURI on the request"}
+	}
+	return videoPlan{o: o, cfg: cfg, vgCfg: vgCfg, model: model, listed: listed, parts: parts, imageCount: imageCount, variant: variant}, nil
+}
+
+// previewVideo returns the body submitVideo would send (ADR-106).
+func previewVideo(p Provider, req videoRequest, opts ...VideoOption) ([]byte, error) {
+	plan, err := planVideo(p, req, opts)
+	if err != nil {
+		return nil, err
+	}
+	body, _, err := buildVideoSubmit(plan.vgCfg, req, plan.parts, nil)
+	return body, err
 }
 
 // dispatchVideoSubmit POSTs the submit body and returns the provider-assigned
@@ -254,6 +287,49 @@ func dispatchVideoSubmit(
 	headers map[string]string,
 ) (string, error) {
 	base := videoBaseURL(p, cfg, vgCfg)
+	model := req.Model
+
+	jsonBody, headers, err := buildVideoSubmit(vgCfg, req, parts, headers)
+	if err != nil {
+		return "", err
+	}
+
+	// {model} in the submit endpoint is substituted with the per-call model
+	// (Veo's :predictLongRunning path); a no-op for providers that carry the
+	// model in the body. Query-param auth (Google ?key=) is appended last.
+	submitEndpoint := strings.ReplaceAll(variant.Endpoint, "{model}", model)
+	submitURL := appendVideoAuth(base+submitEndpoint, p, cfg)
+
+	var respBody []byte
+	if cfg.AuthScheme == internalproviders.AuthSigV4 {
+		// Bedrock signs every request (SigV4); the bearer/query-param header map
+		// does not apply. Region/secret/session come from the AWS env vars.
+		region := os.Getenv(cfg.RegionEnvVar)
+		secretKey := os.Getenv(cfg.SecretKeyEnvVar)
+		sessionToken := os.Getenv(cfg.SessionTokenEnvVar)
+		respBody, err = doSigV4Post(ctx, client, submitURL, jsonBody, p.APIKey, secretKey, sessionToken, region, cfg.ServiceName, p.Headers)
+	} else {
+		respBody, err = doPost(ctx, client, submitURL, jsonBody, headers)
+	}
+	if err != nil {
+		return "", err
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(respBody, &raw); err != nil {
+		return "", fmt.Errorf("unmarshal video submit response: %w", err)
+	}
+
+	id := lookupHandleField(raw, vgCfg.SubmitHandleField)
+	if id == "" {
+		return "", fmt.Errorf("video submit: empty handle field %q", vgCfg.SubmitHandleField)
+	}
+	return id, nil
+}
+
+// buildVideoSubmit serializes the submit body of a video request and adds
+// the per-shape submit headers. The send and PreviewRequest both call it, so a
+// preview carries the sent bytes (ADR-106).
+func buildVideoSubmit(vgCfg *internalproviders.VideoGenDef, req videoRequest, parts []Part, headers map[string]string) ([]byte, map[string]string, error) {
 	model, outputURI := req.Model, req.OutputURI
 
 	var body map[string]any
@@ -291,7 +367,7 @@ func dispatchVideoSubmit(
 		// (read 2026-10-15).
 		seed, err := videoSeedImage(parts)
 		if err != nil {
-			return "", err
+			return nil, nil, err
 		}
 		if seed != nil {
 			instance["image"] = veoImage(seed)
@@ -375,7 +451,7 @@ func dispatchVideoSubmit(
 		// (live probe 2026-10-18; openrouter.ai/openapi.json).
 		seed, err := videoSeedImage(parts)
 		if err != nil {
-			return "", err
+			return nil, nil, err
 		}
 		if seed != nil {
 			frames := []map[string]any{openRouterFrame(seed, "first_frame")}
@@ -398,7 +474,7 @@ func dispatchVideoSubmit(
 		// existing video-grok golden is unchanged.
 		seed, err := videoSeedImageURL(parts)
 		if err != nil {
-			return "", err
+			return nil, nil, err
 		}
 		if seed != "" {
 			body["image"] = map[string]any{"url": seed}
@@ -409,43 +485,13 @@ func dispatchVideoSubmit(
 			setRootVideoOptions(body, req)
 		}
 	default:
-		return "", fmt.Errorf("video submit: unsupported wire shape %q", vgCfg.WireShape)
+		return nil, nil, fmt.Errorf("video submit: unsupported wire shape %q", vgCfg.WireShape)
 	}
 	jsonBody, err := marshalWire(body)
 	if err != nil {
-		return "", fmt.Errorf("marshal video request: %w", err)
+		return nil, nil, fmt.Errorf("marshal video request: %w", err)
 	}
-
-	// {model} in the submit endpoint is substituted with the per-call model
-	// (Veo's :predictLongRunning path); a no-op for providers that carry the
-	// model in the body. Query-param auth (Google ?key=) is appended last.
-	submitEndpoint := strings.ReplaceAll(variant.Endpoint, "{model}", model)
-	submitURL := appendVideoAuth(base+submitEndpoint, p, cfg)
-
-	var respBody []byte
-	if cfg.AuthScheme == internalproviders.AuthSigV4 {
-		// Bedrock signs every request (SigV4); the bearer/query-param header map
-		// does not apply. Region/secret/session come from the AWS env vars.
-		region := os.Getenv(cfg.RegionEnvVar)
-		secretKey := os.Getenv(cfg.SecretKeyEnvVar)
-		sessionToken := os.Getenv(cfg.SessionTokenEnvVar)
-		respBody, err = doSigV4Post(ctx, client, submitURL, jsonBody, p.APIKey, secretKey, sessionToken, region, cfg.ServiceName, p.Headers)
-	} else {
-		respBody, err = doPost(ctx, client, submitURL, jsonBody, headers)
-	}
-	if err != nil {
-		return "", err
-	}
-	var raw map[string]any
-	if err := json.Unmarshal(respBody, &raw); err != nil {
-		return "", fmt.Errorf("unmarshal video submit response: %w", err)
-	}
-
-	id := lookupHandleField(raw, vgCfg.SubmitHandleField)
-	if id == "" {
-		return "", fmt.Errorf("video submit: empty handle field %q", vgCfg.SubmitHandleField)
-	}
-	return id, nil
+	return jsonBody, headers, nil
 }
 
 // Wait polls the provider until the video job reaches a terminal state, then

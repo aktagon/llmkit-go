@@ -77,30 +77,11 @@ func resolveSpeechOptions(opts []speechOption) *speechOptions {
 //
 // Internal helper — the public surface is (*Speech).Generate in speech_builder.go.
 func generateSpeech(ctx context.Context, p Provider, req speechRequest, opts ...speechOption) (SpeechResponse, error) {
-	o := resolveSpeechOptions(opts)
-
-	if err := validateProvider(p); err != nil {
+	plan, err := planSpeech(p, req, opts)
+	if err != nil {
 		return SpeechResponse{}, err
 	}
-	if req.Model == "" {
-		return SpeechResponse{}, &ValidationError{Field: "model", Message: "required for speech generation"}
-	}
-	if err := validateSpeechInputs(req); err != nil {
-		return SpeechResponse{}, err
-	}
-
-	cfg, ok := providerSpecs()[p.Name]
-	if !ok {
-		return SpeechResponse{}, &ValidationError{Field: "provider", Message: "unknown: " + p.Name}
-	}
-	sgCfg := internalproviders.SpeechGenConfig(p.Name)
-	if sgCfg == nil {
-		return SpeechResponse{}, &ValidationError{Field: "provider", Message: p.Name + " does not support speech generation"}
-	}
-	model, listed := lookupModel(sgCfg.Models, req.Model, speechModelID)
-	if err := validateSpeechModel(req, sgCfg, model); err != nil {
-		return SpeechResponse{}, err
-	}
+	o, cfg, sgCfg, model, listed := plan.o, plan.cfg, plan.sgCfg, plan.model, plan.listed
 
 	baseEvent := Event{
 		Op:            OpSpeechGeneration,
@@ -135,6 +116,54 @@ func generateSpeech(ctx context.Context, p Provider, req speechRequest, opts ...
 	postEv.Duration = time.Since(start)
 	firePost(ctx, o.middleware, postEv)
 	return resp, parseErr
+}
+
+// speechPlan is what generateSpeech's validation resolves before the send.
+type speechPlan struct {
+	o      *speechOptions
+	cfg    providerSpec
+	sgCfg  *internalproviders.SpeechGenDef
+	model  *internalproviders.SpeechModelDef
+	listed bool
+}
+
+// planSpeech runs every pre-flight check of a speech request. generateSpeech
+// and previewSpeech share it, so a preview fails exactly where a send would.
+func planSpeech(p Provider, req speechRequest, opts []speechOption) (speechPlan, error) {
+	o := resolveSpeechOptions(opts)
+
+	if err := validateProvider(p); err != nil {
+		return speechPlan{}, err
+	}
+	if req.Model == "" {
+		return speechPlan{}, &ValidationError{Field: "model", Message: "required for speech generation"}
+	}
+	if err := validateSpeechInputs(req); err != nil {
+		return speechPlan{}, err
+	}
+
+	cfg, ok := providerSpecs()[p.Name]
+	if !ok {
+		return speechPlan{}, &ValidationError{Field: "provider", Message: "unknown: " + p.Name}
+	}
+	sgCfg := internalproviders.SpeechGenConfig(p.Name)
+	if sgCfg == nil {
+		return speechPlan{}, &ValidationError{Field: "provider", Message: p.Name + " does not support speech generation"}
+	}
+	model, listed := lookupModel(sgCfg.Models, req.Model, speechModelID)
+	if err := validateSpeechModel(req, sgCfg, model); err != nil {
+		return speechPlan{}, err
+	}
+	return speechPlan{o: o, cfg: cfg, sgCfg: sgCfg, model: model, listed: listed}, nil
+}
+
+// previewSpeech returns the body generateSpeech would send (ADR-106).
+func previewSpeech(p Provider, req speechRequest, opts ...speechOption) ([]byte, error) {
+	plan, err := planSpeech(p, req, opts)
+	if err != nil {
+		return nil, err
+	}
+	return buildSpeechJSON(plan.sgCfg, req)
 }
 
 // dispatchSpeechHTTP picks a wire shape per provider config (never by provider
@@ -177,6 +206,16 @@ func dispatchSpeechHTTP(
 		url += "?" + cfg.AuthQueryParam + "=" + p.APIKey
 	}
 
+	jsonBody, err := buildSpeechJSON(sgCfg, req)
+	if err != nil {
+		return nil, err
+	}
+	return doPost(ctx, client, url, jsonBody, headers)
+}
+
+// buildSpeechJSON serializes the body of a speech request. The send and
+// PreviewRequest both call it, so a preview carries the sent bytes (ADR-106).
+func buildSpeechJSON(sgCfg *internalproviders.SpeechGenDef, req speechRequest) ([]byte, error) {
 	var body map[string]any
 	switch sgCfg.WireShape {
 	case internalproviders.SpeechShapeOpenAI:
@@ -196,7 +235,7 @@ func dispatchSpeechHTTP(
 	if err != nil {
 		return nil, fmt.Errorf("marshal speech request: %w", err)
 	}
-	return doPost(ctx, client, url, jsonBody, headers)
+	return jsonBody, nil
 }
 
 // buildInworldSpeechBody assembles the Inworld /tts/v1/voice request body.
