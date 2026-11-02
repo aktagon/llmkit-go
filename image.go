@@ -175,55 +175,11 @@ func resolveImageOptions(opts []imageOption) *imageOptions {
 // Internal helper as of plan-018 D1.3c — public surface is
 // (*Image).Generate in image_builder.go.
 func generateImage(ctx context.Context, p Provider, req imageRequest, opts ...imageOption) (ImageResponse, error) {
-	o := resolveImageOptions(opts)
-
-	if err := validateProvider(p); err != nil {
-		return ImageResponse{}, err
-	}
-	if req.Model == "" {
-		return ImageResponse{}, &ValidationError{Field: "model", Message: "required for image generation"}
-	}
-
-	parts, err := normalizeImageParts(req)
+	plan, err := planImage(p, req, opts)
 	if err != nil {
 		return ImageResponse{}, err
 	}
-	if err := checkPartKinds("image_generation", parts); err != nil {
-		return ImageResponse{}, err
-	}
-
-	cfg, ok := providerSpecs()[p.Name]
-	if !ok {
-		return ImageResponse{}, &ValidationError{Field: "provider", Message: "unknown: " + p.Name}
-	}
-	imgCfg := internalproviders.ImageGenConfig(p.Name)
-	if imgCfg == nil {
-		return ImageResponse{}, &ValidationError{Field: "provider", Message: p.Name + " does not support image generation"}
-	}
-	// ADR-102 MPT-001: an unlisted model (nil) skips the per-model checks.
-	model, listed := lookupModel(imgCfg.Models, req.Model, imageModelID)
-	// ADR-102 MPT-006 G5: a listed model's aspect ratios and sizes are hints,
-	// not blocks. The provider answers an off-list value.
-	imageCount := 0
-	for _, part := range parts {
-		if part.Image != nil {
-			imageCount++
-		}
-	}
-	if err := validateImageArity(imgCfg, model, imageCount); err != nil {
-		return ImageResponse{}, err
-	}
-
-	// ADR-096: the request's parts pick the wire request; a config with no
-	// variant for those inputs cannot send it.
-	variant, err := selectRequestVariant(p.Name, imgCfg.Variants, partsCarry(imageCount, internalproviders.WithReferenceImages))
-	if err != nil {
-		return ImageResponse{}, err
-	}
-
-	if err := validateImageShapeOptions(p.Name, variant.Shape, o); err != nil {
-		return ImageResponse{}, err
-	}
+	o, cfg, imgCfg, model, listed, parts, imageCount, variant := plan.o, plan.cfg, plan.imgCfg, plan.model, plan.listed, plan.parts, plan.imageCount, plan.variant
 
 	baseEvent := Event{
 		Op:            OpImageGeneration,
@@ -261,6 +217,83 @@ func generateImage(ctx context.Context, p Provider, req imageRequest, opts ...im
 	postEv.Duration = time.Since(start)
 	firePost(ctx, o.middleware, postEv)
 	return resp, parseErr
+}
+
+// imagePlan is what generateImage's validation resolves before the send:
+// the options, provider config, model and the selected request variant.
+type imagePlan struct {
+	o          *imageOptions
+	cfg        providerSpec
+	imgCfg     *internalproviders.ImageGenDef
+	model      *internalproviders.ImageModelDef
+	listed     bool
+	parts      []Part
+	imageCount int
+	variant    internalproviders.RequestVariant
+}
+
+// planImage runs every pre-flight check of an image request. generateImage
+// and previewImage share it, so a preview fails exactly where a send would.
+func planImage(p Provider, req imageRequest, opts []imageOption) (imagePlan, error) {
+	o := resolveImageOptions(opts)
+
+	if err := validateProvider(p); err != nil {
+		return imagePlan{}, err
+	}
+	if req.Model == "" {
+		return imagePlan{}, &ValidationError{Field: "model", Message: "required for image generation"}
+	}
+
+	parts, err := normalizeImageParts(req)
+	if err != nil {
+		return imagePlan{}, err
+	}
+	if err := checkPartKinds("image_generation", parts); err != nil {
+		return imagePlan{}, err
+	}
+
+	cfg, ok := providerSpecs()[p.Name]
+	if !ok {
+		return imagePlan{}, &ValidationError{Field: "provider", Message: "unknown: " + p.Name}
+	}
+	imgCfg := internalproviders.ImageGenConfig(p.Name)
+	if imgCfg == nil {
+		return imagePlan{}, &ValidationError{Field: "provider", Message: p.Name + " does not support image generation"}
+	}
+	// ADR-102 MPT-001: an unlisted model (nil) skips the per-model checks.
+	model, listed := lookupModel(imgCfg.Models, req.Model, imageModelID)
+	// ADR-102 MPT-006 G5: a listed model's aspect ratios and sizes are hints,
+	// not blocks. The provider answers an off-list value.
+	imageCount := 0
+	for _, part := range parts {
+		if part.Image != nil {
+			imageCount++
+		}
+	}
+	if err := validateImageArity(imgCfg, model, imageCount); err != nil {
+		return imagePlan{}, err
+	}
+
+	// ADR-096: the request's parts pick the wire request; a config with no
+	// variant for those inputs cannot send it.
+	variant, err := selectRequestVariant(p.Name, imgCfg.Variants, partsCarry(imageCount, internalproviders.WithReferenceImages))
+	if err != nil {
+		return imagePlan{}, err
+	}
+
+	if err := validateImageShapeOptions(p.Name, variant.Shape, o); err != nil {
+		return imagePlan{}, err
+	}
+	return imagePlan{o: o, cfg: cfg, imgCfg: imgCfg, model: model, listed: listed, parts: parts, imageCount: imageCount, variant: variant}, nil
+}
+
+// previewImage returns the body generateImage would send (ADR-106).
+func previewImage(p Provider, req imageRequest, opts ...imageOption) ([]byte, error) {
+	plan, err := planImage(p, req, opts)
+	if err != nil {
+		return nil, err
+	}
+	return buildImageJSON(plan.variant, req.Model, plan.parts, plan.o)
 }
 
 // validateImageShapeOptions is the per-request-shape knob validation. Quality, OutputFormat, Background
@@ -422,11 +455,25 @@ func dispatchImageHTTP(
 		url = base + variant.Endpoint
 	}
 
+	if variant.Shape == internalproviders.MultipartForm {
+		files, fields := buildOpenAIEditMultipart(parts, model, o)
+		return doMultipartPostMulti(ctx, client, url, files, fields, headers)
+	}
+	jsonBody, err := buildImageJSON(variant, model, parts, o)
+	if err != nil {
+		return nil, err
+	}
+	return doPost(ctx, client, url, jsonBody, headers)
+}
+
+// buildImageJSON serializes the JSON body of the selected image request.
+// The send and PreviewRequest both call it, so a preview carries the sent
+// bytes. A multipart request has no JSON body to preview (ADR-106 PRV-005).
+func buildImageJSON(variant internalproviders.RequestVariant, model string, parts []Part, o *imageOptions) ([]byte, error) {
 	var body map[string]any
 	switch variant.Shape {
 	case internalproviders.MultipartForm:
-		files, fields := buildOpenAIEditMultipart(parts, model, o)
-		return doMultipartPostMulti(ctx, client, url, files, fields, headers)
+		return nil, &ValidationError{Field: "preview", Message: "not available for a multipart request body"}
 	case internalproviders.JSONGenerationsOpenAI:
 		body = buildOpenAIGenBody(parts, model, o)
 	case internalproviders.JSONInlineRefs:
@@ -445,7 +492,7 @@ func dispatchImageHTTP(
 	if err != nil {
 		return nil, fmt.Errorf("marshal image request: %w", err)
 	}
-	return doPost(ctx, client, url, jsonBody, headers)
+	return jsonBody, nil
 }
 
 // buildOpenAIGenBody assembles the JSON body for /v1/images/generations.

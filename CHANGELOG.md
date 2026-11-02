@@ -7,7 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.2.0] — 2026-11-02
+
 ### Added
+
+- **`PreviewRequest(text)` on `Image`, `Music`, `Speech` and `Video`
+  returns the request body the builder would send, without sending it.** It
+  needs no network and no real key: any non-empty key works. It runs the same
+  checks as `Generate` or `Submit`, so an invalid request fails the same way,
+  and it calls no middleware. It returns the body bytes only, never the URL
+  or headers, which can carry the key. OpenAI image edits send a multipart
+  body, so they return a `ValidationError` on field `preview`. Example:
+  `body, err := c.Image.Model("gemini-2.5-flash-image").AspectRatio("16:9").PreviewRequest("a red fox")`.
 
 - **`ThinkingType(mode)` on `Text` and `Agent`, and `Request.ThinkingType`,
   set Anthropic's `thinking.type`.** The modes are `adaptive`, `enabled`,
