@@ -240,25 +240,6 @@ func WireShapeResponseModelPath(chatWireShape string) string {
 	}
 }
 
-// FinishReason is why a chat response stopped, in one vocabulary shared by
-// every provider (ADR-099 CRF-001). Response.FinishReason holds one; the
-// provider's own string is in Response.ProviderFinishReason.
-type FinishReason string
-
-// Canonical finish reasons.
-const (
-	// FinishContentFilter: The provider withheld or cut the output because its content filter flagged it.
-	FinishContentFilter FinishReason = "content_filter"
-	// FinishLength: The response reached the output-token limit set in the request.
-	FinishLength FinishReason = "length"
-	// FinishOther: Any wire value with no entry in the table (CRF-011). The provider's string is kept verbatim.
-	FinishOther FinishReason = "other"
-	// FinishStop: The model reached a natural stop point or a caller-provided stop sequence.
-	FinishStop FinishReason = "stop"
-	// FinishToolCalls: The model stopped to call one or more tools.
-	FinishToolCalls FinishReason = "tool_calls"
-)
-
 // FinishReasonEntry is one row of a chat wire shape's finish-reason table
 // (ADR-099 CRF-004): a provider wire value and the canonical value it means.
 // DetailPath and DetailValue are set only when the wire value fuses two

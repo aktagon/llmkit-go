@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aktagon/llmkit-go/v3/providers"
+	internalproviders "github.com/aktagon/llmkit-go/v3/internal/providers"
 )
 
 // Catalogue error sentinels (ADR-019). Provider live calls map to:
@@ -123,7 +123,7 @@ func (b *ScopedModels) runList(ctx context.Context) ([]ModelInfo, error) {
 
 // cached returns the provider's cached records, unless the chain asked for
 // a fresh call.
-func (b *ScopedModels) cached() ([]providers.ParsedModelRecord, bool) {
+func (b *ScopedModels) cached() ([]internalproviders.ParsedModelRecord, bool) {
 	if b.fresh {
 		return nil, false
 	}
@@ -148,7 +148,7 @@ func (b *ScopedModels) cacheKey() string {
 // fires once per call (not once per page) — pre fires before the first
 // request, post fires after the final page (or first error). A list served
 // from the cache makes no call and fires no event.
-func (b *ScopedModels) fetchList(ctx context.Context) ([]providers.ParsedModelRecord, error) {
+func (b *ScopedModels) fetchList(ctx context.Context) ([]internalproviders.ParsedModelRecord, error) {
 	cfg, ok := catalogueByProvider[b.target.Name]
 	if !ok {
 		return nil, ErrModelsNotSupported
@@ -160,8 +160,8 @@ func (b *ScopedModels) fetchList(ctx context.Context) ([]providers.ParsedModelRe
 	provider := b.client.provider.toProvider("")
 	httpClient := withRequestTimeout(http.DefaultClient, provider.Timeout)
 
-	baseEvent := providers.Event{
-		Op:       providers.OpModelsList,
+	baseEvent := Event{
+		Op:       OpModelsList,
 		Provider: b.target.Name,
 	}
 	// Client-scoped hooks (telemetry, ADR-054) observe catalogue calls too
@@ -192,7 +192,7 @@ func (b *ScopedModels) runGet(ctx context.Context, id string) (ModelInfo, error)
 	if records, ok := b.cached(); ok {
 		for _, rec := range records {
 			if rec.ID == id {
-				return b.enrich([]providers.ParsedModelRecord{rec})[0], nil
+				return b.enrich([]internalproviders.ParsedModelRecord{rec})[0], nil
 			}
 		}
 	}
@@ -210,8 +210,8 @@ func (b *ScopedModels) runGet(ctx context.Context, id string) (ModelInfo, error)
 	provider := b.client.provider.toProvider("")
 	httpClient := withRequestTimeout(http.DefaultClient, provider.Timeout)
 
-	baseEvent := providers.Event{
-		Op:       providers.OpModelsList,
+	baseEvent := Event{
+		Op:       OpModelsList,
 		Provider: b.target.Name,
 		Model:    id,
 	}
@@ -234,7 +234,7 @@ func (b *ScopedModels) runGet(ctx context.Context, id string) (ModelInfo, error)
 	if perr != nil {
 		return ModelInfo{}, fmt.Errorf("%w: %v", ErrModelsUnavailable, perr)
 	}
-	infos := b.enrich([]providers.ParsedModelRecord{rec})
+	infos := b.enrich([]internalproviders.ParsedModelRecord{rec})
 	return infos[0], nil
 }
 
@@ -242,8 +242,8 @@ func (b *ScopedModels) runGet(ctx context.Context, id string) (ModelInfo, error)
 // style. The parser returns NextCursor uniformly — empty means stop —
 // so the loop body stays shape-agnostic. cursor seeds the first call
 // (always "") and is then read off each parsed page.
-func paginate(ctx context.Context, httpClient *http.Client, p Provider, pcfg providerSpec, cfg catalogueConfig, cursor string) ([]providers.ParsedModelRecord, error) {
-	var all []providers.ParsedModelRecord
+func paginate(ctx context.Context, httpClient *http.Client, p Provider, pcfg providerSpec, cfg catalogueConfig, cursor string) ([]internalproviders.ParsedModelRecord, error) {
+	var all []internalproviders.ParsedModelRecord
 	headers := buildCatalogueHeaders(p, pcfg)
 	for {
 		reqURL := listPageURL(p, pcfg, cfg, cursor)
@@ -299,16 +299,16 @@ func appendCursor(rawURL, cursorParam, cursor string) string {
 //
 // ModelsParserKind instance in tbox + new case here. Vertex/Bedrock
 // fall through to ErrModelsNotSupported pending dedicated parsers.
-func dispatchParser(kind string, body []byte) (providers.ParsedModelsPage, error) {
+func dispatchParser(kind string, body []byte) (internalproviders.ParsedModelsPage, error) {
 	switch kind {
 	case "ParseAnthropicModels":
-		return providers.ParseAnthropicModelsResponse(body)
+		return internalproviders.ParseAnthropicModelsResponse(body)
 	case "ParseGoogleModels":
-		return providers.ParseGoogleModelsResponse(body)
+		return internalproviders.ParseGoogleModelsResponse(body)
 	case "ParseOpenAICohortModels":
-		return providers.ParseOpenAICohortModelsResponse(body)
+		return internalproviders.ParseOpenAICohortModelsResponse(body)
 	default:
-		return providers.ParsedModelsPage{}, ErrModelsNotSupported
+		return internalproviders.ParsedModelsPage{}, ErrModelsNotSupported
 	}
 }
 
@@ -316,28 +316,28 @@ func dispatchParser(kind string, body []byte) (providers.ParsedModelsPage, error
 // path. Each provider returns the single record inline (no envelope) at
 // /v1/models/{id} — wrap it into a one-record list and reuse the same
 // parser to keep wire-format mapping single-sourced.
-func parseSingleRecord(kind string, body []byte) (providers.ParsedModelRecord, error) {
+func parseSingleRecord(kind string, body []byte) (internalproviders.ParsedModelRecord, error) {
 	switch kind {
 	case "ParseAnthropicModels":
-		page, err := providers.ParseAnthropicModelsResponse(wrapInList(body, "data"))
+		page, err := internalproviders.ParseAnthropicModelsResponse(wrapInList(body, "data"))
 		if err != nil || len(page.Records) == 0 {
-			return providers.ParsedModelRecord{}, fmt.Errorf("parse anthropic single record: %v", err)
+			return internalproviders.ParsedModelRecord{}, fmt.Errorf("parse anthropic single record: %v", err)
 		}
 		return page.Records[0], nil
 	case "ParseGoogleModels":
-		page, err := providers.ParseGoogleModelsResponse(wrapInList(body, "models"))
+		page, err := internalproviders.ParseGoogleModelsResponse(wrapInList(body, "models"))
 		if err != nil || len(page.Records) == 0 {
-			return providers.ParsedModelRecord{}, fmt.Errorf("parse google single record: %v", err)
+			return internalproviders.ParsedModelRecord{}, fmt.Errorf("parse google single record: %v", err)
 		}
 		return page.Records[0], nil
 	case "ParseOpenAICohortModels":
-		page, err := providers.ParseOpenAICohortModelsResponse(wrapInList(body, "data"))
+		page, err := internalproviders.ParseOpenAICohortModelsResponse(wrapInList(body, "data"))
 		if err != nil || len(page.Records) == 0 {
-			return providers.ParsedModelRecord{}, fmt.Errorf("parse openai single record: %v", err)
+			return internalproviders.ParsedModelRecord{}, fmt.Errorf("parse openai single record: %v", err)
 		}
 		return page.Records[0], nil
 	default:
-		return providers.ParsedModelRecord{}, ErrModelsNotSupported
+		return internalproviders.ParsedModelRecord{}, ErrModelsNotSupported
 	}
 }
 
@@ -356,7 +356,7 @@ func buildCatalogueURL(p Provider, pcfg providerSpec, endpoint string) string {
 	if base == "" {
 		base = pcfg.BaseURL
 	}
-	if pcfg.AuthScheme == providers.AuthQueryParamKey {
+	if pcfg.AuthScheme == internalproviders.AuthQueryParamKey {
 		sep := "?"
 		if strings.Contains(endpoint, "?") {
 			sep = "&"
@@ -374,9 +374,9 @@ func buildCatalogueURL(p Provider, pcfg providerSpec, endpoint string) string {
 func buildCatalogueHeaders(p Provider, pcfg providerSpec) map[string]string {
 	headers := map[string]string{}
 	switch pcfg.AuthScheme {
-	case providers.AuthBearerToken:
+	case internalproviders.AuthBearerToken:
 		headers[pcfg.AuthHeader] = pcfg.AuthPrefix + " " + p.APIKey
-	case providers.AuthHeaderAPIKey:
+	case internalproviders.AuthHeaderAPIKey:
 		headers[pcfg.AuthHeader] = p.APIKey
 	}
 	if pcfg.RequiredHeader != "" {
@@ -408,7 +408,7 @@ func mapCatalogueHTTPErr(status int, body []byte, herr error) error {
 //
 // (when Raw() was in the chain) the parser-captured Raw json. Unknown
 // IDs surface with Capabilities == nil per ADR OQ-6.
-func (b *ScopedModels) enrich(records []providers.ParsedModelRecord) []ModelInfo {
+func (b *ScopedModels) enrich(records []internalproviders.ParsedModelRecord) []ModelInfo {
 	out := make([]ModelInfo, 0, len(records))
 	for _, rec := range records {
 		info := ModelInfo{
@@ -436,17 +436,17 @@ func (b *ScopedModels) enrich(records []providers.ParsedModelRecord) []ModelInfo
 // image, video and speech generation (ADR-102 MPT-008). Each is nil when
 // the capability's catalogue does not list the model.
 func catalogueHints(provider, modelID string) (image *ImageHints, video *VideoHints, speech *SpeechHints) {
-	if cfg := providers.ImageGenConfig(provider); cfg != nil {
+	if cfg := internalproviders.ImageGenConfig(provider); cfg != nil {
 		if m, ok := lookupModel(cfg.Models, modelID, imageModelID); ok {
 			image = imageHints(m)
 		}
 	}
-	if cfg := providers.VideoGenConfig(provider); cfg != nil {
+	if cfg := internalproviders.VideoGenConfig(provider); cfg != nil {
 		if m, ok := lookupModel(cfg.Models, modelID, videoModelID); ok {
 			video = videoHints(m)
 		}
 	}
-	if cfg := providers.SpeechGenConfig(provider); cfg != nil {
+	if cfg := internalproviders.SpeechGenConfig(provider); cfg != nil {
 		if m, ok := lookupModel(cfg.Models, modelID, speechModelID); ok {
 			speech = &SpeechHints{Style: m.SupportsSpeechStyle}
 		}
@@ -456,17 +456,18 @@ func catalogueHints(provider, modelID string) (image *ImageHints, video *VideoHi
 
 // imageHints copies one image model's facts. The lists are copies, so a
 // caller cannot change the compiled facts.
-func imageHints(m *providers.ImageModelDef) *ImageHints {
+func imageHints(m *internalproviders.ImageModelDef) *ImageHints {
 	return &ImageHints{
-		AspectRatios: slices.Clone(m.AspectRatios),
-		Sizes:        slices.Clone(m.ImageSizes),
-		ImageInput:   m.SupportsImageInput,
+		AspectRatios:   slices.Clone(m.AspectRatios),
+		Sizes:          slices.Clone(m.ImageSizes),
+		ImageInput:     m.SupportsImageInput,
+		MaxInputImages: m.MaxInputImages,
 	}
 }
 
 // videoHints copies one video model's facts. The lists are copies, so a
 // caller cannot change the compiled facts.
-func videoHints(m *providers.VideoModelDef) *VideoHints {
+func videoHints(m *internalproviders.VideoModelDef) *VideoHints {
 	return &VideoHints{
 		Resolutions:        slices.Clone(m.Resolutions),
 		AspectRatios:       slices.Clone(m.AspectRatios),
@@ -474,5 +475,6 @@ func videoHints(m *providers.VideoModelDef) *VideoHints {
 		ImageToVideo:       m.SupportsImageToVideo,
 		LastFrame:          m.SupportsLastFrame,
 		ReferenceImages:    m.SupportsReferenceImages,
+		MaxInputImages:     m.MaxInputImages,
 	}
 }

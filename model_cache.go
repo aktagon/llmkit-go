@@ -4,7 +4,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/aktagon/llmkit-go/v3/providers"
+	internalproviders "github.com/aktagon/llmkit-go/v3/internal/providers"
 )
 
 // modelCacheTTL is how long a provider's live model list stays fresh
@@ -23,7 +23,7 @@ type modelCache struct {
 }
 
 type modelCacheEntry struct {
-	records   []providers.ParsedModelRecord
+	records   []internalproviders.ParsedModelRecord
 	fetchedAt time.Time
 }
 
@@ -33,7 +33,7 @@ func newModelCache() *modelCache {
 
 // get returns the cached records for key when they are younger than
 // modelCacheTTL.
-func (c *modelCache) get(key string) ([]providers.ParsedModelRecord, bool) {
+func (c *modelCache) get(key string) ([]internalproviders.ParsedModelRecord, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	e, ok := c.entries[key]
@@ -44,7 +44,7 @@ func (c *modelCache) get(key string) ([]providers.ParsedModelRecord, bool) {
 }
 
 // put stores a successful live list. Failed calls never reach it.
-func (c *modelCache) put(key string, records []providers.ParsedModelRecord) {
+func (c *modelCache) put(key string, records []internalproviders.ParsedModelRecord) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.entries[key] = modelCacheEntry{records: records, fetchedAt: c.now()}

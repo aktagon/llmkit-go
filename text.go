@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aktagon/llmkit-go/v3/providers"
+	internalproviders "github.com/aktagon/llmkit-go/v3/internal/providers"
 )
 
 // Prompt executes the chained ChatCompletion request against the
@@ -46,8 +46,8 @@ func (b *Text) Prompt(ctx context.Context, finalText string) (Response, error) {
 	model, body := chat.req.Model, chat.body
 	headers := sendHeaders(p, cfg, chat.content)
 
-	baseEvent := providers.Event{
-		Op:            providers.OpLLMRequest,
+	baseEvent := Event{
+		Op:            OpLLMRequest,
 		Provider:      p.Name,
 		Model:         model,
 		ModelUnlisted: !chatModelListed(p.Name, model),
@@ -79,7 +79,7 @@ func (b *Text) Prompt(ctx context.Context, finalText string) (Response, error) {
 	url := sendURL(p, cfg, requestPath(cfg, model))
 
 	var respBody []byte
-	if cfg.AuthScheme == providers.AuthSigV4 {
+	if cfg.AuthScheme == internalproviders.AuthSigV4 {
 		region := os.Getenv(cfg.RegionEnvVar)
 		secretKey := os.Getenv(cfg.SecretKeyEnvVar)
 		sessionToken := os.Getenv(cfg.SessionTokenEnvVar)
