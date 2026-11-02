@@ -55,3 +55,38 @@ const (
 	// SupportNo: a source states the model does not support it.
 	SupportNo
 )
+
+// Capability names one of the SDK's modelled capabilities. ModelInfo.Capabilities
+// and ProviderInfo.Capabilities hold these; they are never read from provider
+// wire data. A model lists CapSpeechGeneration, CapMusicGeneration or
+// CapVideoGeneration when the provider's speech, music or video model list
+// holds it (ADR-102 MPT-010).
+type Capability string
+
+// The Capability values.
+const (
+	// CapChatCompletion: text generation.
+	CapChatCompletion Capability = "chat_completion"
+	// CapImageGeneration: image generation.
+	CapImageGeneration Capability = "image_generation"
+	// CapToolCalling: tool calling.
+	CapToolCalling Capability = "tool_calling"
+	// CapFileUpload: file upload.
+	CapFileUpload Capability = "file_upload"
+	// CapBatching: batch execution.
+	CapBatching Capability = "batching"
+	// CapCaching: prompt caching.
+	CapCaching Capability = "caching"
+	// CapReasoning: reasoning.
+	CapReasoning Capability = "reasoning"
+	// CapCatalogue: the model catalogue.
+	CapCatalogue Capability = "catalogue"
+	// CapSpeechGeneration: speech generation.
+	CapSpeechGeneration Capability = "speech_generation"
+	// CapMusicGeneration: music generation.
+	CapMusicGeneration Capability = "music_generation"
+	// CapVideoGeneration: video generation.
+	CapVideoGeneration Capability = "video_generation"
+	// CapTranscription: speech-to-text transcription.
+	CapTranscription Capability = "transcription"
+)

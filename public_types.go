@@ -117,6 +117,42 @@ const (
 	SupportNo Support = providers.SupportNo
 )
 
+// Capability names one of the SDK's modelled capabilities. ModelInfo.Capabilities
+// and ProviderInfo.Capabilities hold these; they are never read from provider
+// wire data. A model lists CapSpeechGeneration, CapMusicGeneration or
+// CapVideoGeneration when the provider's speech, music or video model list
+// holds it (ADR-102 MPT-010).
+// It is providers.Capability.
+type Capability = providers.Capability
+
+// The Capability values.
+const (
+	// CapChatCompletion: text generation.
+	CapChatCompletion Capability = providers.CapChatCompletion
+	// CapImageGeneration: image generation.
+	CapImageGeneration Capability = providers.CapImageGeneration
+	// CapToolCalling: tool calling.
+	CapToolCalling Capability = providers.CapToolCalling
+	// CapFileUpload: file upload.
+	CapFileUpload Capability = providers.CapFileUpload
+	// CapBatching: batch execution.
+	CapBatching Capability = providers.CapBatching
+	// CapCaching: prompt caching.
+	CapCaching Capability = providers.CapCaching
+	// CapReasoning: reasoning.
+	CapReasoning Capability = providers.CapReasoning
+	// CapCatalogue: the model catalogue.
+	CapCatalogue Capability = providers.CapCatalogue
+	// CapSpeechGeneration: speech generation.
+	CapSpeechGeneration Capability = providers.CapSpeechGeneration
+	// CapMusicGeneration: music generation.
+	CapMusicGeneration Capability = providers.CapMusicGeneration
+	// CapVideoGeneration: video generation.
+	CapVideoGeneration Capability = providers.CapVideoGeneration
+	// CapTranscription: speech-to-text transcription.
+	CapTranscription Capability = providers.CapTranscription
+)
+
 // ProviderInfo is the secret-free metadata of one provider: typed identity,
 // env var, default model and base URL. Info and List return it without a
 // client; Client.Providers.List returns it for the configured providers.

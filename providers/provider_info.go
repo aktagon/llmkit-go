@@ -16,6 +16,9 @@ type ProviderInfo struct {
 	DefaultModel    string
 	BaseURL         string
 	BrowserCallable bool // ADR-035: host serves CORS for direct browser calls (coarse)
+	// Capabilities is what the provider offers, from its stated capabilities;
+	// Catalogue is not listed.
+	Capabilities []Capability
 }
 
 // Info returns the public metadata for a provider. Keyed by the typed
@@ -43,6 +46,7 @@ var providerInfoTable = map[ProviderName]ProviderInfo{
 		DefaultModel:    "jamba-1.5-large",
 		BaseURL:         "https://api.ai21.com",
 		BrowserCallable: false,
+		Capabilities:    []Capability{CapChatCompletion},
 	},
 	Anthropic: {
 		ID:              Anthropic,
@@ -51,6 +55,7 @@ var providerInfoTable = map[ProviderName]ProviderInfo{
 		DefaultModel:    "claude-sonnet-4-6",
 		BaseURL:         "https://api.anthropic.com",
 		BrowserCallable: false,
+		Capabilities:    []Capability{CapChatCompletion, CapToolCalling},
 	},
 	Assemblyai: {
 		ID:              Assemblyai,
@@ -59,6 +64,7 @@ var providerInfoTable = map[ProviderName]ProviderInfo{
 		DefaultModel:    "best",
 		BaseURL:         "https://api.assemblyai.com",
 		BrowserCallable: false,
+		Capabilities:    []Capability{CapTranscription},
 	},
 	Azure: {
 		ID:              Azure,
@@ -67,6 +73,7 @@ var providerInfoTable = map[ProviderName]ProviderInfo{
 		DefaultModel:    "gpt-4o",
 		BaseURL:         "https://{resource}.openai.azure.com",
 		BrowserCallable: false,
+		Capabilities:    []Capability{CapChatCompletion},
 	},
 	Bedrock: {
 		ID:              Bedrock,
@@ -75,6 +82,7 @@ var providerInfoTable = map[ProviderName]ProviderInfo{
 		DefaultModel:    "anthropic.claude-sonnet-4-20250514-v1:0",
 		BaseURL:         "https://bedrock-runtime.{region}.amazonaws.com",
 		BrowserCallable: false,
+		Capabilities:    []Capability{CapChatCompletion, CapVideoGeneration},
 	},
 	Cerebras: {
 		ID:              Cerebras,
@@ -83,6 +91,7 @@ var providerInfoTable = map[ProviderName]ProviderInfo{
 		DefaultModel:    "gpt-oss-120b",
 		BaseURL:         "https://api.cerebras.ai",
 		BrowserCallable: false,
+		Capabilities:    []Capability{CapChatCompletion, CapToolCalling},
 	},
 	Cohere: {
 		ID:              Cohere,
@@ -91,6 +100,7 @@ var providerInfoTable = map[ProviderName]ProviderInfo{
 		DefaultModel:    "command-r-plus",
 		BaseURL:         "https://api.cohere.com/compatibility",
 		BrowserCallable: false,
+		Capabilities:    []Capability{CapChatCompletion},
 	},
 	Deepseek: {
 		ID:              Deepseek,
@@ -99,6 +109,7 @@ var providerInfoTable = map[ProviderName]ProviderInfo{
 		DefaultModel:    "deepseek-chat",
 		BaseURL:         "https://api.deepseek.com",
 		BrowserCallable: false,
+		Capabilities:    []Capability{CapChatCompletion, CapToolCalling},
 	},
 	Doubao: {
 		ID:              Doubao,
@@ -107,6 +118,7 @@ var providerInfoTable = map[ProviderName]ProviderInfo{
 		DefaultModel:    "doubao-1.5-pro-32k-250115",
 		BaseURL:         "https://ark.cn-beijing.volces.com/api/v3",
 		BrowserCallable: false,
+		Capabilities:    []Capability{CapChatCompletion},
 	},
 	Ernie: {
 		ID:              Ernie,
@@ -115,6 +127,7 @@ var providerInfoTable = map[ProviderName]ProviderInfo{
 		DefaultModel:    "ernie-4.0-8k",
 		BaseURL:         "https://qianfan.baidubce.com/v2",
 		BrowserCallable: false,
+		Capabilities:    []Capability{CapChatCompletion},
 	},
 	Fireworks: {
 		ID:              Fireworks,
@@ -123,6 +136,7 @@ var providerInfoTable = map[ProviderName]ProviderInfo{
 		DefaultModel:    "accounts/fireworks/models/gpt-oss-120b",
 		BaseURL:         "https://api.fireworks.ai/inference",
 		BrowserCallable: false,
+		Capabilities:    []Capability{CapChatCompletion, CapToolCalling},
 	},
 	Google: {
 		ID:              Google,
@@ -131,6 +145,7 @@ var providerInfoTable = map[ProviderName]ProviderInfo{
 		DefaultModel:    "gemini-2.5-flash",
 		BaseURL:         "https://generativelanguage.googleapis.com",
 		BrowserCallable: true,
+		Capabilities:    []Capability{CapChatCompletion, CapImageGeneration, CapToolCalling, CapReasoning, CapSpeechGeneration, CapMusicGeneration, CapVideoGeneration},
 	},
 	Grok: {
 		ID:              Grok,
@@ -139,6 +154,7 @@ var providerInfoTable = map[ProviderName]ProviderInfo{
 		DefaultModel:    "grok-3-fast",
 		BaseURL:         "https://api.x.ai",
 		BrowserCallable: false,
+		Capabilities:    []Capability{CapChatCompletion, CapImageGeneration, CapToolCalling, CapSpeechGeneration, CapVideoGeneration},
 	},
 	Groq: {
 		ID:              Groq,
@@ -147,6 +163,7 @@ var providerInfoTable = map[ProviderName]ProviderInfo{
 		DefaultModel:    "openai/gpt-oss-120b",
 		BaseURL:         "https://api.groq.com/openai",
 		BrowserCallable: false,
+		Capabilities:    []Capability{CapChatCompletion, CapToolCalling},
 	},
 	Inworld: {
 		ID:              Inworld,
@@ -155,6 +172,7 @@ var providerInfoTable = map[ProviderName]ProviderInfo{
 		DefaultModel:    "inworld-tts-2",
 		BaseURL:         "https://api.inworld.ai",
 		BrowserCallable: false,
+		Capabilities:    []Capability{CapSpeechGeneration},
 	},
 	Jan: {
 		ID:              Jan,
@@ -163,6 +181,7 @@ var providerInfoTable = map[ProviderName]ProviderInfo{
 		DefaultModel:    "",
 		BaseURL:         "http://localhost:1337",
 		BrowserCallable: false,
+		Capabilities:    []Capability{CapChatCompletion},
 	},
 	Llamacpp: {
 		ID:              Llamacpp,
@@ -171,6 +190,7 @@ var providerInfoTable = map[ProviderName]ProviderInfo{
 		DefaultModel:    "",
 		BaseURL:         "http://localhost:8080",
 		BrowserCallable: false,
+		Capabilities:    []Capability{CapChatCompletion},
 	},
 	Lmstudio: {
 		ID:              Lmstudio,
@@ -179,6 +199,7 @@ var providerInfoTable = map[ProviderName]ProviderInfo{
 		DefaultModel:    "",
 		BaseURL:         "http://localhost:1234",
 		BrowserCallable: false,
+		Capabilities:    []Capability{CapChatCompletion},
 	},
 	Minimax: {
 		ID:              Minimax,
@@ -187,6 +208,7 @@ var providerInfoTable = map[ProviderName]ProviderInfo{
 		DefaultModel:    "MiniMax-Text-01",
 		BaseURL:         "https://api.minimax.chat",
 		BrowserCallable: false,
+		Capabilities:    []Capability{CapChatCompletion, CapSpeechGeneration, CapMusicGeneration, CapVideoGeneration},
 	},
 	Mistral: {
 		ID:              Mistral,
@@ -195,6 +217,7 @@ var providerInfoTable = map[ProviderName]ProviderInfo{
 		DefaultModel:    "mistral-large-latest",
 		BaseURL:         "https://api.mistral.ai",
 		BrowserCallable: false,
+		Capabilities:    []Capability{CapChatCompletion, CapToolCalling},
 	},
 	Moonshot: {
 		ID:              Moonshot,
@@ -203,6 +226,7 @@ var providerInfoTable = map[ProviderName]ProviderInfo{
 		DefaultModel:    "kimi-k2.6",
 		BaseURL:         "https://api.moonshot.ai",
 		BrowserCallable: false,
+		Capabilities:    []Capability{CapChatCompletion, CapToolCalling},
 	},
 	Ollama: {
 		ID:              Ollama,
@@ -211,6 +235,7 @@ var providerInfoTable = map[ProviderName]ProviderInfo{
 		DefaultModel:    "",
 		BaseURL:         "http://localhost:11434",
 		BrowserCallable: false,
+		Capabilities:    []Capability{CapChatCompletion},
 	},
 	OpenAI: {
 		ID:              OpenAI,
@@ -219,6 +244,7 @@ var providerInfoTable = map[ProviderName]ProviderInfo{
 		DefaultModel:    "gpt-4o-2024-08-06",
 		BaseURL:         "https://api.openai.com",
 		BrowserCallable: false,
+		Capabilities:    []Capability{CapChatCompletion, CapImageGeneration, CapToolCalling, CapReasoning, CapSpeechGeneration, CapTranscription},
 	},
 	Openrouter: {
 		ID:              Openrouter,
@@ -227,6 +253,7 @@ var providerInfoTable = map[ProviderName]ProviderInfo{
 		DefaultModel:    "openai/gpt-4o",
 		BaseURL:         "https://openrouter.ai/api",
 		BrowserCallable: false,
+		Capabilities:    []Capability{CapChatCompletion, CapImageGeneration, CapToolCalling, CapSpeechGeneration, CapVideoGeneration},
 	},
 	Perplexity: {
 		ID:              Perplexity,
@@ -235,6 +262,7 @@ var providerInfoTable = map[ProviderName]ProviderInfo{
 		DefaultModel:    "sonar-pro",
 		BaseURL:         "https://api.perplexity.ai",
 		BrowserCallable: false,
+		Capabilities:    []Capability{CapChatCompletion},
 	},
 	Pixverse: {
 		ID:              Pixverse,
@@ -243,6 +271,7 @@ var providerInfoTable = map[ProviderName]ProviderInfo{
 		DefaultModel:    "v4.5",
 		BaseURL:         "https://app-api.pixverse.ai",
 		BrowserCallable: false,
+		Capabilities:    []Capability{CapVideoGeneration},
 	},
 	Qwen: {
 		ID:              Qwen,
@@ -251,6 +280,7 @@ var providerInfoTable = map[ProviderName]ProviderInfo{
 		DefaultModel:    "qwen-plus",
 		BaseURL:         "https://dashscope-intl.aliyuncs.com/compatible-mode",
 		BrowserCallable: false,
+		Capabilities:    []Capability{CapChatCompletion, CapToolCalling, CapVideoGeneration},
 	},
 	Recraft: {
 		ID:              Recraft,
@@ -259,6 +289,7 @@ var providerInfoTable = map[ProviderName]ProviderInfo{
 		DefaultModel:    "recraftv3",
 		BaseURL:         "https://external.api.recraft.ai",
 		BrowserCallable: false,
+		Capabilities:    []Capability{CapImageGeneration},
 	},
 	Sambanova: {
 		ID:              Sambanova,
@@ -267,6 +298,7 @@ var providerInfoTable = map[ProviderName]ProviderInfo{
 		DefaultModel:    "Meta-Llama-3.3-70B-Instruct",
 		BaseURL:         "https://api.sambanova.ai",
 		BrowserCallable: false,
+		Capabilities:    []Capability{CapChatCompletion},
 	},
 	Together: {
 		ID:              Together,
@@ -275,6 +307,7 @@ var providerInfoTable = map[ProviderName]ProviderInfo{
 		DefaultModel:    "meta-llama/Llama-3.3-70B-Instruct-Turbo",
 		BaseURL:         "https://api.together.xyz",
 		BrowserCallable: false,
+		Capabilities:    []Capability{CapChatCompletion, CapToolCalling, CapVideoGeneration},
 	},
 	Vertex: {
 		ID:              Vertex,
@@ -283,6 +316,7 @@ var providerInfoTable = map[ProviderName]ProviderInfo{
 		DefaultModel:    "lyria-002",
 		BaseURL:         "https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/models",
 		BrowserCallable: false,
+		Capabilities:    []Capability{CapMusicGeneration, CapVideoGeneration},
 	},
 	Vidu: {
 		ID:              Vidu,
@@ -291,6 +325,7 @@ var providerInfoTable = map[ProviderName]ProviderInfo{
 		DefaultModel:    "viduq3-pro",
 		BaseURL:         "https://api.vidu.com",
 		BrowserCallable: false,
+		Capabilities:    []Capability{CapVideoGeneration},
 	},
 	Vllm: {
 		ID:              Vllm,
@@ -299,6 +334,7 @@ var providerInfoTable = map[ProviderName]ProviderInfo{
 		DefaultModel:    "",
 		BaseURL:         "http://localhost:8000",
 		BrowserCallable: false,
+		Capabilities:    []Capability{CapChatCompletion},
 	},
 	Workersai: {
 		ID:              Workersai,
@@ -307,6 +343,7 @@ var providerInfoTable = map[ProviderName]ProviderInfo{
 		DefaultModel:    "@cf/meta/llama-3.1-8b-instruct",
 		BaseURL:         "https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1",
 		BrowserCallable: false,
+		Capabilities:    []Capability{CapChatCompletion},
 	},
 	Yi: {
 		ID:              Yi,
@@ -315,6 +352,7 @@ var providerInfoTable = map[ProviderName]ProviderInfo{
 		DefaultModel:    "yi-large",
 		BaseURL:         "https://api.01.ai",
 		BrowserCallable: false,
+		Capabilities:    []Capability{CapChatCompletion},
 	},
 	Zhipu: {
 		ID:              Zhipu,
@@ -323,5 +361,6 @@ var providerInfoTable = map[ProviderName]ProviderInfo{
 		DefaultModel:    "glm-4-plus",
 		BaseURL:         "https://open.bigmodel.cn/api/paas",
 		BrowserCallable: false,
+		Capabilities:    []Capability{CapChatCompletion, CapVideoGeneration},
 	},
 }
