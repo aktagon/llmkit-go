@@ -83,7 +83,7 @@ func generateMusic(ctx context.Context, p Provider, req musicRequest, opts ...mu
 	if err != nil {
 		return MusicResponse{}, err
 	}
-	o, cfg, mgCfg, model, listed, parts := plan.o, plan.cfg, plan.mgCfg, plan.model, plan.listed, plan.parts
+	o, cfg, mgCfg, model, listed, parts := plan.o, plan.cfg, plan.mgCfg, plan.model, plan.listed, plan.Parts
 
 	baseEvent := Event{
 		Op:            OpMusicGeneration,
@@ -130,7 +130,7 @@ type musicPlan struct {
 	mgCfg  *internalproviders.MusicGenDef
 	model  *internalproviders.MusicModelDef
 	listed bool
-	parts  []Part
+	Parts  []Part
 }
 
 // planMusic runs every pre-flight check of a music request. generateMusic and
@@ -166,7 +166,7 @@ func planMusic(p Provider, req musicRequest, opts []musicOption) (musicPlan, err
 	// ADR-037 (MUS-008): supportsLyrics is advisory metadata, not a gate.
 	// Lyrics on an instrumental-only model fold into the prompt (for the
 	// single-prompt Predict shape) and the model ignores or honors them.
-	return musicPlan{o: o, cfg: cfg, mgCfg: mgCfg, model: model, listed: listed, parts: parts}, nil
+	return musicPlan{o: o, cfg: cfg, mgCfg: mgCfg, model: model, listed: listed, Parts: parts}, nil
 }
 
 // previewMusic returns the body generateMusic would send (ADR-106).
@@ -175,7 +175,7 @@ func previewMusic(p Provider, req musicRequest, opts ...musicOption) ([]byte, er
 	if err != nil {
 		return nil, err
 	}
-	_, body, err := buildMusicWire(p, plan.cfg, plan.mgCfg, req.Model, plan.parts)
+	_, body, err := buildMusicWire(p, plan.cfg, plan.mgCfg, req.Model, plan.Parts)
 	return body, err
 }
 
