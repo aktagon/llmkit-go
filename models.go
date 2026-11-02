@@ -412,8 +412,11 @@ func mapCatalogueHTTPErr(status int, body []byte, herr error) error {
 func (b *ScopedModels) enrich(records []internalproviders.ParsedModelRecord) []ModelInfo {
 	out := make([]ModelInfo, 0, len(records))
 	for _, rec := range records {
-		info := catalogueModelInfo(b.target.Name, rec.ID)
-		info.DisplayName = rec.DisplayName
+		info := knownModelInfo(b.target.Name, rec.ID)
+		// The provider's own name wins over the catalogue label.
+		if rec.DisplayName != "" {
+			info.DisplayName = rec.DisplayName
+		}
 		info.Description = rec.Description
 		info.ContextWindow = rec.ContextWindow
 		info.MaxOutput = rec.MaxOutput
@@ -428,14 +431,14 @@ func (b *ScopedModels) enrich(records []internalproviders.ParsedModelRecord) []M
 	return out
 }
 
-// Catalogue returns every model this SDK version states facts for under
-// name, with the capabilities and hints the compiled catalogue holds
+// KnownModels returns every model this SDK version states facts for under
+// name, with the capabilities, hints and label the compiled catalogue holds
 // (ADR-102 MPT-010). It needs no client, no API key and no network. The
 // list is not proof that the provider serves a model; use
-// Client.Models.Provider(p).List for that. The live fields (DisplayName,
+// Client.Models.Provider(p).List for that. The live fields (Description,
 // ContextWindow, Raw and the rest) are empty, and Provider carries no API
-// key. Sorted by ID.
-func Catalogue(name providers.ProviderName) []ModelInfo {
+// key. Sorted by ID; empty for a provider the catalogue states nothing for.
+func KnownModels(name providers.ProviderName) []ModelInfo {
 	provider := string(name)
 	var ids []string
 	for id := range ontologyCapabilities[provider] {
@@ -461,27 +464,66 @@ func Catalogue(name providers.ProviderName) []ModelInfo {
 			ids = append(ids, m.ModelID)
 		}
 	}
+	// Go strings order by bytes, the order every SDK uses.
 	slices.Sort(ids)
 	ids = slices.Compact(ids)
 	out := make([]ModelInfo, 0, len(ids))
 	for _, id := range ids {
-		out = append(out, catalogueModelInfo(provider, id))
+		out = append(out, knownModelInfo(provider, id))
 	}
 	return out
 }
 
-// catalogueModelInfo is the one ModelInfo builder for a live list (enrich)
-// and the keyless Catalogue: the ID, the provider without a key, and what
-// the compiled catalogue states about the model. The live fields are left
-// empty.
-func catalogueModelInfo(provider, modelID string) ModelInfo {
+// knownModelInfo is the one ModelInfo builder for a live list (enrich) and
+// KnownModels: the ID, the provider without a key, and what the compiled
+// catalogue states about the model. The live fields are left empty.
+func knownModelInfo(provider, modelID string) ModelInfo {
 	info := ModelInfo{
 		ID:           modelID,
 		Provider:     Provider{Name: provider},
 		Capabilities: ontologyCapabilities[provider][modelID],
+		DisplayName:  catalogueLabel(provider, modelID),
 	}
 	info.Image, info.Video, info.Speech, info.Music = catalogueHints(provider, modelID)
 	return info
+}
+
+// catalogueLabel is the first label the compiled catalogue states for the
+// model: the chat table's, then the image, video, speech and music lists'.
+// Empty when none states one.
+func catalogueLabel(provider, modelID string) string {
+	var labels []string
+	for _, m := range compiledInModels {
+		if m.Provider.Name == provider && m.ID == modelID {
+			labels = append(labels, m.DisplayName)
+		}
+	}
+	if cfg := internalproviders.ImageGenConfig(provider); cfg != nil {
+		if m, ok := lookupModel(cfg.Models, modelID, imageModelID); ok {
+			labels = append(labels, m.Label)
+		}
+	}
+	if cfg := internalproviders.VideoGenConfig(provider); cfg != nil {
+		if m, ok := lookupModel(cfg.Models, modelID, videoModelID); ok {
+			labels = append(labels, m.Label)
+		}
+	}
+	if cfg := internalproviders.SpeechGenConfig(provider); cfg != nil {
+		if m, ok := lookupModel(cfg.Models, modelID, speechModelID); ok {
+			labels = append(labels, m.Label)
+		}
+	}
+	if cfg := internalproviders.MusicGenConfig(provider); cfg != nil {
+		if m, ok := lookupModel(cfg.Models, modelID, musicModelID); ok {
+			labels = append(labels, m.Label)
+		}
+	}
+	for _, l := range labels {
+		if l != "" {
+			return l
+		}
+	}
+	return ""
 }
 
 // catalogueHints is what the compiled catalogue states about modelID for
@@ -511,38 +553,31 @@ func catalogueHints(provider, modelID string) (image *ImageHints, video *VideoHi
 	return image, video, speech, music
 }
 
-// speechHints applies the provider's request body to every model: a body
-// with no style field makes Style SupportNo, and a body with no
-// multi-speaker form makes MaxSpeakers 1. These are the config checks
-// validateSpeechModel runs before send (ADR-102 MPT-010).
+// speechHints is the model's stated facts, plus the request options the
+// SDK rejects before send for every model of this provider config:
+// "speakers" when the config has no multi-speaker body, "style" when it
+// carries no style. These are the config checks validateSpeechModel runs
+// (ADR-102 MPT-010). Sorted.
 func speechHints(cfg *internalproviders.SpeechGenDef, m *internalproviders.SpeechModelDef) *SpeechHints {
-	hints := &SpeechHints{Style: m.SupportsSpeechStyle, MaxSpeakers: m.MaxSpeakers}
-	if !cfg.CarriesSpeechStyle {
-		hints.Style = SupportNo
-	}
+	rejects := []string{}
 	if !cfg.MultiSpeaker {
-		hints.MaxSpeakers = 1
+		rejects = append(rejects, "speakers")
 	}
-	return hints
+	if !cfg.CarriesSpeechStyle {
+		rejects = append(rejects, "style")
+	}
+	return &SpeechHints{Style: m.SupportsSpeechStyle, MaxSpeakers: m.MaxSpeakers, Rejects: rejects}
 }
 
 // musicHints copies one music model's facts. The list is a copy, so a
 // caller cannot change the compiled facts.
 func musicHints(m *internalproviders.MusicModelDef) *MusicHints {
 	return &MusicHints{
-		Lyrics:             supportOf(m.SupportsLyrics),
+		Lyrics:             m.SupportsLyrics,
 		MaxDurationSeconds: m.MaxDurationSeconds,
 		OutputFormats:      slices.Clone(m.AvailableOutputFormats),
-		ImageInput:         supportOf(m.SupportsImageInput),
+		ImageInput:         m.SupportsImageInput,
 	}
-}
-
-// supportOf maps a stated boolean fact to SupportYes or SupportNo.
-func supportOf(stated bool) providers.Support {
-	if stated {
-		return SupportYes
-	}
-	return SupportNo
 }
 
 // imageHints copies one image model's facts. The lists are copies, so a

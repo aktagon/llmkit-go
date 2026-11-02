@@ -418,6 +418,21 @@ raw, err := c.Models.Provider(p).Raw().List(ctx)                   // ModelInfo.
 
 `List(ctx)` calls every configured provider's `/v1/models` and aggregates results into `LiveResult.Models` + a per-provider `LiveResult.Errors` map (partial success is the normal case). Each client keeps every provider's list in memory for one hour, so a repeat `List` or a `Provider(p).Get` for a listed ID makes no HTTP call. A failed call is not kept. `Fresh()` makes the call again and refills the cache. `Provider(p).Raw().List(ctx)` opts into populating `ModelInfo.Raw` with the provider-native record -- useful when you need fields the universal `ModelInfo` does not carry (Anthropic's capability matrix, Google's `supportedGenerationMethods`, etc.).
 
+### Known models
+
+`llmkit.KnownModels(name)` returns the models this SDK version states facts for, as a `[]ModelInfo` sorted by id. It needs no client, no API key and no network.
+
+<!-- llmkit:include go/examples/catalogue/main.go#known-models -->
+```go
+for _, m := range llmkit.KnownModels(providers.Google) {
+	if m.Speech != nil {
+		fmt.Println(m.ID, m.DisplayName, m.Speech.MaxSpeakers, m.Speech.Rejects)
+	}
+}
+```
+
+Each model carries its capabilities, its label as the display name, and the hints `Image`, `Video`, `Speech` and `Music`. `Speech.Rejects` names the request options the SDK rejects before send for that model, such as `"style"`. Live fields (`Description`, `ContextWindow`, `Raw`) are empty, and the provider carries no API key. The list is not proof that the provider serves a model; use `c.Models.Provider(p).List(ctx)` for that. `json.Marshal(m)` writes the JSON form the Go, TypeScript and Rust SDKs share.
+
 ## Options
 
 Sampling and decoding knobs are typed chain methods on `*Text` and
