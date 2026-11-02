@@ -22,23 +22,6 @@ type Provider struct {
 	Timeout time.Duration
 }
 
-// Capability names one of the SDK's modelled capabilities. The set mirrors
-//
-//
-// provider wire data.
-type Capability string
-
-const (
-	CapChatCompletion  Capability = "chat_completion"
-	CapImageGeneration Capability = "image_generation"
-	CapToolCalling     Capability = "tool_calling"
-	CapFileUpload      Capability = "file_upload"
-	CapBatching        Capability = "batching"
-	CapCaching         Capability = "caching"
-	CapReasoning       Capability = "reasoning"
-	CapCatalogue       Capability = "catalogue"
-)
-
 // Tool is a callable function for the agent: its definition, which the
 // request carries as a ToolDefinition, plus Run, which the Agent keeps beside
 // the Request (ADR-098 RQC-018).
