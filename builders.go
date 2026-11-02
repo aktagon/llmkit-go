@@ -295,7 +295,6 @@ type Image struct {
 	outputFormat   string
 	quality        string
 	raw            bool
-	safetyFilter   string
 	safetySettings []SafetySetting
 	extraFields    map[string]any
 }
@@ -306,9 +305,10 @@ func (b *Image) AddMiddleware(fns ...MiddlewareFn) *Image {
 	return &out
 }
 
-// AspectRatio sets the output aspect ratio, such as "16:9". A ratio the model does
-// not list is rejected before send. On a video, OpenRouter, Grok, Veo and
-// Gemini Omni send it.
+// AspectRatio sets the output aspect ratio, such as "16:9". The SDK sends a ratio the
+// model does not list; if the provider rejects it, the error names the
+// catalogue fact. On a video, OpenRouter, Grok, Veo and Gemini Omni send it;
+// for other video providers the SDK rejects it before send.
 func (b *Image) AspectRatio(r string) *Image { out := *b; out.aspectRatio = r; return &out }
 func (b *Image) Background(s string) *Image  { out := *b; out.background = s; return &out }
 func (b *Image) Count(n int) *Image          { out := *b; v := n; out.count = &v; return &out }
@@ -328,13 +328,6 @@ func (b *Image) Model(name string) *Image     { out := *b; out.model = name; ret
 func (b *Image) OutputFormat(s string) *Image { out := *b; out.outputFormat = s; return &out }
 func (b *Image) Quality(s string) *Image      { out := *b; out.quality = s; return &out }
 func (b *Image) Raw() *Image                  { out := *b; out.raw = true; return &out }
-
-// SafetyFilter sets a single image safety threshold. Every image provider rejects it
-// with a validation error.
-//
-// Deprecated: no provider accepts this since 2026-10-15 (Vertex Imagen
-// shut down, BUG-101); removed at the next major.
-func (b *Image) SafetyFilter(s string) *Image { out := *b; out.safetyFilter = s; return &out }
 func (b *Image) SafetySettings(s []SafetySetting) *Image {
 	out := *b
 	out.safetySettings = s
@@ -384,9 +377,9 @@ func (b *Music) Text(s string) *Music {
 // terminals live in hand-written text.go / image.go.
 type Speech struct {
 	client     *Client
-	lines      []SpeechLine
+	lines      []speechLine
 	middleware []MiddlewareFn
-	speakers   []SpeechSpeaker
+	speakers   []speechSpeaker
 	model      string
 	style      string
 	voice      string
@@ -396,7 +389,7 @@ type Speech struct {
 // order. When lines are set, the text passed to Generate must be empty.
 func (b *Speech) AddLine(speaker, text string) *Speech {
 	out := *b
-	out.lines = append(append([]SpeechLine{}, b.lines...), SpeechLine{Speaker: speaker, Text: text})
+	out.lines = append(append([]speechLine{}, b.lines...), speechLine{Speaker: speaker, Text: text})
 	return &out
 } // ordered
 func (b *Speech) AddMiddleware(fns ...MiddlewareFn) *Speech {
@@ -409,14 +402,14 @@ func (b *Speech) AddMiddleware(fns ...MiddlewareFn) *Speech {
 // request. Declare exactly 2 speakers, and do not set a Voice with them.
 func (b *Speech) AddSpeaker(name, voice string) *Speech {
 	out := *b
-	out.speakers = append(append([]SpeechSpeaker{}, b.speakers...), SpeechSpeaker{Name: name, Voice: voice})
+	out.speakers = append(append([]speechSpeaker{}, b.speakers...), speechSpeaker{Name: name, Voice: voice})
 	return &out
 } // ordered
 // AddStyledLine appends a line said by a declared speaker in a delivery style, such as
 // "calm and relaxed". Otherwise it works like AddLine.
 func (b *Speech) AddStyledLine(speaker, style, text string) *Speech {
 	out := *b
-	out.lines = append(append([]SpeechLine{}, b.lines...), SpeechLine{Speaker: speaker, Style: style, Text: text})
+	out.lines = append(append([]speechLine{}, b.lines...), speechLine{Speaker: speaker, Style: style, Text: text})
 	return &out
 }                                           // ordered
 func (b *Speech) Model(name string) *Speech { out := *b; out.model = name; return &out }
@@ -477,14 +470,16 @@ func (b *Video) AddReferenceImage(mime string, data []byte) *Video {
 	out.referenceImages = append(append([]MediaRef{}, b.referenceImages...), MediaRef{MimeType: mime, Bytes: data})
 	return &out
 } // ordered
-// AspectRatio sets the output aspect ratio, such as "16:9". A ratio the model does
-// not list is rejected before send. On a video, OpenRouter, Grok, Veo and
-// Gemini Omni send it.
+// AspectRatio sets the output aspect ratio, such as "16:9". The SDK sends a ratio the
+// model does not list; if the provider rejects it, the error names the
+// catalogue fact. On a video, OpenRouter, Grok, Veo and Gemini Omni send it;
+// for other video providers the SDK rejects it before send.
 func (b *Video) AspectRatio(r string) *Video { out := *b; out.aspectRatio = r; return &out }
 
 // Duration sets the video length in whole seconds; 0 means the provider default.
-// OpenRouter, Grok and Veo send it. Above the model's maximum, it is rejected
-// before send. With Veo reference images, only 8 is accepted.
+// OpenRouter, Grok and Veo send it; for other video providers the SDK
+// rejects it before send. The SDK rejects a negative value and sends a
+// value above the model's maximum. With Veo reference images, only 8 is accepted.
 func (b *Video) Duration(seconds int) *Video { out := *b; out.duration = seconds; return &out }
 func (b *Video) Image(mime string, data []byte) *Video {
 	out := *b
@@ -508,8 +503,9 @@ func (b *Video) OutputURI(uri string) *Video { out := *b; out.outputURI = uri; r
 func (b *Video) Raw() *Video                 { out := *b; out.raw = true; return &out }
 
 // Resolution sets the video resolution, such as "720p". OpenRouter, Grok, Veo and
-// Gemini Omni send it.
-// A resolution the model does not list is rejected before send.
+// Gemini Omni send it; for other video providers the SDK rejects it before
+// send. The SDK sends a resolution the model does not list; if the provider
+// rejects it, the error names the catalogue fact.
 func (b *Video) Resolution(r string) *Video { out := *b; out.resolution = r; return &out }
 func (b *Video) Text(s string) *Video {
 	out := *b

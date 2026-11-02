@@ -4,9 +4,10 @@ package providers
 
 import "sort"
 
-// ProviderInfo is WHAT a user wants to know about a provider (PUBLIC): the
-// narrow, stable catalogue (typed identity, env var, default model, base
-// URL). It is a projection of the same provider facts that feed the internal
+// ProviderInfo is the secret-free metadata of one provider: typed identity,
+// env var, default model and base URL. Info and List return it without a
+// client; Client.Providers.List returns it for the configured providers.
+// It is a projection of the same provider facts that feed the internal
 // providerSpec, so the two cannot drift.
 type ProviderInfo struct {
 	ID              ProviderName // typed identity (ADR-040)

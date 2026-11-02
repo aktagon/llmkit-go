@@ -15,7 +15,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/aktagon/llmkit-go/v3/providers"
+	internalproviders "github.com/aktagon/llmkit-go/v3/internal/providers"
 )
 
 // redactURLError strips the (key-bearing) URL from a *url.Error, keeping
@@ -370,7 +370,7 @@ type streamFields struct {
 // A bare locator is read on every parsed data frame; the last non-empty value
 // wins.
 func doStreamPost(ctx context.Context, client *http.Client, url string, body []byte, headers map[string]string,
-	streamCfg *providers.StreamDef, locs streamLocators, callback func(string)) (Usage, streamFields, error) {
+	streamCfg *internalproviders.StreamDef, locs streamLocators, callback func(string)) (Usage, streamFields, error) {
 
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
 	if err != nil {

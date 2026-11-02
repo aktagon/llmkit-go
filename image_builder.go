@@ -5,60 +5,57 @@ import (
 )
 
 // Generate executes the chained ImageGeneration request against the
-// client's provider. Chain state populates ImageRequest and
-// the matching ImageOption set; finalText, when non-empty, becomes a
+// client's provider. Chain state populates imageRequest and
+// the matching imageOption set; finalText, when non-empty, becomes a
 // trailing text Part appended to the chain's accumulated Parts.
 //
 // Phase 3 wiring: typed front door on GenerateImage. Per
-// ADR-008, ImageRequest already speaks Parts natively, so the
-// translation is just chain → ImageRequest{Model, Parts} + options.
+// ADR-008, imageRequest already speaks Parts natively, so the
+// translation is just chain → imageRequest{Model, Parts} + options.
 func (b *Image) Generate(ctx context.Context, finalText string) (ImageResponse, error) {
 	parts := b.parts
 	if finalText != "" {
 		parts = append(parts, Part{Text: finalText})
 	}
 
-	req := ImageRequest{
+	req := imageRequest{
 		Model: b.model,
 		Parts: parts,
 	}
 
-	var opts []ImageOption
+	var opts []imageOption
 	if b.aspectRatio != "" {
-		opts = append(opts, WithAspectRatio(b.aspectRatio))
+		opts = append(opts, withAspectRatio(b.aspectRatio))
 	}
 	if b.imageSize != "" {
-		opts = append(opts, WithImageSize(b.imageSize))
+		opts = append(opts, withImageSize(b.imageSize))
 	}
 	if b.includeText {
-		opts = append(opts, WithIncludeText())
+		opts = append(opts, withIncludeText())
 	}
 	if b.quality != "" {
-		opts = append(opts, WithImageQuality(b.quality))
+		opts = append(opts, withImageQuality(b.quality))
 	}
 	if b.outputFormat != "" {
-		opts = append(opts, WithImageOutputFormat(b.outputFormat))
+		opts = append(opts, withImageOutputFormat(b.outputFormat))
 	}
 	if b.background != "" {
-		opts = append(opts, WithImageBackground(b.background))
+		opts = append(opts, withImageBackground(b.background))
 	}
 	if b.count != nil {
-		opts = append(opts, WithImageCount(*b.count))
+		opts = append(opts, withImageCount(*b.count))
 	}
 	if b.mask != nil {
-		opts = append(opts, WithImageMask(b.mask.MimeType, b.mask.Bytes))
+		opts = append(opts, withImageMask(b.mask.MimeType, b.mask.Bytes))
 	}
 	if len(b.middleware) > 0 {
-		opts = append(opts, WithImageMiddleware(b.middleware...))
-	}
-	if b.safetyFilter != "" {
-		opts = append(opts, WithImageSafetyFilter(b.safetyFilter))
+		opts = append(opts, withImageMiddleware(b.middleware...))
 	}
 	if len(b.safetySettings) > 0 {
-		opts = append(opts, WithImageSafetySettings(b.safetySettings...))
+		opts = append(opts, withImageSafetySettings(b.safetySettings...))
 	}
 	if len(b.extraFields) > 0 {
-		opts = append(opts, WithImageExtraFields(b.extraFields))
+		opts = append(opts, withImageExtraFields(b.extraFields))
 	}
 	if b.raw {
 		opts = append(opts, withImageRaw())

@@ -395,10 +395,6 @@ resp, err := c.Text.
 `HarmCategory*` and `HarmBlockThreshold*` constants cover all documented
 values; raw strings also work.
 
-`SafetyFilter` and the `ImageSafetyFilter*` constants are deprecated. They
-served Vertex Imagen, which Google shut down; every provider now returns a
-`*ValidationError` for them. They will be removed in the next major version.
-
 ### Model catalogue
 
 `c.Models` and `c.Providers` cover model discovery. Every list comes live from the provider's `/v1/models` endpoint. Runnable counterpart at [`examples/catalogue/main.go`](./examples/catalogue/main.go).

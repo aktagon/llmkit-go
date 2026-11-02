@@ -11,15 +11,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aktagon/llmkit-go/v3/providers"
+	internalproviders "github.com/aktagon/llmkit-go/v3/internal/providers"
 )
 
-// TranscriptionRequest is the canonical speech-to-text request (ADR-048). It
+// transcriptionRequest is the canonical speech-to-text request (ADR-048). It
 // carries exactly one audio Part — a public URL (parts.Audio) or local bytes
 // (parts.AudioBytes). Transcription is single-turn, so there is no Message/Role
 // wrapper (golden rule). Model is used only by synchronous providers (OpenAI,
 // ADR-051), where it is a required multipart field; async providers ignore it.
-type TranscriptionRequest struct {
+type transcriptionRequest struct {
 	Model string
 	Parts []Part
 }
@@ -41,7 +41,7 @@ type TranscriptionOption func(*transcriptionOptions)
 
 type transcriptionOptions struct {
 	httpClient *http.Client
-	middleware []providers.MiddlewareFn
+	middleware []MiddlewareFn
 }
 
 // WithTranscriptionHTTPClient overrides the http.Client used for the
@@ -52,9 +52,9 @@ func WithTranscriptionHTTPClient(c *http.Client) TranscriptionOption {
 
 // WithTranscriptionMiddleware registers pre/post hooks that fire around the
 // OUTBOUND transcription request — the async Submit and the sync Transcribe.
-// Op is providers.OpTranscription. Wait/Poll only read job state and do not
+// Op is OpTranscription. Wait/Poll only read job state and do not
 // fire (mirrors video_generation / batch_submit). Pre-phase can veto.
-func WithTranscriptionMiddleware(fns ...providers.MiddlewareFn) TranscriptionOption {
+func WithTranscriptionMiddleware(fns ...MiddlewareFn) TranscriptionOption {
 	return func(o *transcriptionOptions) { o.middleware = append(o.middleware, fns...) }
 }
 
@@ -74,7 +74,7 @@ func resolveTranscriptionOptions(opts []TranscriptionOption) *transcriptionOptio
 //
 // Internal helper — the public surface is (*Transcription).Submit in
 // transcription_builder.go.
-func submitTranscription(ctx context.Context, p Provider, req TranscriptionRequest, opts ...TranscriptionOption) (TranscriptionHandle, error) {
+func submitTranscription(ctx context.Context, p Provider, req transcriptionRequest, opts ...TranscriptionOption) (TranscriptionHandle, error) {
 	o := resolveTranscriptionOptions(opts)
 
 	if err := validateProvider(p); err != nil {
@@ -85,7 +85,7 @@ func submitTranscription(ctx context.Context, p Provider, req TranscriptionReque
 	if !ok {
 		return TranscriptionHandle{}, &ValidationError{Field: "provider", Message: "unknown: " + p.Name}
 	}
-	tcCfg := providers.TranscriptionConfig(p.Name)
+	tcCfg := internalproviders.TranscriptionConfig(p.Name)
 	if tcCfg == nil {
 		return TranscriptionHandle{}, &ValidationError{Field: "provider", Message: p.Name + " does not support transcription"}
 	}
@@ -110,8 +110,8 @@ func submitTranscription(ctx context.Context, p Provider, req TranscriptionReque
 	base := transcriptionBaseURL(p, cfg)
 	headers := buildAuthHeaders(p, cfg)
 
-	baseEvent := providers.Event{
-		Op:       providers.OpTranscription,
+	baseEvent := Event{
+		Op:       OpTranscription,
 		Provider: p.Name,
 		Model:    req.Model,
 	}
@@ -138,7 +138,7 @@ func dispatchTranscriptionSubmit(
 	ctx context.Context,
 	client *http.Client,
 	base string,
-	tcCfg *providers.TranscriptionDef,
+	tcCfg *internalproviders.TranscriptionDef,
 	headers map[string]string,
 	audioURL string,
 	audioBytes []byte,
@@ -215,14 +215,14 @@ func (h TranscriptionHandle) Poll(ctx context.Context, opts ...TranscriptionOpti
 // classify uses the config-backed default (status vs DoneStatus / ErrorStatus);
 // result decodes the finished transcript per wire shape (no second hop).
 type transcriptionAdapter struct {
-	lc         LifecycleConfig
+	lc         lifecycleConfig
 	client     *http.Client
 	headers    map[string]string
 	pollURLStr string
-	tcCfg      *providers.TranscriptionDef
+	tcCfg      *internalproviders.TranscriptionDef
 }
 
-func (a transcriptionAdapter) config() LifecycleConfig { return a.lc }
+func (a transcriptionAdapter) config() lifecycleConfig { return a.lc }
 
 func (a transcriptionAdapter) poll(ctx context.Context) (pollBody, error) {
 	respBody, err := doGet(ctx, a.client, a.pollURLStr, a.headers)
@@ -245,7 +245,7 @@ func (a transcriptionAdapter) result(ctx context.Context, raw pollBody) (Transcr
 }
 
 // newTranscriptionAdapter assembles the transcription adapter + its
-// LifecycleConfig from today's transcription facts. The status-to-terminal
+// lifecycleConfig from today's transcription facts. The status-to-terminal
 // mapping stays config (StatusPath / DoneStatus / ErrorStatus, STT-005); the
 // provider error message rides on cfg.ErrorMessagePath so Wait still surfaces
 // it (S02). Cadence/timeout come from the existing package vars so tests keep
@@ -256,7 +256,7 @@ func newTranscriptionAdapter(h TranscriptionHandle, o *transcriptionOptions) (tr
 	if !ok {
 		return transcriptionAdapter{}, &ValidationError{Field: "provider", Message: "unknown: " + p.Name}
 	}
-	tcCfg := providers.TranscriptionConfig(p.Name)
+	tcCfg := internalproviders.TranscriptionConfig(p.Name)
 	if tcCfg == nil {
 		return transcriptionAdapter{}, &ValidationError{Field: "provider", Message: p.Name + " does not support transcription"}
 	}
@@ -266,7 +266,7 @@ func newTranscriptionAdapter(h TranscriptionHandle, o *transcriptionOptions) (tr
 	headers := buildAuthHeaders(p, cfg)
 	pollURL := base + strings.Replace(tcCfg.PollEndpoint, "{id}", h.ID, 1)
 
-	lc := LifecycleConfig{
+	lc := lifecycleConfig{
 		Noun:             "transcription",
 		StatusPath:       tcCfg.StatusPath,
 		DoneValues:       nonEmptyValues(tcCfg.DoneStatus),
@@ -287,7 +287,7 @@ func newTranscriptionAdapter(h TranscriptionHandle, o *transcriptionOptions) (tr
 // inverse of AssemblyAI, OAA-005), and a non-single-audio-part input.
 //
 // Internal helper — the public surface is (*Transcription).Transcribe.
-func transcribeSync(ctx context.Context, p Provider, req TranscriptionRequest, opts ...TranscriptionOption) (TranscriptionResponse, error) {
+func transcribeSync(ctx context.Context, p Provider, req transcriptionRequest, opts ...TranscriptionOption) (TranscriptionResponse, error) {
 	o := resolveTranscriptionOptions(opts)
 
 	if err := validateProvider(p); err != nil {
@@ -297,7 +297,7 @@ func transcribeSync(ctx context.Context, p Provider, req TranscriptionRequest, o
 	if !ok {
 		return TranscriptionResponse{}, &ValidationError{Field: "provider", Message: "unknown: " + p.Name}
 	}
-	tcCfg := providers.TranscriptionConfig(p.Name)
+	tcCfg := internalproviders.TranscriptionConfig(p.Name)
 	if tcCfg == nil {
 		return TranscriptionResponse{}, &ValidationError{Field: "provider", Message: p.Name + " does not support transcription"}
 	}
@@ -323,8 +323,8 @@ func transcribeSync(ctx context.Context, p Provider, req TranscriptionRequest, o
 	}
 	headers["Content-Type"] = contentType
 
-	baseEvent := providers.Event{
-		Op:       providers.OpTranscription,
+	baseEvent := Event{
+		Op:       OpTranscription,
 		Provider: p.Name,
 		Model:    req.Model,
 	}
@@ -365,7 +365,7 @@ func transcribeSync(ctx context.Context, p Provider, req TranscriptionRequest, o
 // the generated boundary.
 func buildTranscriptionMultipart(wireShape, model string, ref *MediaRef) ([]byte, string, error) {
 	switch wireShape {
-	case providers.TranscriptionShapeOpenAI:
+	case internalproviders.TranscriptionShapeOpenAI:
 		return buildOpenAITranscriptionMultipart(model, "verbose_json", ref)
 	default:
 		return nil, "", fmt.Errorf("transcription: wire shape %q has no multipart encoder", wireShape)
@@ -479,9 +479,9 @@ func normalizeAudioBytesPart(parts []Part) (*MediaRef, error) {
 // transcriptionResult extracts the finished transcript per wire shape. Only the
 // result decode is wire-shape-keyed (STT-005); the submit/poll/status facts are
 // config.
-func transcriptionResult(tcCfg *providers.TranscriptionDef, raw map[string]any) (TranscriptionResponse, error) {
+func transcriptionResult(tcCfg *internalproviders.TranscriptionDef, raw map[string]any) (TranscriptionResponse, error) {
 	switch tcCfg.WireShape {
-	case providers.TranscriptionShapeAssemblyAI:
+	case internalproviders.TranscriptionShapeAssemblyAI:
 		return transcriptionResultFromAssemblyAI(raw), nil
 	default:
 		return TranscriptionResponse{}, fmt.Errorf("transcription: unsupported wire shape %q", tcCfg.WireShape)

@@ -10,11 +10,12 @@ import (
 	"strings"
 	"time"
 
+	internalproviders "github.com/aktagon/llmkit-go/v3/internal/providers"
 	"github.com/aktagon/llmkit-go/v3/providers"
 )
 
-// StreamCallback is called with each text chunk during streaming.
-type StreamCallback func(chunk string)
+// streamCallback is called with each text chunk during streaming.
+type streamCallback func(chunk string)
 
 // BaseURL and AddHeader (Client-scoped config setters, ADR-052) are
 // generated into builders.go from the ClientConfigMethod manifest.
@@ -31,13 +32,13 @@ type StreamCallback func(chunk string)
 func (c *Client) Supports(cap Capability) bool {
 	switch cap {
 	case CapCaching:
-		return providers.CachingConfig(c.provider.name) != nil
+		return internalproviders.CachingConfig(c.provider.name) != nil
 	case CapBatching:
-		return providers.BatchConfig(c.provider.name) != nil
+		return internalproviders.BatchConfig(c.provider.name) != nil
 	case CapFileUpload:
-		return providers.FileUploadConfig(c.provider.name) != nil
+		return internalproviders.FileUploadConfig(c.provider.name) != nil
 	case CapImageGeneration:
-		return providers.ImageGenConfig(c.provider.name) != nil
+		return internalproviders.ImageGenConfig(c.provider.name) != nil
 	default:
 		return true
 	}
@@ -46,7 +47,7 @@ func (c *Client) Supports(cap Capability) bool {
 // promptStream is the internal streaming implementation. The
 // public surface is (*Text).Stream in stream.go (plan-018 D1.3b).
 // protocol is the Text.Protocol token (ADR-055); "" keeps the default.
-func promptStream(ctx context.Context, p Provider, req Request, protocol string, callback StreamCallback, o *options) (Response, error) {
+func promptStream(ctx context.Context, p Provider, req Request, protocol string, callback streamCallback, o *options) (Response, error) {
 	o.httpClient = withRequestTimeout(o.httpClient, p.Timeout)
 
 	if err := validateProvider(p); err != nil {
@@ -77,8 +78,8 @@ func promptStream(ctx context.Context, p Provider, req Request, protocol string,
 	model, body := chat.req.Model, chat.body
 	headers := sendHeaders(p, cfg, chat.content)
 
-	baseEvent := providers.Event{
-		Op:            providers.OpLLMRequest,
+	baseEvent := Event{
+		Op:            OpLLMRequest,
 		Provider:      p.Name,
 		Model:         model,
 		ModelUnlisted: !chatModelListed(p.Name, model),
@@ -157,15 +158,15 @@ func promptStream(ctx context.Context, p Provider, req Request, protocol string,
 // call's effective wire shape. A shape that declares its own (OpenAI
 // Responses: event-typed SSE) outranks the provider's, which describe the
 // provider's default protocol (HANDOFF-087).
-func streamSettings(provider string, cfg providerSpec) (*providers.StreamDef, streamLocators) {
-	if sd := providers.WireShapeStreamConfig(cfg.ChatWireShape); sd != nil {
+func streamSettings(provider string, cfg providerSpec) (*internalproviders.StreamDef, streamLocators) {
+	if sd := internalproviders.WireShapeStreamConfig(cfg.ChatWireShape); sd != nil {
 		return sd, streamLocators{
-			FinishReason: providers.WireShapeStreamFinishReasonPath(cfg.ChatWireShape),
-			ID:           providers.WireShapeStreamResponseIDPath(cfg.ChatWireShape),
-			Model:        providers.WireShapeStreamResponseModelPath(cfg.ChatWireShape),
+			FinishReason: internalproviders.WireShapeStreamFinishReasonPath(cfg.ChatWireShape),
+			ID:           internalproviders.WireShapeStreamResponseIDPath(cfg.ChatWireShape),
+			Model:        internalproviders.WireShapeStreamResponseModelPath(cfg.ChatWireShape),
 		}
 	}
-	return providers.StreamConfig(provider), streamLocators{
+	return internalproviders.StreamConfig(provider), streamLocators{
 		FinishReason: cfg.StreamFinishReasonPath,
 		ID:           cfg.StreamResponseIDPath,
 		Model:        cfg.StreamResponseModelPath,
@@ -173,7 +174,7 @@ func streamSettings(provider string, cfg providerSpec) (*providers.StreamDef, st
 }
 
 // buildStreamURL constructs the streaming endpoint URL.
-func buildStreamURL(p Provider, cfg providerSpec, streamCfg *providers.StreamDef, model string) string {
+func buildStreamURL(p Provider, cfg providerSpec, streamCfg *internalproviders.StreamDef, model string) string {
 	base := p.BaseURL
 	if base == "" {
 		base = cfg.BaseURL
@@ -183,7 +184,7 @@ func buildStreamURL(p Provider, cfg providerSpec, streamCfg *providers.StreamDef
 	endpoint = strings.ReplaceAll(endpoint, "{apiKey}", p.APIKey)
 
 	// Handle query param auth
-	if cfg.AuthScheme == providers.AuthQueryParamKey {
+	if cfg.AuthScheme == internalproviders.AuthQueryParamKey {
 		if strings.Contains(endpoint, "?") {
 			endpoint = endpoint + "&" + cfg.AuthQueryParam + "=" + p.APIKey
 		} else {
@@ -209,7 +210,7 @@ func uploadFile(ctx context.Context, p Provider, data []byte, name, mime string,
 		return File{}, &ValidationError{Field: "provider", Message: "unknown: " + p.Name}
 	}
 
-	fuDef := providers.FileUploadConfig(p.Name)
+	fuDef := internalproviders.FileUploadConfig(p.Name)
 	if fuDef == nil {
 		return File{}, &ValidationError{Field: "provider", Message: "file upload not supported: " + p.Name}
 	}
@@ -220,8 +221,8 @@ func uploadFile(ctx context.Context, p Provider, data []byte, name, mime string,
 	if err != nil {
 		return File{}, err
 	}
-	baseEvent := providers.Event{
-		Op:       providers.OpUpload,
+	baseEvent := Event{
+		Op:       OpUpload,
 		Provider: p.Name,
 		Model:    model,
 	}
@@ -236,16 +237,16 @@ func uploadFile(ctx context.Context, p Provider, data []byte, name, mime string,
 		base = cfg.BaseURL
 	}
 	uploadURL := base + fuDef.Endpoint
-	if cfg.AuthScheme == providers.AuthQueryParamKey {
+	if cfg.AuthScheme == internalproviders.AuthQueryParamKey {
 		uploadURL += "?" + cfg.AuthQueryParam + "=" + p.APIKey
 	}
 
 	// Build headers
 	headers := map[string]string{}
 	switch cfg.AuthScheme {
-	case providers.AuthBearerToken:
+	case internalproviders.AuthBearerToken:
 		headers[cfg.AuthHeader] = cfg.AuthPrefix + " " + p.APIKey
-	case providers.AuthHeaderAPIKey:
+	case internalproviders.AuthHeaderAPIKey:
 		headers[cfg.AuthHeader] = p.APIKey
 	}
 	if cfg.RequiredHeader != "" {
@@ -351,46 +352,46 @@ func validateRequest(req Request) error {
 
 // validateOptions checks that requested options are supported by the provider.
 func validateOptions(provider string, req Request) error {
-	supported := providers.SupportedOptions(provider)
+	supported := internalproviders.SupportedOptions(provider)
 	if supported == nil {
 		return nil
 	}
 
 	if req.TopK != nil {
-		if _, ok := supported[providers.OptionTopK]; !ok {
+		if _, ok := supported[internalproviders.OptionTopK]; !ok {
 			return &ValidationError{Field: "top_k", Message: "not supported by " + provider}
 		}
 	}
 	if req.Seed != nil {
-		if _, ok := supported[providers.OptionSeed]; !ok {
+		if _, ok := supported[internalproviders.OptionSeed]; !ok {
 			return &ValidationError{Field: "seed", Message: "not supported by " + provider}
 		}
 	}
 	if req.FrequencyPenalty != nil {
-		if _, ok := supported[providers.OptionFrequencyPenalty]; !ok {
+		if _, ok := supported[internalproviders.OptionFrequencyPenalty]; !ok {
 			return &ValidationError{Field: "frequency_penalty", Message: "not supported by " + provider}
 		}
 	}
 	if req.PresencePenalty != nil {
-		if _, ok := supported[providers.OptionPresencePenalty]; !ok {
+		if _, ok := supported[internalproviders.OptionPresencePenalty]; !ok {
 			return &ValidationError{Field: "presence_penalty", Message: "not supported by " + provider}
 		}
 	}
 	if req.ThinkingBudget != nil {
-		if _, ok := supported[providers.OptionThinkingBudget]; !ok {
+		if _, ok := supported[internalproviders.OptionThinkingBudget]; !ok {
 			return &ValidationError{Field: "thinking_budget", Message: "not supported by " + provider}
 		}
 	}
 	if req.ReasoningEffort != nil {
-		if _, ok := supported[providers.OptionReasoningEffort]; !ok {
+		if _, ok := supported[internalproviders.OptionReasoningEffort]; !ok {
 			return &ValidationError{Field: "reasoning_effort", Message: "not supported by " + provider}
 		}
 	}
 
 	//
-	overrides := providers.OptionOverrides(provider)
+	overrides := internalproviders.OptionOverrides(provider)
 	if req.ReasoningEffort != nil && overrides != nil {
-		if ov, ok := overrides[providers.OptionReasoningEffort]; ok && ov.AllowedValues != "" {
+		if ov, ok := overrides[internalproviders.OptionReasoningEffort]; ok && ov.AllowedValues != "" {
 			if !containsValue(ov.AllowedValues, *req.ReasoningEffort) {
 				return &ValidationError{
 					Field:   "reasoning_effort",
@@ -499,7 +500,7 @@ func sendURL(p Provider, cfg providerSpec, path string) string {
 	}
 
 	// Handle query param auth (Google)
-	if cfg.AuthScheme == providers.AuthQueryParamKey {
+	if cfg.AuthScheme == internalproviders.AuthQueryParamKey {
 		path = path + "?" + cfg.AuthQueryParam + "=" + p.APIKey
 	}
 	path = strings.ReplaceAll(path, "{apiKey}", p.APIKey)
@@ -523,13 +524,13 @@ func sendURL(p Provider, cfg providerSpec, path string) string {
 // the provider's default supported-options key is used. This is the single
 // resolution path; both the MaxTokens site and the general option loop call it
 // (OPT-005).
-func resolveOptionKey(provider, model, chatWireShape string, param providers.OptionKey, supported map[providers.OptionKey]string) (string, bool) {
-	if key, ok := providers.WireShapeOptionOverrides(chatWireShape)[param]; ok {
+func resolveOptionKey(provider, model, chatWireShape string, param internalproviders.OptionKey, supported map[internalproviders.OptionKey]string) (string, bool) {
+	if key, ok := internalproviders.WireShapeOptionOverrides(chatWireShape)[param]; ok {
 		return key, true
 	}
 	bestKey := ""
 	bestLen := -1
-	for _, ov := range providers.ModelOptionOverrides(provider) {
+	for _, ov := range internalproviders.ModelOptionOverrides(provider) {
 		if ov.Key != param {
 			continue
 		}
@@ -645,27 +646,27 @@ func encodeRequest(provider string, cfg providerSpec, req Request) (map[string]a
 	// Max tokens: the caller's value, else the provider's default where the
 	// wire shape requires the param, else none (ADR-098 RQC-015).
 	maxTokens := req.MaxTokens
-	if maxTokens == nil && slices.Contains(providers.WireShapeRequiredParams(cfg.ChatWireShape), providers.OptionMaxTokens) {
+	if maxTokens == nil && slices.Contains(internalproviders.WireShapeRequiredParams(cfg.ChatWireShape), internalproviders.OptionMaxTokens) {
 		maxTokens = &cfg.DefaultMaxTokens
 	}
 
 	// Provider-specific max tokens key (per-model override aware, ADR-024)
-	supported := providers.SupportedOptions(provider)
+	supported := internalproviders.SupportedOptions(provider)
 	if maxTokens != nil {
-		if key, ok := resolveOptionKey(provider, model, cfg.ChatWireShape, providers.OptionMaxTokens, supported); ok {
+		if key, ok := resolveOptionKey(provider, model, cfg.ChatWireShape, internalproviders.OptionMaxTokens, supported); ok {
 			body[key] = *maxTokens
 		}
 	}
 
 	// System message placement
 	switch cfg.SystemPlacement {
-	case providers.PlacementTopLevelField:
+	case internalproviders.PlacementTopLevelField:
 		if req.System != "" {
 			body["system"] = req.System
 		}
-	case providers.PlacementMessageInArray:
+	case internalproviders.PlacementMessageInArray:
 		// system handled below in message transform
-	case providers.PlacementSiblingObject:
+	case internalproviders.PlacementSiblingObject:
 		if req.System != "" {
 			body["system_instruction"] = map[string]any{
 				"parts": []map[string]any{{"text": req.System}},
@@ -693,7 +694,7 @@ func encodeRequest(provider string, cfg providerSpec, req Request) (map[string]a
 		optBody := map[string]any{}
 		addOptions(body, optBody, req, provider, model, cfg.ChatWireShape)
 		// Also move max tokens into the wrapper
-		if key, ok := resolveOptionKey(provider, model, cfg.ChatWireShape, providers.OptionMaxTokens, supported); ok && maxTokens != nil {
+		if key, ok := resolveOptionKey(provider, model, cfg.ChatWireShape, internalproviders.OptionMaxTokens, supported); ok && maxTokens != nil {
 			setNestedField(optBody, key, *maxTokens)
 			delete(body, strings.SplitN(key, ".", 2)[0])
 		}
@@ -724,7 +725,7 @@ func encodeRequest(provider string, cfg providerSpec, req Request) (map[string]a
 	// with any existing value (e.g. structured output) rather than overwrite.
 	// Anthropic declares none since its Files API left beta (BUG-078).
 	if requestHasFiles(req) {
-		if fu := providers.FileUploadConfig(provider); fu != nil && fu.BetaHeader != "" {
+		if fu := internalproviders.FileUploadConfig(provider); fu != nil && fu.BetaHeader != "" {
 			headers["anthropic-beta"] = appendBeta(headers["anthropic-beta"], fu.BetaHeader)
 		}
 	}
@@ -749,9 +750,9 @@ func sendHeaders(p Provider, cfg providerSpec, content map[string]string) map[st
 		headers[k] = v
 	}
 	switch cfg.AuthScheme {
-	case providers.AuthBearerToken:
+	case internalproviders.AuthBearerToken:
 		headers[cfg.AuthHeader] = cfg.AuthPrefix + " " + p.APIKey
-	case providers.AuthHeaderAPIKey:
+	case internalproviders.AuthHeaderAPIKey:
 		headers[cfg.AuthHeader] = p.APIKey
 	}
 	mergeCallerHeaders(headers, p)
@@ -778,10 +779,10 @@ func mapRole(role string, mappings map[string]string) string {
 // output_config.effort). root is the true body root; for providers that wrap
 // options (WrapsOptionsIn), target is the wrapper object and root differs.
 func addOptions(root, target map[string]any, req Request, provider, model, chatWireShape string) {
-	supported := providers.SupportedOptions(provider)
-	overrides := providers.OptionOverrides(provider)
+	supported := internalproviders.SupportedOptions(provider)
+	overrides := internalproviders.OptionOverrides(provider)
 
-	apply := func(key providers.OptionKey, value any) {
+	apply := func(key internalproviders.OptionKey, value any) {
 		jsonKey, ok := resolveOptionKey(provider, model, chatWireShape, key, supported)
 		if !ok {
 			return
@@ -804,31 +805,31 @@ func addOptions(root, target map[string]any, req Request, provider, model, chatW
 	}
 
 	if req.Temperature != nil {
-		apply(providers.OptionTemperature, *req.Temperature)
+		apply(internalproviders.OptionTemperature, *req.Temperature)
 	}
 	if req.TopP != nil {
-		apply(providers.OptionTopP, *req.TopP)
+		apply(internalproviders.OptionTopP, *req.TopP)
 	}
 	if req.TopK != nil {
-		apply(providers.OptionTopK, *req.TopK)
+		apply(internalproviders.OptionTopK, *req.TopK)
 	}
 	if len(req.Stop) > 0 {
-		apply(providers.OptionStopSequences, req.Stop)
+		apply(internalproviders.OptionStopSequences, req.Stop)
 	}
 	if req.Seed != nil {
-		apply(providers.OptionSeed, *req.Seed)
+		apply(internalproviders.OptionSeed, *req.Seed)
 	}
 	if req.FrequencyPenalty != nil {
-		apply(providers.OptionFrequencyPenalty, *req.FrequencyPenalty)
+		apply(internalproviders.OptionFrequencyPenalty, *req.FrequencyPenalty)
 	}
 	if req.PresencePenalty != nil {
-		apply(providers.OptionPresencePenalty, *req.PresencePenalty)
+		apply(internalproviders.OptionPresencePenalty, *req.PresencePenalty)
 	}
 	if req.ThinkingBudget != nil {
-		apply(providers.OptionThinkingBudget, *req.ThinkingBudget)
+		apply(internalproviders.OptionThinkingBudget, *req.ThinkingBudget)
 	}
 	if req.ReasoningEffort != nil {
-		apply(providers.OptionReasoningEffort, *req.ReasoningEffort)
+		apply(internalproviders.OptionReasoningEffort, *req.ReasoningEffort)
 	}
 }
 
@@ -892,7 +893,7 @@ func appendBeta(existing, add string) string {
 
 // addStructuredOutput adds schema-based output format to the request.
 func addStructuredOutput(body map[string]any, headers map[string]string, schema string, providerName string, cfg providerSpec) {
-	soDef := providers.StructuredOutput(providerName)
+	soDef := internalproviders.StructuredOutput(providerName)
 	if soDef == nil {
 		return
 	}
@@ -1100,7 +1101,7 @@ func DecodeResponse(provider, chatWireShape string, body []byte) (Response, erro
 		ProviderTurn:         turn,
 		ID:                   id,
 		Model:                model,
-		Created:              optIntPath(raw, providers.WireShapeResponseCreatedPath(chatWireShape)),
+		Created:              optIntPath(raw, internalproviders.WireShapeResponseCreatedPath(chatWireShape)),
 		ChatWireShape:        optString(chatWireShape),
 	}, nil
 }
@@ -1111,7 +1112,7 @@ func DecodeResponse(provider, chatWireShape string, body []byte) (Response, erro
 // produces — which is exactly how Go, Python and TypeScript came to accumulate
 // three dimensions of six (BUG-045).
 func decodeUsage(raw map[string]any, provider string) Usage {
-	inputPath, outputPath := providers.UsagePaths(provider)
+	inputPath, outputPath := internalproviders.UsagePaths(provider)
 	cacheWrite, cacheRead := extractCacheUsage(raw, provider)
 	return Usage{
 		Input:      optIntPath(raw, inputPath),
@@ -1120,8 +1121,8 @@ func decodeUsage(raw map[string]any, provider string) Usage {
 		CacheRead:  cacheRead,
 		Reasoning:  extractReasoningUsage(raw, provider),
 		Cost: scaleCost(
-			optFloatPath(raw, providers.UsageCostPath(provider)),
-			providers.UsageCostScale(provider),
+			optFloatPath(raw, internalproviders.UsageCostPath(provider)),
+			internalproviders.UsageCostScale(provider),
 		),
 	}
 }
@@ -1159,14 +1160,14 @@ func EncodeResponse(provider, chatWireShape string, resp Response) ([]byte, erro
 	if err := encodeChatParts(raw, provider, chatWireShape, resp.Parts); err != nil {
 		return nil, err
 	}
-	inputPath, outputPath := providers.UsagePaths(provider)
+	inputPath, outputPath := internalproviders.UsagePaths(provider)
 	setWirePath(raw, inputPath, resp.Usage.Input)
 	setWirePath(raw, outputPath, resp.Usage.Output)
-	cacheWritePath, cacheReadPath := providers.CacheUsagePaths(provider)
+	cacheWritePath, cacheReadPath := internalproviders.CacheUsagePaths(provider)
 	setWirePath(raw, cacheWritePath, resp.Usage.CacheWrite)
 	setWirePath(raw, cacheReadPath, resp.Usage.CacheRead)
-	if scale := providers.UsageCostScale(provider); scale != 0 && resp.Usage.Cost != nil {
-		setWirePath(raw, providers.UsageCostPath(provider), *resp.Usage.Cost/scale)
+	if scale := internalproviders.UsageCostScale(provider); scale != 0 && resp.Usage.Cost != nil {
+		setWirePath(raw, internalproviders.UsageCostPath(provider), *resp.Usage.Cost/scale)
 	}
 	if cfg, ok := providerSpecs()[provider]; ok {
 		setWirePath(raw, cfg.ReasoningTokensPath, resp.Usage.Reasoning)
@@ -1178,7 +1179,7 @@ func EncodeResponse(provider, chatWireShape string, resp Response) ([]byte, erro
 		setWirePath(raw, cfg.ResponseIDPath, resp.ID)
 		setWirePath(raw, cfg.ResponseModelPath, resp.Model)
 	}
-	setWirePath(raw, providers.WireShapeResponseCreatedPath(chatWireShape), resp.Created)
+	setWirePath(raw, internalproviders.WireShapeResponseCreatedPath(chatWireShape), resp.Created)
 	encodeFixedValues(raw, chatWireShape)
 	return marshalWire(raw)
 }
@@ -1249,7 +1250,7 @@ func servedChatSpec(provider, chatWireShape string) (providerSpec, error) {
 // the same value (shapeFixedValue, owner decision 4): on ChatOpenAI the
 // object type, the choice index and the message role.
 func encodeFixedValues(raw map[string]any, chatWireShape string) {
-	for _, fv := range providers.WireShapeFixedValues(chatWireShape) {
+	for _, fv := range internalproviders.WireShapeFixedValues(chatWireShape) {
 		setWirePath(raw, fv.Path, fv.Value)
 	}
 }
@@ -1393,9 +1394,9 @@ func encodeResponsesEnvelope(provider, chatWireShape string, resp Response) (map
 		setWirePath(raw, "status", e.WireValue)
 		setWirePath(raw, e.DetailPath, e.DetailValue)
 	}
-	setWirePath(raw, providers.WireShapeResponseIDPath(providers.ChatResponsesOpenAI), resp.ID)
-	setWirePath(raw, providers.WireShapeResponseModelPath(providers.ChatResponsesOpenAI), resp.Model)
-	setWirePath(raw, providers.WireShapeResponseCreatedPath(providers.ChatResponsesOpenAI), resp.Created)
+	setWirePath(raw, internalproviders.WireShapeResponseIDPath(providers.ChatResponsesOpenAI), resp.ID)
+	setWirePath(raw, internalproviders.WireShapeResponseModelPath(providers.ChatResponsesOpenAI), resp.Model)
+	setWirePath(raw, internalproviders.WireShapeResponseCreatedPath(providers.ChatResponsesOpenAI), resp.Created)
 	encodeFixedValues(raw, chatWireShape)
 	return raw, nil
 }
@@ -1421,9 +1422,9 @@ func parseResponsesEnvelope(raw map[string]any) Response {
 		resp.ProviderFinishReason = optString(extractPath(raw, "status"))
 		resp.FinishReason = decodeFinishReason(providers.ChatResponsesOpenAI, resp.ProviderFinishReason, raw)
 	}
-	resp.ID = optStringPath(raw, providers.WireShapeResponseIDPath(providers.ChatResponsesOpenAI))
-	resp.Model = optStringPath(raw, providers.WireShapeResponseModelPath(providers.ChatResponsesOpenAI))
-	resp.Created = optIntPath(raw, providers.WireShapeResponseCreatedPath(providers.ChatResponsesOpenAI))
+	resp.ID = optStringPath(raw, internalproviders.WireShapeResponseIDPath(providers.ChatResponsesOpenAI))
+	resp.Model = optStringPath(raw, internalproviders.WireShapeResponseModelPath(providers.ChatResponsesOpenAI))
+	resp.Created = optIntPath(raw, internalproviders.WireShapeResponseCreatedPath(providers.ChatResponsesOpenAI))
 	return resp
 }
 
@@ -1673,8 +1674,8 @@ func addOptFloat(a, b *float64) *float64 {
 // The caller seeds from the first turn rather than from a zero value: the
 // identity for absorbing addition is a REPORTED zero, and seeding with an
 // all-unreported Usage would absorb every subsequent turn to nothing.
-func accumulateUsage(total, turn providers.Usage) providers.Usage {
-	return providers.Usage{
+func accumulateUsage(total, turn Usage) Usage {
+	return Usage{
 		Input:      addOptInt(total.Input, turn.Input),
 		Output:     addOptInt(total.Output, turn.Output),
 		CacheWrite: addOptInt(total.CacheWrite, turn.CacheWrite),

@@ -4,8 +4,6 @@ package llmkit
 
 import (
 	"encoding/json"
-
-	"github.com/aktagon/llmkit-go/v3/providers"
 )
 
 // AudioData is one decoded audio payload returned in a MusicResponse. Same shape as MediaRef (mime type + raw bytes) but a distinct type so capability-specific return semantics stay typed: MusicResponse.audio carries decoded outputs; MediaRef appears in input payloads.
@@ -62,7 +60,10 @@ type ImageHints struct {
 	Sizes []string
 
 	// ImageInput is whether the model takes image parts: yes, no, or unknown when no source states it.
-	ImageInput providers.Support
+	ImageInput Support
+
+	// MaxInputImages is the most input images the catalogue lists for the model (maxInputImages). Zero or absent when no source states a limit (ADR-104 PUB-004).
+	MaxInputImages int
 }
 
 // ImageResponse is the universal image-generation response container returned by Image.Generate. Carries the decoded images, optional text captions/refusals, usage, and the same finish-reason / finish-message / raw fields the text-gen Response carries.
@@ -299,7 +300,7 @@ type SafetySetting struct {
 // SpeechHints is what the SDK's catalogue states about one speech-generation model (ADR-102 MPT-008). The values are hints: a request outside them is still sent, and the provider answers.
 type SpeechHints struct {
 	// Style is whether the model takes a speech style: yes, no, or unknown when no source states it.
-	Style providers.Support
+	Style Support
 }
 
 // SpeechResponse is the universal text-to-speech response container returned by Speech.Generate. Carries the synthesized audio (a single clip), the provider-reported usage, and an optional finish reason — reusing the music pipeline's AudioData container unchanged (ADR-049).
@@ -428,13 +429,16 @@ type VideoHints struct {
 	MaxDurationSeconds int
 
 	// ImageToVideo is whether the model takes a seed image: yes, no, or unknown when no source states it.
-	ImageToVideo providers.Support
+	ImageToVideo Support
 
 	// LastFrame is whether the model takes a last frame: yes, no, or unknown when no source states it.
-	LastFrame providers.Support
+	LastFrame Support
 
 	// ReferenceImages is whether the model takes reference images: yes, no, or unknown when no source states it.
-	ReferenceImages providers.Support
+	ReferenceImages Support
+
+	// MaxInputImages is the most input images the catalogue lists for the model (maxInputImages), such as 1 for a single seed-frame slot. Zero or absent when no source states a limit (ADR-104 PUB-004).
+	MaxInputImages int
 }
 
 // VideoResponse is the universal video-generation response container returned by VideoHandle.Wait. Carries the finished video references, usage, and the same finish-reason / finish-message / raw fields the image-gen and music-gen responses carry.
