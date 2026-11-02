@@ -438,6 +438,9 @@ func (b *ScopedModels) enrich(records []internalproviders.ParsedModelRecord) []M
 // Client.Models.Provider(p).List for that. The live fields (Description,
 // ContextWindow, Raw and the rest) are empty, and Provider carries no API
 // key. Sorted by ID; empty for a provider the catalogue states nothing for.
+// Chat models appear only for providers with compiled chat facts (today
+// Anthropic, Google and OpenAI); image, video, speech and music models appear
+// for every provider that lists them.
 func KnownModels(name providers.ProviderName) []ModelInfo {
 	provider := string(name)
 	var ids []string
@@ -479,12 +482,32 @@ func KnownModels(name providers.ProviderName) []ModelInfo {
 // catalogue states about the model. The live fields are left empty.
 func knownModelInfo(provider, modelID string) ModelInfo {
 	info := ModelInfo{
-		ID:           modelID,
-		Provider:     Provider{Name: provider},
-		Capabilities: ontologyCapabilities[provider][modelID],
-		DisplayName:  catalogueLabel(provider, modelID),
+		ID:          modelID,
+		Provider:    Provider{Name: provider},
+		DisplayName: catalogueLabel(provider, modelID),
 	}
 	info.Image, info.Video, info.Speech, info.Music = catalogueHints(provider, modelID)
+	// A model in the provider's speech, music or video list has that
+	// capability (ADR-102 MPT-010); the hints are present exactly then. The
+	// copy keeps the shared compiled slice unchanged.
+	compiled := ontologyCapabilities[provider][modelID]
+	caps := append([]Capability(nil), compiled...)
+	derived := []struct {
+		member bool
+		cap    Capability
+	}{
+		{info.Speech != nil, CapSpeechGeneration},
+		{info.Music != nil, CapMusicGeneration},
+		{info.Video != nil, CapVideoGeneration},
+	}
+	for _, d := range derived {
+		if d.member && !slices.Contains(caps, d.cap) {
+			caps = append(caps, d.cap)
+		}
+	}
+	if compiled != nil || len(caps) > 0 {
+		info.Capabilities = caps
+	}
 	return info
 }
 
@@ -576,8 +599,17 @@ func musicHints(m *internalproviders.MusicModelDef) *MusicHints {
 		Lyrics:             m.SupportsLyrics,
 		MaxDurationSeconds: m.MaxDurationSeconds,
 		OutputFormats:      slices.Clone(m.AvailableOutputFormats),
-		ImageInput:         m.SupportsImageInput,
+		// Required on a music model (CR-008), so always yes or no.
+		ImageInput: supportOf(m.SupportsImageInput),
 	}
+}
+
+// supportOf maps a stated boolean fact to SupportYes or SupportNo.
+func supportOf(stated bool) Support {
+	if stated {
+		return SupportYes
+	}
+	return SupportNo
 }
 
 // imageHints copies one image model's facts. The lists are copies, so a

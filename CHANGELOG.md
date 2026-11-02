@@ -19,14 +19,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`ModelInfo.Music` holds a `*MusicHints`** for a model the SDK lists for
   music generation: whether it takes lyrics, the maximum duration in
   seconds, the audio formats it can return, and whether it takes image
-  parts. Each support fact is `SupportUnknown` when no source states it.
+  parts. `Lyrics` is `SupportUnknown` when no source states it;
+  `ImageInput` is always `SupportYes` or `SupportNo`.
 - **`SpeechHints.MaxSpeakers`** is the number of speakers the model takes,
   or 0 when no source states it. **`SpeechHints.Rejects`** names the
   request options the SDK rejects before send for the model, from
   `"speakers"` and `"style"`, sorted.
-- **`json.Marshal` of a `ModelInfo` writes the JSON form the Go, TypeScript
-  and Rust SDKs share:** camelCase keys, `provider` as the provider name,
-  and `null` for an absent or unknown value.
+- **`Capability` gains `CapSpeechGeneration`, `CapMusicGeneration`,
+  `CapVideoGeneration` and `CapTranscription`.** A model in a provider's
+  speech, music or video model list carries that capability in
+  `ModelInfo.Capabilities`, from both `KnownModels` and the live list, so
+  `c.Models.WithCapability(llmkit.CapSpeechGeneration)` finds speech
+  models. `Client.Supports` answers the four from the provider's
+  configuration. `Capability` and its constants are now declared in the
+  `providers` package; `llmkit.Capability` and the `llmkit.Cap*` names
+  stay as aliases.
+- **`providers.ProviderInfo.Capabilities`** lists what a provider offers,
+  with no client and no API key, in the order the `Cap*` constants are
+  declared. `CapCatalogue` is not listed.
+- `KnownModels` lists chat models only for providers with compiled chat
+  facts (today Anthropic, Google and OpenAI).
 - `ModelInfo.DisplayName` falls back to the model's label when the
   provider's model list carries no name.
 
@@ -34,6 +46,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - A model's capabilities are listed in the order the `Cap*` constants are
   declared.
+- **`json.Marshal(ModelInfo)` now writes a different JSON form.**
+  `ModelInfo` gains a `MarshalJSON` method that writes the form the Go,
+  TypeScript and Rust SDKs share: camelCase keys, `provider` as the provider
+  name, and `null` for an absent or unknown value. Before, `json.Marshal`
+  wrote the Go field names and the whole `Provider` value, API key
+  included. Code that parses the old output must read the new keys.
 
 ## [3.0.0] — 2026-11-02
 
