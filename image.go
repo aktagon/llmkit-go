@@ -179,7 +179,7 @@ func generateImage(ctx context.Context, p Provider, req imageRequest, opts ...im
 	if err != nil {
 		return ImageResponse{}, err
 	}
-	o, cfg, imgCfg, model, listed, parts, imageCount, variant := plan.o, plan.cfg, plan.imgCfg, plan.model, plan.listed, plan.parts, plan.imageCount, plan.variant
+	o, cfg, imgCfg, model, listed, parts, imageCount, variant := plan.o, plan.cfg, plan.imgCfg, plan.model, plan.listed, plan.Parts, plan.imageCount, plan.variant
 
 	baseEvent := Event{
 		Op:            OpImageGeneration,
@@ -227,7 +227,7 @@ type imagePlan struct {
 	imgCfg     *internalproviders.ImageGenDef
 	model      *internalproviders.ImageModelDef
 	listed     bool
-	parts      []Part
+	Parts      []Part
 	imageCount int
 	variant    internalproviders.RequestVariant
 }
@@ -284,7 +284,7 @@ func planImage(p Provider, req imageRequest, opts []imageOption) (imagePlan, err
 	if err := validateImageShapeOptions(p.Name, variant.Shape, o); err != nil {
 		return imagePlan{}, err
 	}
-	return imagePlan{o: o, cfg: cfg, imgCfg: imgCfg, model: model, listed: listed, parts: parts, imageCount: imageCount, variant: variant}, nil
+	return imagePlan{o: o, cfg: cfg, imgCfg: imgCfg, model: model, listed: listed, Parts: parts, imageCount: imageCount, variant: variant}, nil
 }
 
 // previewImage returns the body generateImage would send (ADR-106).
@@ -293,7 +293,7 @@ func previewImage(p Provider, req imageRequest, opts ...imageOption) ([]byte, er
 	if err != nil {
 		return nil, err
 	}
-	return buildImageJSON(plan.variant, req.Model, plan.parts, plan.o)
+	return buildImageJSON(plan.variant, req.Model, plan.Parts, plan.o)
 }
 
 // validateImageShapeOptions is the per-request-shape knob validation. Quality, OutputFormat, Background
