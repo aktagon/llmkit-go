@@ -135,6 +135,7 @@ func (b *Agent) initAgent() error {
 		PresencePenalty:  b.presencePenalty,
 		ReasoningEffort:  b.reasoningEffort,
 		ThinkingBudget:   b.thinkingBudget,
+		ThinkingType:     b.thinkingType,
 		SafetySettings:   b.safetySettings,
 	}
 	a := newLegacyAgent(b.client.provider.toProvider(""), req, b.tools, o)

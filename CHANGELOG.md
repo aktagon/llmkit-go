@@ -5,6 +5,17 @@ All notable changes to the Go SDK are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **`ThinkingType(mode)` on `Text` and `Agent`, and `Request.ThinkingType`,
+  set Anthropic's `thinking.type`.** The modes are `adaptive`, `enabled`,
+  `disabled` and `between_tools`; any other value fails before send. When
+  set, it wins over the type that `ReasoningEffort` or `ThinkingBudget`
+  sends. A Sonnet 5.5 caller turns thinking off with
+  `c.Text.Model("claude-sonnet-5-5").ReasoningEffort("low").ThinkingType("between_tools")`.
+
 ## [3.1.0] — 2026-11-02
 
 ### Added

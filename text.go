@@ -140,6 +140,7 @@ func (b *Text) request(finalText string) Request {
 		PresencePenalty:  b.presencePenalty,
 		ReasoningEffort:  b.reasoningEffort,
 		ThinkingBudget:   b.thinkingBudget,
+		ThinkingType:     b.thinkingType,
 		SafetySettings:   b.safetySettings,
 	}
 }
@@ -167,6 +168,7 @@ func (b *Text) setRequest(req Request) {
 	b.presencePenalty = req.PresencePenalty
 	b.reasoningEffort = req.ReasoningEffort
 	b.thinkingBudget = req.ThinkingBudget
+	b.thinkingType = req.ThinkingType
 	b.safetySettings = append([]SafetySetting(nil), req.SafetySettings...)
 }
 
