@@ -15,15 +15,16 @@ const (
 type MusicModelDef struct {
 	ModelID            string
 	Label              string
-	SupportsLyrics     bool
+	SupportsLyrics     Support // unknown when no source states it
 	MaxDurationSeconds int
 	OutputMime         string
 	// SampleRateHz + AvailableOutputFormats are ADR-037 advisory facts
 	// (queryable, never gated). SampleRateHz is 0 when unverified.
 	SampleRateHz           int
 	AvailableOutputFormats []string
-	// SupportsImageInput reports whether llmkit sends Image Parts for this model.
-	SupportsImageInput bool
+	// SupportsImageInput reports whether the model takes Image Parts;
+	// unknown when no source states it.
+	SupportsImageInput Support
 }
 
 // MusicGenDef holds one provider's music-generation configuration.
@@ -49,32 +50,32 @@ func MusicGenConfig(provider string) *MusicGenDef {
 				{
 					ModelID:                "lyria-3-clip-preview",
 					Label:                  "Lyria 3 Clip",
-					SupportsLyrics:         true,
+					SupportsLyrics:         SupportYes,
 					MaxDurationSeconds:     30,
 					OutputMime:             "audio/mpeg",
 					SampleRateHz:           0,
 					AvailableOutputFormats: []string{"audio/mpeg"},
-					SupportsImageInput:     false,
+					SupportsImageInput:     SupportNo,
 				},
 				{
 					ModelID:                "lyria-3-pro-preview",
 					Label:                  "Lyria 3 Pro",
-					SupportsLyrics:         true,
+					SupportsLyrics:         SupportYes,
 					MaxDurationSeconds:     120,
 					OutputMime:             "audio/mpeg",
 					SampleRateHz:           0,
 					AvailableOutputFormats: []string{"audio/mpeg"},
-					SupportsImageInput:     false,
+					SupportsImageInput:     SupportNo,
 				},
 				{
 					ModelID:                "lyria-3.5",
 					Label:                  "Lyria 3.5",
-					SupportsLyrics:         true,
+					SupportsLyrics:         SupportYes,
 					MaxDurationSeconds:     0,
 					OutputMime:             "audio/mpeg",
 					SampleRateHz:           0,
 					AvailableOutputFormats: []string{"audio/mpeg"},
-					SupportsImageInput:     false,
+					SupportsImageInput:     SupportNo,
 				},
 			},
 		}
@@ -87,12 +88,12 @@ func MusicGenConfig(provider string) *MusicGenDef {
 				{
 					ModelID:                "music-2.6",
 					Label:                  "MiniMax Music 2.6",
-					SupportsLyrics:         true,
+					SupportsLyrics:         SupportYes,
 					MaxDurationSeconds:     0,
 					OutputMime:             "audio/mpeg",
 					SampleRateHz:           44100,
 					AvailableOutputFormats: []string{"audio/mpeg", "audio/wav"},
-					SupportsImageInput:     false,
+					SupportsImageInput:     SupportNo,
 				},
 			},
 		}
@@ -105,12 +106,12 @@ func MusicGenConfig(provider string) *MusicGenDef {
 				{
 					ModelID:                "lyria-002",
 					Label:                  "Lyria 2",
-					SupportsLyrics:         false,
+					SupportsLyrics:         SupportNo,
 					MaxDurationSeconds:     30,
 					OutputMime:             "audio/wav",
 					SampleRateHz:           48000,
 					AvailableOutputFormats: []string{"audio/wav"},
-					SupportsImageInput:     false,
+					SupportsImageInput:     SupportNo,
 				},
 			},
 		}

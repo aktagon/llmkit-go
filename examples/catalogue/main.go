@@ -1,6 +1,6 @@
 // Model catalogue + provider lookup.
 //
-// Demonstrates the c.Models / c.Providers surface (ADR-019). Three parts:
+// Demonstrates the c.Models / c.Providers surface (ADR-019). Four parts:
 //
 //  1. Live list — List(ctx) fans out to each configured provider's
 //     /v1/models endpoint. The client caches each provider's list in
@@ -10,6 +10,8 @@
 //  3. Scoped — Provider(p).Get(ctx, id) answers from the cached list when
 //     it holds the ID; Provider(p).List(ctx) lists one provider. Raw()
 //     additionally populates ModelInfo.Raw with the provider-native record.
+//  4. Known models — KnownModels(name) lists the models this SDK version
+//     states facts for, with no key and no network.
 //
 // Run with: ANTHROPIC_API_KEY=sk-... go run ./examples/catalogue
 package main
@@ -79,4 +81,14 @@ func main() {
 	}
 	rawPopulated := len(rawScoped) > 0 && rawScoped[0].Raw != nil
 	fmt.Println("raw populated:", rawPopulated)
+
+	// 4. Known models: what this SDK version states about each model,
+	// with no key and no network.
+	// #region known-models
+	for _, m := range llmkit.KnownModels(providers.Google) {
+		if m.Speech != nil {
+			fmt.Println(m.ID, m.DisplayName, m.Speech.MaxSpeakers, m.Speech.Rejects)
+		}
+	}
+	// #endregion
 }

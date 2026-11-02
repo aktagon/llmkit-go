@@ -9,25 +9,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **`llmkit.Catalogue(name)` lists the models this SDK version states facts
-  for, with no client, no API key and no network.** It returns a
-  `[]ModelInfo` sorted by ID, with `Capabilities` and the hints filled. The
-  live fields (`DisplayName`, `ContextWindow`, `Raw` and the rest) are
-  empty. The list is not proof that the provider serves a model; use
-  `c.Models.Provider(p).List(ctx)` for that.
+- **`llmkit.KnownModels(name)` lists the models this SDK version states
+  facts for, with no client, no API key and no network.** It returns a
+  `[]ModelInfo` sorted by ID, with `Capabilities`, the hints and the model's
+  label as `DisplayName`. The live fields (`Description`, `ContextWindow`,
+  `Raw` and the rest) are empty. A provider with no listed models returns
+  an empty list. The list is not proof that the provider serves a model;
+  use `c.Models.Provider(p).List(ctx)` for that.
 - **`ModelInfo.Music` holds a `*MusicHints`** for a model the SDK lists for
   music generation: whether it takes lyrics, the maximum duration in
   seconds, the audio formats it can return, and whether it takes image
-  parts.
+  parts. Each support fact is `SupportUnknown` when no source states it.
 - **`SpeechHints.MaxSpeakers`** is the number of speakers the model takes,
-  or 0 when no source states it. It is 1 when the provider's request has no
-  multi-speaker form.
+  or 0 when no source states it. **`SpeechHints.Rejects`** names the
+  request options the SDK rejects before send for the model, from
+  `"speakers"` and `"style"`, sorted.
+- **`json.Marshal` of a `ModelInfo` writes the JSON form the Go, TypeScript
+  and Rust SDKs share:** camelCase keys, `provider` as the provider name,
+  and `null` for an absent or unknown value.
+- `ModelInfo.DisplayName` falls back to the model's label when the
+  provider's model list carries no name.
 
 ### Changed
 
-- **`SpeechHints.Style` is `SupportNo` when the provider's request carries no
-  style**, whatever the model states. The SDK already rejected a style on
-  those providers before send.
+- A model's capabilities are listed in the order the `Cap*` constants are
+  declared.
 
 ## [3.0.0] — 2026-11-02
 
