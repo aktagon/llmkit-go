@@ -1396,7 +1396,7 @@ func validateGeminiOmniInputs(vgCfg *internalproviders.VideoGenDef, parts []Part
 	}
 	switch {
 	case req.DurationSeconds != 0:
-		return &ValidationError{Field: "duration", Message: "Gemini Omni video has no duration field"}
+		return &ValidationError{Field: "duration", Message: "llmkit sends no duration for Gemini Omni video"}
 	case hasImage:
 		return &ValidationError{Field: "parts", Message: "Gemini Omni video sends text only, not a seed frame"}
 	case req.LastFrame != nil:

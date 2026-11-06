@@ -142,6 +142,18 @@ func VideoGenConfig(provider string) *VideoGenDef {
 					AspectRatios:            []string{},
 					MaxInputImages:          0,
 				},
+				{
+					ModelID:                 "gemini-omni-1.2-flash",
+					Label:                   "Gemini Omni 1.2 Flash",
+					SupportsImageToVideo:    SupportNo,
+					SupportsLastFrame:       SupportNo,
+					SupportsReferenceImages: SupportNo,
+					MaxDurationSeconds:      0,
+					OutputMime:              "video/mp4",
+					Resolutions:             []string{},
+					AspectRatios:            []string{},
+					MaxInputImages:          0,
+				},
 			},
 		}
 	case Grok:
