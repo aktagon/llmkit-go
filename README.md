@@ -53,7 +53,7 @@ are guaranteed to match the public surface.
 | doubao     | doubao-1.5-pro-32k-250115               | ARK_API_KEY        | chat          |
 | ernie      | ernie-4.0-8k                            | QIANFAN_API_KEY    | chat          |
 | fireworks  | accounts/fireworks/models/gpt-oss-120b  | FIREWORKS_API_KEY  | chat          |
-| google     | gemini-2.5-flash                        | GOOGLE_API_KEY     | chat          |
+| google     | gemini-3.5-flash-lite                   | GOOGLE_API_KEY     | chat          |
 | grok       | grok-3-fast                             | XAI_API_KEY        | chat          |
 | groq       | openai/gpt-oss-120b                     | GROQ_API_KEY       | chat          |
 | jan        | none - set with .Model()                | JAN_API_KEY        | chat          |
