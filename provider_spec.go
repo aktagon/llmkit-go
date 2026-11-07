@@ -592,7 +592,7 @@ var providerSpecRegistry = map[string]providerSpec{
 		Name:                "google",
 		BaseURL:             "https://generativelanguage.googleapis.com",
 		Endpoint:            "/v1beta/models/{model}:generateContent",
-		DefaultModel:        "gemini-2.5-flash",
+		DefaultModel:        "gemini-3.5-flash-lite",
 		EnvVar:              "GOOGLE_API_KEY",
 		DefaultMaxTokens:    0,
 		ResponseTextPath:    "candidates[0].content.parts[0].text",

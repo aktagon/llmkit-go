@@ -142,7 +142,7 @@ var providerInfoTable = map[ProviderName]ProviderInfo{
 		ID:              Google,
 		Slug:            "google",
 		EnvVar:          "GOOGLE_API_KEY",
-		DefaultModel:    "gemini-2.5-flash",
+		DefaultModel:    "gemini-3.5-flash-lite",
 		BaseURL:         "https://generativelanguage.googleapis.com",
 		BrowserCallable: true,
 		Capabilities:    []Capability{CapChatCompletion, CapImageGeneration, CapToolCalling, CapReasoning, CapSpeechGeneration, CapMusicGeneration, CapVideoGeneration},
