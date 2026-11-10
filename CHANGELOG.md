@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`Video.Resume(id)` returns the handle for a job submitted in another
+  process**, built from your own client: its key, base URL, headers and
+  timeout, the builder's model, and its `Raw` and `KeepStored` choices. Use it
+  instead of building a `Provider` by hand, which drops the client's headers,
+  base URL and timeout.
 - **`Video.Audio(on bool)` turns a video's audio track on or off.** OpenRouter
   sends it as `generate_audio` and Vertex Veo as `parameters.generateAudio`.
   Without the call no field is sent, and the provider default applies. On other

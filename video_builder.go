@@ -23,6 +23,21 @@ func (b *Video) PreviewRequest(finalText string) ([]byte, error) {
 	return previewVideo(provider, req, opts...)
 }
 
+// Resume returns the handle for a job submitted earlier, so another process
+// can Wait on it (ADR-014 cross-process resume). The handle carries the
+// client's provider with its key, base URL, headers and timeout, the
+// builder's model (Vertex Veo polls a model-templated URL), and its Raw and
+// KeepStored choices, as Submit's handle does. It sends nothing.
+func (b *Video) Resume(id string) VideoHandle {
+	return VideoHandle{
+		ID:         id,
+		Provider:   b.client.provider.toProvider(b.model),
+		Raw:        b.raw,
+		Model:      b.model,
+		KeepStored: b.keepStored,
+	}
+}
+
 // call translates the chain into the provider, request and options that
 // Submit and PreviewRequest share.
 func (b *Video) call(finalText string) (Provider, videoRequest, []VideoOption) {
