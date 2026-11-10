@@ -66,6 +66,12 @@ type videoRequest struct {
 	// Sent as `resolution` or parameters.resolution, on the same wire shapes
 	// as DurationSeconds. Set it via (*Video).Resolution.
 	Resolution string
+
+	// GenerateAudio turns the audio track on or off; nil means unset (the
+	// provider default, audio on). VideoOpenRouter sends it as the body-root
+	// boolean generate_audio; VideoVertexVeo sends it as
+	// parameters.generateAudio. Set it via (*Video).Audio.
+	GenerateAudio *bool
 }
 
 // maxVideoReferenceImages is the most asset reference images a Vertex Veo
@@ -404,6 +410,9 @@ func buildVideoSubmit(vgCfg *internalproviders.VideoGenDef, req videoRequest, pa
 		if req.Resolution != "" {
 			params["resolution"] = req.Resolution
 		}
+		if req.GenerateAudio != nil {
+			params["generateAudio"] = *req.GenerateAudio
+		}
 		if len(params) > 0 {
 			body["parameters"] = params
 		}
@@ -461,6 +470,9 @@ func buildVideoSubmit(vgCfg *internalproviders.VideoGenDef, req videoRequest, pa
 			body["frame_images"] = frames
 		}
 		setRootVideoOptions(body, req)
+		if req.GenerateAudio != nil {
+			body["generate_audio"] = *req.GenerateAudio
+		}
 	case internalproviders.VideoShapeGrok, internalproviders.VideoShapeZhipu, internalproviders.VideoShapeTogether,
 		internalproviders.VideoShapeMinimax, internalproviders.VideoShapeVidu:
 		body = map[string]any{
@@ -1339,15 +1351,22 @@ func videoShapeSendsOptions(shape string) bool {
 	return false
 }
 
-// validateVideoOptions rejects a duration, aspect ratio or resolution the
-// provider or the model cannot take, before any HTTP call (HANDOFF-097). The
-// rules run in this order in every SDK, so a request that breaks two gets the
-// same error:
+// videoShapeSendsAudio reports whether a video wire shape has a body field
+// for the audio switch: generate_audio on OpenRouter, parameters.generateAudio
+// on Vertex Veo (both read 2026-11-10).
+func videoShapeSendsAudio(shape string) bool {
+	return shape == internalproviders.VideoShapeOpenRouter || shape == internalproviders.VideoShapeVertexVeo
+}
+
+// validateVideoOptions rejects a duration, aspect ratio, resolution or audio
+// switch the provider or the model cannot take, before any HTTP call
+// (HANDOFF-097). The rules run in this order in every SDK, so a request that
+// breaks two gets the same error:
 //
 //  1. A set option on a wire shape with no body field for it (see
-//     videoShapeSendsOptions): sending nothing would drop it silently. The
-//     first set option is named, in the order duration, aspect_ratio,
-//     resolution.
+//     videoShapeSendsOptions and videoShapeSendsAudio): sending nothing would
+//     drop it silently. The first set option is named, in the order duration,
+//     aspect_ratio, resolution, generate_audio.
 //  2. A negative duration.
 //  3. A duration other than 8 with reference images: Veo forces 8 seconds
 //     (ai.google.dev/gemini-api/docs/veo, read 2026-10-19; HANDOFF-100).
@@ -1355,19 +1374,21 @@ func videoShapeSendsOptions(shape string) bool {
 // A model's maximum duration, resolutions and aspect ratios are hints, not
 // blocks (ADR-102 MPT-006 G5): the provider answers an off-list value.
 func validateVideoOptions(providerName string, vgCfg *internalproviders.VideoGenDef, req videoRequest) error {
-	if !videoShapeSendsOptions(vgCfg.WireShape) {
-		for _, opt := range []struct {
-			field string
-			set   bool
-		}{
-			{"duration", req.DurationSeconds != 0},
-			{"aspect_ratio", req.AspectRatio != ""},
-			{"resolution", req.Resolution != ""},
-		} {
-			if opt.set {
-				return &ValidationError{Field: opt.field, Message: fmt.Sprintf("%s video does not send %s", providerName, opt.field)}
-			}
+	sendsOptions := videoShapeSendsOptions(vgCfg.WireShape)
+	for _, opt := range []struct {
+		field string
+		set   bool
+	}{
+		{"duration", !sendsOptions && req.DurationSeconds != 0},
+		{"aspect_ratio", !sendsOptions && req.AspectRatio != ""},
+		{"resolution", !sendsOptions && req.Resolution != ""},
+		{"generate_audio", !videoShapeSendsAudio(vgCfg.WireShape) && req.GenerateAudio != nil},
+	} {
+		if opt.set {
+			return &ValidationError{Field: opt.field, Message: fmt.Sprintf("%s video does not send %s", providerName, opt.field)}
 		}
+	}
+	if !sendsOptions {
 		return nil
 	}
 	switch {

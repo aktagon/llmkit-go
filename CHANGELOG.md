@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`Video.Audio(on bool)` turns a video's audio track on or off.** OpenRouter
+  sends it as `generate_audio` and Vertex Veo as `parameters.generateAudio`.
+  Without the call no field is sent, and the provider default applies. On other
+  video providers it is rejected before send.
+
 ### Changed
 
 - **The `google` default model is now `gemini-3.5-flash-lite`.** It replaces
