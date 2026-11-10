@@ -459,6 +459,7 @@ type Video struct {
 	middleware      []MiddlewareFn
 	referenceImages []MediaRef
 	aspectRatio     string
+	audio           *bool
 	duration        int
 	parts           []Part
 	keepStored      bool
@@ -487,6 +488,11 @@ func (b *Video) AddReferenceImage(mime string, data []byte) *Video {
 // catalogue fact. On a video, OpenRouter, Grok, Veo and Gemini Omni send it;
 // for other video providers the SDK rejects it before send.
 func (b *Video) AspectRatio(r string) *Video { out := *b; out.aspectRatio = r; return &out }
+
+// Audio turns the video's audio track on or off. Unset, the provider default
+// applies. OpenRouter and Vertex Veo send it; for other video providers
+// the SDK rejects it before send.
+func (b *Video) Audio(on bool) *Video { out := *b; out.audio = &on; return &out }
 
 // Duration sets the video length in whole seconds; 0 means the provider default.
 // OpenRouter, Grok and Veo send it; for other video providers the SDK

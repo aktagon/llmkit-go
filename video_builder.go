@@ -40,6 +40,7 @@ func (b *Video) call(finalText string) (Provider, videoRequest, []VideoOption) {
 		DurationSeconds: b.duration,
 		AspectRatio:     b.aspectRatio,
 		Resolution:      b.resolution,
+		GenerateAudio:   b.audio,
 	}
 
 	var opts []VideoOption

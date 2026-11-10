@@ -37,6 +37,7 @@ func APIOptions() []APIOptionDef {
 		{GoFunc: "WithAddStyledLine", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithAddTool", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithAspectRatio", SubOptions: []APISubOptionDef{}},
+		{GoFunc: "WithAudio", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithBackground", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithBytes", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithCaching", SubOptions: []APISubOptionDef{
