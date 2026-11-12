@@ -21,6 +21,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **BREAKING — `Text.Schema` is rejected before send when the provider cannot
+  carry a schema, or when the schema is not valid JSON.** The call fails with
+  `*ValidationError` on field `schema` and sends nothing. Before, the schema
+  was dropped and the call returned free text. Providers that take a schema:
+  anthropic, azure, google, grok, mistral and openai.
 - **The `google` default model is now `gemini-3.5-flash-lite`.** It replaces
   `gemini-2.5-flash`, which Google shuts down on 2026-12-01, at the same price.
   A call that names `gemini-2.5-flash` still sends it.
