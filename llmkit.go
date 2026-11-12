@@ -361,6 +361,17 @@ func validateRequest(req Request) error {
 
 // validateOptions checks that requested options are supported by the provider.
 func validateOptions(provider string, req Request) error {
+	// BUG-120: a schema the provider cannot carry, or one that is not JSON,
+	// is rejected here instead of being dropped by the encoder.
+	if req.Schema != "" {
+		if internalproviders.StructuredOutput(provider) == nil {
+			return &ValidationError{Field: "schema", Message: "not supported by " + provider}
+		}
+		if !json.Valid([]byte(req.Schema)) {
+			return &ValidationError{Field: "schema", Message: "not valid JSON"}
+		}
+	}
+
 	supported := internalproviders.SupportedOptions(provider)
 	if supported == nil {
 		return nil
@@ -923,15 +934,11 @@ func appendBeta(existing, add string) string {
 
 // addStructuredOutput adds schema-based output format to the request.
 func addStructuredOutput(body map[string]any, headers map[string]string, schema string, providerName string, cfg providerSpec) {
+	// validateOptions has already rejected a provider with no structured
+	// output and a schema that is not JSON (BUG-120).
 	soDef := internalproviders.StructuredOutput(providerName)
-	if soDef == nil {
-		return
-	}
-
 	var parsedSchema any
-	if json.Unmarshal([]byte(schema), &parsedSchema) != nil {
-		return
-	}
+	_ = json.Unmarshal([]byte(schema), &parsedSchema)
 
 	// OpenAI strict mode requires additionalProperties: false on all objects
 	if soDef.EnforceStrict {
