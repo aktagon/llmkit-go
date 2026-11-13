@@ -5,7 +5,7 @@ All notable changes to the Go SDK are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [4.0.0]
 
 ### Added
 
@@ -21,6 +21,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **BREAKING — the module path is now `github.com/aktagon/llmkit-go/v4`.**
+  Replace `github.com/aktagon/llmkit-go/v3` with
+  `github.com/aktagon/llmkit-go/v4` in every import and in `go get`, then run
+  `go mod tidy`. No other source change is needed for the path.
 - **BREAKING — `Text.Schema` is rejected before send when the provider cannot
   carry a schema, or when the schema is not valid JSON.** The call fails with
   `*ValidationError` on field `schema` and sends nothing. Before, the schema

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	internalproviders "github.com/aktagon/llmkit-go/v3/internal/providers"
+	internalproviders "github.com/aktagon/llmkit-go/v4/internal/providers"
 )
 
 // musicRequest is the canonical music-generation request (ADR-033).

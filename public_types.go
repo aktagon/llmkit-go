@@ -2,7 +2,7 @@
 
 package llmkit
 
-import "github.com/aktagon/llmkit-go/v3/providers"
+import "github.com/aktagon/llmkit-go/v4/providers"
 
 // Usage tracks token consumption for an LLM call.
 // It is providers.Usage.

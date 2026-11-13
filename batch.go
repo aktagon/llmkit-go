@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	internalproviders "github.com/aktagon/llmkit-go/v3/internal/providers"
+	internalproviders "github.com/aktagon/llmkit-go/v4/internal/providers"
 )
 
 // BatchHandle is defined in builders.go (typed-builder API surface);

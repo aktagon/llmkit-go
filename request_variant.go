@@ -3,7 +3,7 @@ package llmkit
 import (
 	"strings"
 
-	internalproviders "github.com/aktagon/llmkit-go/v3/internal/providers"
+	internalproviders "github.com/aktagon/llmkit-go/v4/internal/providers"
 )
 
 // selectRequestVariant picks the config's wire request whose carried inputs

@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/aktagon/llmkit-go/v3/providers"
+	"github.com/aktagon/llmkit-go/v4/providers"
 )
 
 // Verbatim assistant-turn capture (ADR-085).

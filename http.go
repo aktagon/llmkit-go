@@ -15,7 +15,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	internalproviders "github.com/aktagon/llmkit-go/v3/internal/providers"
+	internalproviders "github.com/aktagon/llmkit-go/v4/internal/providers"
 )
 
 // redactURLError strips the (key-bearing) URL from a *url.Error, keeping

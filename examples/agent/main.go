@@ -14,7 +14,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/aktagon/llmkit-go/v3"
+	"github.com/aktagon/llmkit-go/v4"
 )
 
 func main() {

@@ -1,6 +1,6 @@
 package llmkit
 
-import internalproviders "github.com/aktagon/llmkit-go/v3/internal/providers"
+import internalproviders "github.com/aktagon/llmkit-go/v4/internal/providers"
 
 // decodeFinishReason maps the provider's finish-reason string to its
 // canonical value through the chat wire shape's generated table (ADR-099

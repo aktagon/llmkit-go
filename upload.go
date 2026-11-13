@@ -7,7 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
-	internalproviders "github.com/aktagon/llmkit-go/v3/internal/providers"
+	internalproviders "github.com/aktagon/llmkit-go/v4/internal/providers"
 )
 
 // Run uploads the configured file to the client's provider and

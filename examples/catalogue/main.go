@@ -22,8 +22,8 @@ import (
 	"log"
 	"os"
 
-	llmkit "github.com/aktagon/llmkit-go/v3"
-	"github.com/aktagon/llmkit-go/v3/providers"
+	llmkit "github.com/aktagon/llmkit-go/v4"
+	"github.com/aktagon/llmkit-go/v4/providers"
 )
 
 func main() {

@@ -8,7 +8,7 @@ import (
 	"slices"
 	"time"
 
-	internalproviders "github.com/aktagon/llmkit-go/v3/internal/providers"
+	internalproviders "github.com/aktagon/llmkit-go/v4/internal/providers"
 )
 
 // legacyAgent manages multi-turn conversations with optional tool calling.

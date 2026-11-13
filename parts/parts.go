@@ -18,7 +18,7 @@
 //	c.Image.Parts(parts.Text("describe"), parts.Image(mime, bytes)).Generate(ctx)
 package parts
 
-import llmkit "github.com/aktagon/llmkit-go/v3"
+import llmkit "github.com/aktagon/llmkit-go/v4"
 
 // Text constructs a text-bearing Part.
 func Text(s string) llmkit.Part { return llmkit.Part{Text: s} }
