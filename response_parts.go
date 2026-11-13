@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	internalproviders "github.com/aktagon/llmkit-go/v3/internal/providers"
+	internalproviders "github.com/aktagon/llmkit-go/v4/internal/providers"
 )
 
 // The response's assistant turn as ordered parts (owner decision 1,

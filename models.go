@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	internalproviders "github.com/aktagon/llmkit-go/v3/internal/providers"
-	"github.com/aktagon/llmkit-go/v3/providers"
+	internalproviders "github.com/aktagon/llmkit-go/v4/internal/providers"
+	"github.com/aktagon/llmkit-go/v4/providers"
 )
 
 // Catalogue error sentinels (ADR-019). Provider live calls map to:

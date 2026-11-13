@@ -4,7 +4,7 @@ import (
 	"sync"
 	"time"
 
-	internalproviders "github.com/aktagon/llmkit-go/v3/internal/providers"
+	internalproviders "github.com/aktagon/llmkit-go/v4/internal/providers"
 )
 
 // modelCacheTTL is how long a provider's live model list stays fresh

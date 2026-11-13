@@ -2,7 +2,7 @@
 
 package providers
 
-import pub "github.com/aktagon/llmkit-go/v3/providers"
+import pub "github.com/aktagon/llmkit-go/v4/providers"
 
 // ProviderName is the public typed provider identity.
 type ProviderName = pub.ProviderName

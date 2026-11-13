@@ -8,7 +8,7 @@ package llmkit
 import (
 	"time"
 
-	"github.com/aktagon/llmkit-go/v3/providers"
+	"github.com/aktagon/llmkit-go/v4/providers"
 )
 
 // providerConfig holds per-provider auth + endpoint details.

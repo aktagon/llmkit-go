@@ -16,8 +16,8 @@ import (
 	"log"
 	"os"
 
-	"github.com/aktagon/llmkit-go/v3"
-	"github.com/aktagon/llmkit-go/v3/providers"
+	"github.com/aktagon/llmkit-go/v4"
+	"github.com/aktagon/llmkit-go/v4/providers"
 )
 
 const model = "gpt-image-2"

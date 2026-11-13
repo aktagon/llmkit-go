@@ -10,8 +10,8 @@ import (
 	"strconv"
 	"strings"
 
-	internalproviders "github.com/aktagon/llmkit-go/v3/internal/providers"
-	"github.com/aktagon/llmkit-go/v3/providers"
+	internalproviders "github.com/aktagon/llmkit-go/v4/internal/providers"
+	"github.com/aktagon/llmkit-go/v4/providers"
 )
 
 // DecodeRequest decodes a chat request into a Request, the inverse of

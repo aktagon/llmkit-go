@@ -1,6 +1,6 @@
 package llmkit
 
-import "github.com/aktagon/llmkit-go/v3/providers"
+import "github.com/aktagon/llmkit-go/v4/providers"
 
 // eligible returns the providers eligible for *Models.List(ctx), carrying
 // this Client's credentials. Per ADR-019 the eligibility test is:
