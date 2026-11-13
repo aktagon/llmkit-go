@@ -365,7 +365,7 @@ func validateOptions(provider string, req Request) error {
 	// is rejected here instead of being dropped by the encoder.
 	if req.Schema != "" {
 		if internalproviders.StructuredOutput(provider) == nil {
-			return &ValidationError{Field: "schema", Message: "not supported by " + provider}
+			return &ValidationError{Field: "schema", Message: "llmkit has no structured-output support for " + provider}
 		}
 		if !json.Valid([]byte(req.Schema)) {
 			return &ValidationError{Field: "schema", Message: "not valid JSON"}
