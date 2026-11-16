@@ -13,6 +13,7 @@ import (
 	"net/textproto"
 	"net/url"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	internalproviders "github.com/aktagon/llmkit-go/v4/internal/providers"
@@ -363,13 +364,21 @@ type streamFields struct {
 	FinishReason *string
 	ID           *string
 	Model        *string
+	// Body is the response a final event carried (StreamDef.FinalBodyPath),
+	// nil when the stream declares no final events. The finish reason is
+	// decoded with it, as a one-shot body is (ADR-099 CRF-007).
+	Body map[string]any
 }
 
 // doStreamPost sends a POST request and processes SSE events via callback.
 // Returns accumulated usage and the stream-time fields after the stream ends.
 // A bare locator is read on every parsed data frame; the last non-empty value
 // wins.
-func doStreamPost(ctx context.Context, client *http.Client, url string, body []byte, headers map[string]string,
+//
+// A stream that declares final events reads usage and the locators only in
+// the body a final event carries. An error event ends the stream with an
+// *APIError of status 200 (TODO.md owner answers 1, 2 and 4).
+func doStreamPost(ctx context.Context, client *http.Client, provider, url string, body []byte, headers map[string]string,
 	streamCfg *internalproviders.StreamDef, locs streamLocators, callback func(string)) (Usage, streamFields, error) {
 
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
@@ -390,11 +399,7 @@ func doStreamPost(ctx context.Context, client *http.Client, url string, body []b
 
 	if resp.StatusCode >= 400 {
 		data, _ := io.ReadAll(resp.Body)
-		return Usage{}, streamFields{}, &APIError{
-			StatusCode: resp.StatusCode,
-			Message:    string(data),
-			Retryable:  resp.StatusCode == 429 || resp.StatusCode >= 500,
-		}
+		return Usage{}, streamFields{}, parseError(provider, resp.StatusCode, data, resp.Header)
 	}
 
 	finishLoc := parseStreamFinishPath(locs.FinishReason)
@@ -439,7 +444,23 @@ func doStreamPost(ctx context.Context, client *http.Client, url string, body []b
 		var parsed map[string]any
 		parseErr := json.Unmarshal([]byte(data), &parsed)
 
-		if parseErr == nil {
+		if parseErr == nil && streamCfg.UsesEventTypes {
+			if apiErr := streamErrorEvent(provider, streamCfg, parsed, currentEvent, data); apiErr != nil {
+				return Usage{}, streamFields{}, apiErr
+			}
+		}
+
+		if len(streamCfg.FinalEvents) > 0 {
+			// The final event's body holds usage, finish reason, id and model;
+			// no other frame is read for them.
+			if parseErr == nil && slices.Contains(streamCfg.FinalEvents, currentEvent) {
+				final := parsed
+				if streamCfg.FinalBodyPath != "" {
+					final, _ = parsed[streamCfg.FinalBodyPath].(map[string]any)
+				}
+				readFinalBody(final, streamCfg, locs, &usage, &fields)
+			}
+		} else if parseErr == nil {
 			if v := finishLoc.read(parsed, currentEvent); v != "" && v != "FINISH_REASON_UNSPECIFIED" {
 				fields.FinishReason = optString(v)
 			}
@@ -500,6 +521,61 @@ func doStreamPost(ctx context.Context, client *http.Client, url string, body []b
 	}
 
 	return usage, fields, scanner.Err()
+}
+
+// streamErrorEvent returns the *APIError an error event reports, or nil when
+// currentEvent is not one of the stream's error events. The status is 200: the
+// HTTP reply succeeded and the failure arrived in it. Retryable is set only for
+// a code the stream lists; every other code, an unknown one included, is not.
+func streamErrorEvent(provider string, streamCfg *internalproviders.StreamDef, parsed map[string]any, currentEvent, data string) *APIError {
+	for _, ev := range streamCfg.ErrorEvents {
+		if ev.Event != currentEvent {
+			continue
+		}
+		code := ""
+		if pathPresent(parsed, ev.CodePath) {
+			code = extractPath(parsed, ev.CodePath)
+		}
+		message := ""
+		if pathPresent(parsed, ev.MessagePath) {
+			message = extractPath(parsed, ev.MessagePath)
+		}
+		if message == "" {
+			message = data
+		}
+		return &APIError{
+			Provider:   provider,
+			StatusCode: http.StatusOK,
+			Type:       code,
+			Message:    message,
+			Retryable:  code != "" && slices.Contains(streamCfg.RetryableErrorCodes, code),
+		}
+	}
+	return nil
+}
+
+// readFinalBody reads usage and the bare stream locators in the response a
+// final event carries, and keeps the body for finish-reason decoding.
+func readFinalBody(final map[string]any, streamCfg *internalproviders.StreamDef, locs streamLocators, usage *Usage, fields *streamFields) {
+	if final == nil {
+		return
+	}
+	fields.Body = final
+	if v := optIntPath(final, streamCfg.UsageInputPath); v != nil {
+		usage.Input = v
+	}
+	if v := optIntPath(final, streamCfg.UsageOutputPath); v != nil {
+		usage.Output = v
+	}
+	if v := optStringPath(final, locs.FinishReason); v != nil && *v != "" {
+		fields.FinishReason = v
+	}
+	if v := optStringPath(final, locs.ID); v != nil && *v != "" {
+		fields.ID = v
+	}
+	if v := optStringPath(final, locs.Model); v != nil && *v != "" {
+		fields.Model = v
+	}
 }
 
 // streamLocator is one ADR-013 locator split into its optional event name and

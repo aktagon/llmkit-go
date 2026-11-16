@@ -16,6 +16,22 @@ type StreamDef struct {
 	UsageInputPath  string
 	UsageOutputPath string
 	UsageOptIn      bool // BUG-028: send stream_options.include_usage to elicit a usage frame
+	// FinalEvents end a successful stream with the whole response at
+	// FinalBodyPath; usage and the stream locators are read in that body.
+	FinalEvents   []string
+	FinalBodyPath string
+	// ErrorEvents end the stream in failure; RetryableErrorCodes are the
+	// codes on them that make the API error retryable.
+	ErrorEvents         []StreamErrorEventDef
+	RetryableErrorCodes []string
+}
+
+// StreamErrorEventDef is an SSE event that ends a stream in failure, with the
+// paths to its error code and message in the event's data frame.
+type StreamErrorEventDef struct {
+	Event       string
+	CodePath    string
+	MessagePath string
 }
 
 // StreamConfig returns the streaming config for a provider.
@@ -476,10 +492,17 @@ func WireShapeStreamConfig(chatWireShape string) *StreamDef {
 			UsesEventTypes:  true,
 			ContentEvent:    "response.output_text.delta",
 			DoneEvent:       "",
-			UsageEvent:      "response.completed",
-			UsageInputPath:  "response.usage.input_tokens",
-			UsageOutputPath: "response.usage.output_tokens",
+			UsageEvent:      "",
+			UsageInputPath:  "usage.input_tokens",
+			UsageOutputPath: "usage.output_tokens",
 			UsageOptIn:      false,
+			FinalEvents:     []string{"response.completed", "response.incomplete"},
+			FinalBodyPath:   "response",
+			ErrorEvents: []StreamErrorEventDef{
+				{Event: "error", CodePath: "code", MessagePath: "message"},
+				{Event: "response.failed", CodePath: "response.error.code", MessagePath: "response.error.message"},
+			},
+			RetryableErrorCodes: []string{"rate_limit_exceeded", "server_error"},
 		}
 	default:
 		return nil
@@ -491,7 +514,7 @@ func WireShapeStreamConfig(chatWireShape string) *StreamDef {
 func WireShapeStreamFinishReasonPath(chatWireShape string) string {
 	switch chatWireShape {
 	case ChatResponsesOpenAI:
-		return "response.completed:response.status"
+		return "status"
 	default:
 		return ""
 	}
@@ -502,7 +525,7 @@ func WireShapeStreamFinishReasonPath(chatWireShape string) string {
 func WireShapeStreamResponseIDPath(chatWireShape string) string {
 	switch chatWireShape {
 	case ChatResponsesOpenAI:
-		return "response.completed:response.id"
+		return "id"
 	default:
 		return ""
 	}
@@ -513,7 +536,7 @@ func WireShapeStreamResponseIDPath(chatWireShape string) string {
 func WireShapeStreamResponseModelPath(chatWireShape string) string {
 	switch chatWireShape {
 	case ChatResponsesOpenAI:
-		return "response.completed:response.model"
+		return "model"
 	default:
 		return ""
 	}
