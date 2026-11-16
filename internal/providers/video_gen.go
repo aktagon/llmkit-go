@@ -314,6 +314,18 @@ func VideoGenConfig(provider string) *VideoGenDef {
 					MaxInputImages:          0,
 				},
 				{
+					ModelID:                 "google/gemini-omni-1.2-flash",
+					Label:                   "Gemini Omni 1.2 Flash",
+					SupportsImageToVideo:    SupportYes,
+					SupportsLastFrame:       SupportYes,
+					SupportsReferenceImages: SupportNo,
+					MaxDurationSeconds:      15,
+					OutputMime:              "video/mp4",
+					Resolutions:             []string{"1080p", "360p", "4K", "720p"},
+					AspectRatios:            []string{"16:9", "9:16"},
+					MaxInputImages:          0,
+				},
+				{
 					ModelID:                 "google/veo-3.1-fast",
 					Label:                   "Veo 3.1 Fast",
 					SupportsImageToVideo:    SupportYes,
