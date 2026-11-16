@@ -139,7 +139,7 @@ func promptStream(ctx context.Context, p Provider, req Request, protocol string,
 		callback(chunk)
 	}
 
-	usage, fields, err := doStreamPost(ctx, o.httpClient, url, jsonBody, headers, streamCfg, locs, wrappedCallback)
+	usage, fields, err := doStreamPost(ctx, o.httpClient, p.Name, url, jsonBody, headers, streamCfg, locs, wrappedCallback)
 	postEv := baseEvent
 	postEv.Usage = usage
 	postEv.Err = err
@@ -150,12 +150,13 @@ func promptStream(ctx context.Context, p Provider, req Request, protocol string,
 	}
 
 	// The stream reads the same table as the one-shot body (ADR-099 CRF-008).
-	// It keeps no body, so a fused value (CRF-007) cannot be told apart and
-	// decodes to other.
+	// A stream with final events keeps the final body, so a fused value
+	// (CRF-007) such as Responses incomplete keeps its detail; any other
+	// stream keeps no body, and a fused value decodes to other.
 	return Response{
 		Parts:                textParts(fullText.String()),
 		Usage:                usage,
-		FinishReason:         decodeFinishReason(cfg.ChatWireShape, fields.FinishReason, nil),
+		FinishReason:         decodeFinishReason(cfg.ChatWireShape, fields.FinishReason, fields.Body),
 		ProviderFinishReason: fields.FinishReason,
 		ID:                   fields.ID,
 		Model:                fields.Model,
