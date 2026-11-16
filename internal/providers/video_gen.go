@@ -326,7 +326,7 @@ func VideoGenConfig(provider string) *VideoGenDef {
 					Label:                   "Gemini Omni 1.2 Flash",
 					SupportsImageToVideo:    SupportYes,
 					SupportsLastFrame:       SupportYes,
-					SupportsReferenceImages: SupportNo,
+					SupportsReferenceImages: SupportUnknown,
 					MaxDurationSeconds:      15,
 					OutputMime:              "video/mp4",
 					Resolutions:             []string{"1080p", "360p", "4K", "720p"},
