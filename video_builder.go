@@ -47,15 +47,16 @@ func (b *Video) call(finalText string) (Provider, videoRequest, []VideoOption) {
 	}
 
 	req := videoRequest{
-		Model:           b.model,
-		Parts:           parts,
-		OutputURI:       b.outputURI,
-		LastFrame:       b.lastFrame,
-		ReferenceImages: b.referenceImages,
-		DurationSeconds: b.duration,
-		AspectRatio:     b.aspectRatio,
-		Resolution:      b.resolution,
-		GenerateAudio:   b.audio,
+		Model:              b.model,
+		Parts:              parts,
+		OutputURI:          b.outputURI,
+		LastFrame:          b.lastFrame,
+		ReferenceImages:    b.referenceImages,
+		ReferenceImageURLs: b.referenceImageURLs,
+		DurationSeconds:    b.duration,
+		AspectRatio:        b.aspectRatio,
+		Resolution:         b.resolution,
+		GenerateAudio:      b.audio,
 	}
 
 	var opts []VideoOption

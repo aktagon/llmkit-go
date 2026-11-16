@@ -47,8 +47,8 @@ func carriedInputWords(carries []string) string {
 
 // partsCarry is the carried input of a request with imageCount image parts:
 // imageInput when it holds at least one, else TextOnly. The capability names
-// what its image parts are: WithReferenceImages for image, WithSeedFrame for
-// video.
+// what its image parts are: WithReferenceImages for image. Video names every
+// input it carries (videoCarries).
 func partsCarry(imageCount int, imageInput string) []string {
 	if imageCount > 0 {
 		return []string{imageInput}

@@ -48,6 +48,9 @@ type VideoModelDef struct {
 	// shape fixes it (e.g. Grok's single-seed slot); 0 = no llmkit limit,
 	// the provider decides volume (BUG-011).
 	MaxInputImages int
+	// MaxReferenceImages is the most reference images, bytes and URL
+	// together, the model takes in one request; 0 = no stated limit, no check.
+	MaxReferenceImages int
 }
 
 // VideoGenDef holds one provider's video-generation configuration.
@@ -65,6 +68,9 @@ type VideoGenDef struct {
 	DeleteEndpoint    string           // stored-job delete template with {id}; "" = nothing to delete
 	SubmitHandleField string           // dotted path to the poll handle id in the submit response
 	RequiresOutputURI bool
+	// AcceptsReferenceImageURL is true when the provider takes a reference
+	// image by HTTPS URL; otherwise a URL reference is rejected before send.
+	AcceptsReferenceImageURL bool
 	// Usage paths are dotted from the root of the finished poll reply; "" = unreported.
 	UsageInputPath     string
 	UsageOutputPath    string
@@ -252,25 +258,27 @@ func VideoGenConfig(provider string) *VideoGenDef {
 			VideoBaseURL:   "",
 			Variants: []RequestVariant{
 				{Carries: []string{"TextOnly"}, Shape: "", Endpoint: "/v1/videos"},
+				{Carries: []string{"WithReferenceImages"}, Shape: "", Endpoint: "/v1/videos"},
 				{Carries: []string{"WithSeedFrame"}, Shape: "", Endpoint: "/v1/videos"},
 				{Carries: []string{"WithSeedFrame", "WithLastFrame"}, Shape: "", Endpoint: "/v1/videos"},
 			},
-			PollEndpoint:       "/v1/videos/{id}",
-			FileEndpoint:       "",
-			CancelEndpoint:     "",
-			DeleteEndpoint:     "",
-			SubmitHandleField:  "id",
-			RequiresOutputURI:  false,
-			UsageInputPath:     "",
-			UsageOutputPath:    "",
-			UsageReasoningPath: "",
+			PollEndpoint:             "/v1/videos/{id}",
+			FileEndpoint:             "",
+			CancelEndpoint:           "",
+			DeleteEndpoint:           "",
+			SubmitHandleField:        "id",
+			RequiresOutputURI:        false,
+			AcceptsReferenceImageURL: true,
+			UsageInputPath:           "",
+			UsageOutputPath:          "",
+			UsageReasoningPath:       "",
 			Models: []VideoModelDef{
 				{
 					ModelID:                 "alibaba/wan-3.0",
 					Label:                   "Wan 3.0",
 					SupportsImageToVideo:    SupportYes,
 					SupportsLastFrame:       SupportYes,
-					SupportsReferenceImages: SupportNo,
+					SupportsReferenceImages: SupportUnknown,
 					MaxDurationSeconds:      30,
 					OutputMime:              "video/mp4",
 					Resolutions:             []string{"1080p", "480p", "720p"},
@@ -282,7 +290,7 @@ func VideoGenConfig(provider string) *VideoGenDef {
 					Label:                   "Seedance 2.0",
 					SupportsImageToVideo:    SupportYes,
 					SupportsLastFrame:       SupportYes,
-					SupportsReferenceImages: SupportNo,
+					SupportsReferenceImages: SupportUnknown,
 					MaxDurationSeconds:      15,
 					OutputMime:              "video/mp4",
 					Resolutions:             []string{"1080p", "480p", "4K", "720p"},
@@ -294,7 +302,7 @@ func VideoGenConfig(provider string) *VideoGenDef {
 					Label:                   "Seedance 2.0 Fast",
 					SupportsImageToVideo:    SupportYes,
 					SupportsLastFrame:       SupportYes,
-					SupportsReferenceImages: SupportNo,
+					SupportsReferenceImages: SupportUnknown,
 					MaxDurationSeconds:      15,
 					OutputMime:              "video/mp4",
 					Resolutions:             []string{"480p", "720p"},
@@ -306,7 +314,7 @@ func VideoGenConfig(provider string) *VideoGenDef {
 					Label:                   "Seedance 2.5",
 					SupportsImageToVideo:    SupportYes,
 					SupportsLastFrame:       SupportYes,
-					SupportsReferenceImages: SupportNo,
+					SupportsReferenceImages: SupportYes,
 					MaxDurationSeconds:      30,
 					OutputMime:              "video/mp4",
 					Resolutions:             []string{"480p", "720p"},
@@ -330,7 +338,7 @@ func VideoGenConfig(provider string) *VideoGenDef {
 					Label:                   "Veo 3.1 Fast",
 					SupportsImageToVideo:    SupportYes,
 					SupportsLastFrame:       SupportYes,
-					SupportsReferenceImages: SupportNo,
+					SupportsReferenceImages: SupportUnknown,
 					MaxDurationSeconds:      8,
 					OutputMime:              "video/mp4",
 					Resolutions:             []string{"1080p", "4K", "720p"},
@@ -342,7 +350,7 @@ func VideoGenConfig(provider string) *VideoGenDef {
 					Label:                   "Veo 3.1 Lite",
 					SupportsImageToVideo:    SupportYes,
 					SupportsLastFrame:       SupportYes,
-					SupportsReferenceImages: SupportNo,
+					SupportsReferenceImages: SupportUnknown,
 					MaxDurationSeconds:      8,
 					OutputMime:              "video/mp4",
 					Resolutions:             []string{"1080p", "720p"},
@@ -354,7 +362,7 @@ func VideoGenConfig(provider string) *VideoGenDef {
 					Label:                   "HeyGen Video 1",
 					SupportsImageToVideo:    SupportYes,
 					SupportsLastFrame:       SupportNo,
-					SupportsReferenceImages: SupportNo,
+					SupportsReferenceImages: SupportUnknown,
 					MaxDurationSeconds:      15,
 					OutputMime:              "video/mp4",
 					Resolutions:             []string{"2K", "480p", "768p"},
@@ -366,7 +374,7 @@ func VideoGenConfig(provider string) *VideoGenDef {
 					Label:                   "Kling 3.0 Standard",
 					SupportsImageToVideo:    SupportYes,
 					SupportsLastFrame:       SupportYes,
-					SupportsReferenceImages: SupportNo,
+					SupportsReferenceImages: SupportUnknown,
 					MaxDurationSeconds:      15,
 					OutputMime:              "video/mp4",
 					Resolutions:             []string{"720p"},
@@ -378,7 +386,7 @@ func VideoGenConfig(provider string) *VideoGenDef {
 					Label:                   "Hailuo 3",
 					SupportsImageToVideo:    SupportYes,
 					SupportsLastFrame:       SupportYes,
-					SupportsReferenceImages: SupportNo,
+					SupportsReferenceImages: SupportUnknown,
 					MaxDurationSeconds:      15,
 					OutputMime:              "video/mp4",
 					Resolutions:             []string{"2K"},
@@ -390,7 +398,7 @@ func VideoGenConfig(provider string) *VideoGenDef {
 					Label:                   "Grok Imagine Video 1.5 Lite",
 					SupportsImageToVideo:    SupportYes,
 					SupportsLastFrame:       SupportNo,
-					SupportsReferenceImages: SupportNo,
+					SupportsReferenceImages: SupportUnknown,
 					MaxDurationSeconds:      15,
 					OutputMime:              "video/mp4",
 					Resolutions:             []string{"1080p", "480p", "720p"},
@@ -551,6 +559,7 @@ func VideoGenConfig(provider string) *VideoGenDef {
 					Resolutions:             []string{"1080p", "720p"},
 					AspectRatios:            []string{"16:9", "9:16"},
 					MaxInputImages:          1,
+					MaxReferenceImages:      3,
 				},
 				{
 					ModelID:                 "veo-3.1-generate-001",
@@ -563,6 +572,7 @@ func VideoGenConfig(provider string) *VideoGenDef {
 					Resolutions:             []string{"1080p", "4k", "720p"},
 					AspectRatios:            []string{"16:9", "9:16"},
 					MaxInputImages:          1,
+					MaxReferenceImages:      3,
 				},
 				{
 					ModelID:                 "veo-3.1-generate-preview",
@@ -575,6 +585,7 @@ func VideoGenConfig(provider string) *VideoGenDef {
 					Resolutions:             []string{"1080p", "720p"},
 					AspectRatios:            []string{"16:9", "9:16"},
 					MaxInputImages:          1,
+					MaxReferenceImages:      3,
 				},
 				{
 					ModelID:                 "veo-3.1-lite-generate-001",
