@@ -455,19 +455,20 @@ func (b *Transcription) Model(name string) *Transcription { out := *b; out.model
 // call. Chain methods return new instances (immutable); skipped
 // terminals live in hand-written text.go / image.go.
 type Video struct {
-	client          *Client
-	middleware      []MiddlewareFn
-	referenceImages []MediaRef
-	aspectRatio     string
-	audio           *bool
-	duration        int
-	parts           []Part
-	keepStored      bool
-	lastFrame       *MediaRef
-	model           string
-	outputURI       string
-	raw             bool
-	resolution      string
+	client             *Client
+	middleware         []MiddlewareFn
+	referenceImages    []MediaRef
+	referenceImageURLs []string
+	aspectRatio        string
+	audio              *bool
+	duration           int
+	parts              []Part
+	keepStored         bool
+	lastFrame          *MediaRef
+	model              string
+	outputURI          string
+	raw                bool
+	resolution         string
 }
 
 func (b *Video) AddMiddleware(fns ...MiddlewareFn) *Video {
@@ -477,10 +478,20 @@ func (b *Video) AddMiddleware(fns ...MiddlewareFn) *Video {
 }
 
 // AddReferenceImage appends an asset reference image, such as a person, character or
-// product the video keeps. Add at most 3, without Image or LastFrame.
+// product the video keeps. A model with a stated limit (Veo: 3) rejects
+// more before send. Vertex Veo rejects it together with Image or LastFrame.
 func (b *Video) AddReferenceImage(mime string, data []byte) *Video {
 	out := *b
 	out.referenceImages = append(append([]MediaRef{}, b.referenceImages...), MediaRef{MimeType: mime, Bytes: data})
+	return &out
+} // ordered
+// AddReferenceImageURL appends an asset reference image given as an HTTPS URL. The provider
+// fetches it; the SDK sends the URL as is. OpenRouter sends it; for other
+// video providers the SDK rejects it before send. URL references follow
+// the AddReferenceImage references and count toward the same limit.
+func (b *Video) AddReferenceImageURL(url string) *Video {
+	out := *b
+	out.referenceImageURLs = append(append([]string{}, b.referenceImageURLs...), url)
 	return &out
 } // ordered
 // AspectRatio sets the output aspect ratio, such as "16:9". The SDK sends a ratio the
@@ -497,7 +508,7 @@ func (b *Video) Audio(on bool) *Video { out := *b; out.audio = &on; return &out 
 // Duration sets the video length in whole seconds; 0 means the provider default.
 // OpenRouter, Grok and Veo send it; for other video providers the SDK
 // rejects it before send. The SDK rejects a negative value and sends a
-// value above the model's maximum. With Veo reference images, only 8 is accepted.
+// value above the model's maximum.
 func (b *Video) Duration(seconds int) *Video { out := *b; out.duration = seconds; return &out }
 func (b *Video) Image(mime string, data []byte) *Video {
 	out := *b

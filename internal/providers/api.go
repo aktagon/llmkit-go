@@ -33,6 +33,7 @@ func APIOptions() []APIOptionDef {
 	return []APIOptionDef{
 		{GoFunc: "WithAddLine", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithAddReferenceImage", SubOptions: []APISubOptionDef{}},
+		{GoFunc: "WithAddReferenceImageURL", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithAddSpeaker", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithAddStyledLine", SubOptions: []APISubOptionDef{}},
 		{GoFunc: "WithAddTool", SubOptions: []APISubOptionDef{}},

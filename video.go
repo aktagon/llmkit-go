@@ -45,10 +45,16 @@ type videoRequest struct {
 	// (an image part). Set it on the builder via (*Video).LastFrame (BUG-089).
 	LastFrame *MediaRef
 
-	// ReferenceImages are asset images the video keeps, at most
-	// maxVideoReferenceImages, never with a first or last frame. Set them on
-	// the builder via (*Video).AddReferenceImage (BUG-089).
+	// ReferenceImages are asset images the video keeps, at most the model's
+	// MaxReferenceImages when it states one. Set them on the builder via
+	// (*Video).AddReferenceImage (BUG-089).
 	ReferenceImages []MediaRef
+
+	// ReferenceImageURLs are asset reference images given as HTTPS URLs,
+	// sent after ReferenceImages on a config with AcceptsReferenceImageURL
+	// and rejected before send elsewhere. Set them on the builder via
+	// (*Video).AddReferenceImageURL.
+	ReferenceImageURLs []string
 
 	// DurationSeconds is the video length in whole seconds; 0 means unset
 	// (the provider default). VideoOpenRouter and VideoGrok send it as the
@@ -73,10 +79,6 @@ type videoRequest struct {
 	// parameters.generateAudio. Set it via (*Video).Audio.
 	GenerateAudio *bool
 }
-
-// maxVideoReferenceImages is the most asset reference images a Vertex Veo
-// request takes (Vertex Veo page, read 2026-10-15).
-const maxVideoReferenceImages = 3
 
 // VideoData, VideoResponse, and VideoHandle are declared in go/structs.go
 // (ADR-018, API-PDS-002).
@@ -235,7 +237,7 @@ func planVideo(p Provider, req videoRequest, opts []VideoOption) (videoPlan, err
 			imageCount++
 		}
 	}
-	if err := validateVideoFrames(vgCfg, model, imageCount, req); err != nil {
+	if err := validateVideoFrames(p.Name, vgCfg, model, imageCount, req); err != nil {
 		return videoPlan{}, err
 	}
 	if err := validateVideoOptions(p.Name, vgCfg, req); err != nil {
@@ -379,8 +381,8 @@ func buildVideoSubmit(vgCfg *internalproviders.VideoGenDef, req videoRequest, pa
 			instance["image"] = veoImage(seed)
 		}
 		// Last frame and asset reference images (BUG-089): same
-		// {bytesBase64Encoded, mimeType} wrapper. Reference images force an
-		// 8-second video, sent as the NUMBER 8.
+		// {bytesBase64Encoded, mimeType} wrapper. With reference images and
+		// no Duration, the body asks for 8 seconds, sent as the NUMBER 8.
 		if req.LastFrame != nil {
 			instance["lastFrame"] = veoImage(req.LastFrame)
 		}
@@ -398,9 +400,8 @@ func buildVideoSubmit(vgCfg *internalproviders.VideoGenDef, req videoRequest, pa
 			params["durationSeconds"] = 8
 		}
 		// Video options (HANDOFF-100): parameters.durationSeconds (a JSON
-		// number), aspectRatio and resolution, each only when set. With
-		// reference images validateVideoOptions allows only 8, so a set
-		// duration matches the forced 8.
+		// number), aspectRatio and resolution, each only when set. A set
+		// duration replaces the 8 that reference images ask for.
 		if req.DurationSeconds > 0 {
 			params["durationSeconds"] = req.DurationSeconds
 		}
@@ -468,6 +469,12 @@ func buildVideoSubmit(vgCfg *internalproviders.VideoGenDef, req videoRequest, pa
 				frames = append(frames, openRouterFrame(req.LastFrame, "last_frame"))
 			}
 			body["frame_images"] = frames
+		}
+		// Reference images (owner, 2026-11-16): input_references, the same
+		// ContentPartImage items the image path sends; bytes as data URLs,
+		// then each HTTPS URL as is (live probes S and U, 2026-11-16).
+		if refs := openRouterReferences(req); len(refs) > 0 {
+			body["input_references"] = refs
 		}
 		setRootVideoOptions(body, req)
 		if req.GenerateAudio != nil {
@@ -1260,6 +1267,24 @@ func openRouterFrame(img *MediaRef, frameType string) map[string]any {
 	return frame
 }
 
+// openRouterReferences is the OpenRouter input_references list: each byte
+// reference as a data URL, then each URL reference, in call order.
+func openRouterReferences(req videoRequest) []map[string]any {
+	refs := make([]map[string]any, 0, len(req.ReferenceImages)+len(req.ReferenceImageURLs))
+	for i := range req.ReferenceImages {
+		refs = append(refs, imageURLContentPart(&req.ReferenceImages[i]))
+	}
+	for _, u := range req.ReferenceImageURLs {
+		refs = append(refs, map[string]any{"type": "image_url", "image_url": map[string]any{"url": u}})
+	}
+	return refs
+}
+
+// videoReferenceCount is the request's reference images, bytes and URL.
+func videoReferenceCount(req videoRequest) int {
+	return len(req.ReferenceImages) + len(req.ReferenceImageURLs)
+}
+
 // veoImage is a Veo image object: raw base64 bytes and the MIME type.
 func veoImage(img *MediaRef) map[string]any {
 	return map[string]any{
@@ -1270,23 +1295,31 @@ func veoImage(img *MediaRef) map[string]any {
 
 // validateVideoFrames rejects a last frame or reference images the model or
 // the request cannot carry, before any HTTP call (BUG-089). The rules run in
-// this order in every SDK, so a request that breaks two gets the same error.
-// The two per-model rules block a stated SupportNo only on a config whose
-// provider ignores the option (ADR-102 MPT-006 G6); an unlisted model (nil)
-// skips them (ADR-102 MPT-001).
-func validateVideoFrames(cfg *internalproviders.VideoGenDef, model *internalproviders.VideoModelDef, imageCount int, req videoRequest) error {
-	refs := len(req.ReferenceImages)
+// this order in every SDK, so a request that breaks two gets the same error:
+//
+//  1. A last frame on a model that states SupportNo.
+//  2. Reference images on a model that states SupportNo.
+//  3. A URL reference on a config without AcceptsReferenceImageURL: llmkit
+//     does not download the URL.
+//  4. More reference images, bytes and URL together, than the model's
+//     MaxReferenceImages (0 = no stated limit, no check).
+//  5. A last frame without a first frame.
+//
+// Rules 1 and 2 block a stated SupportNo only on a config whose provider
+// ignores the option (ADR-102 MPT-006 G6); an unlisted model (nil) skips
+// rules 1, 2 and 4 (ADR-102 MPT-001). Which inputs a provider takes together
+// is decided by its request variants (selectRequestVariant), not here.
+func validateVideoFrames(providerName string, cfg *internalproviders.VideoGenDef, model *internalproviders.VideoModelDef, imageCount int, req videoRequest) error {
+	refs := videoReferenceCount(req)
 	switch {
 	case req.LastFrame != nil && model != nil && statedFalseBlocks(cfg.IgnoresUnsupported, "LastFrame", model.SupportsLastFrame):
 		return &ValidationError{Field: "last_frame", Message: model.ModelID + " does not accept a last frame"}
 	case refs > 0 && model != nil && statedFalseBlocks(cfg.IgnoresUnsupported, "AddReferenceImage", model.SupportsReferenceImages):
 		return &ValidationError{Field: "reference_images", Message: model.ModelID + " does not accept reference images"}
-	case refs > maxVideoReferenceImages:
-		return &ValidationError{Field: "reference_images", Message: fmt.Sprintf("at most %d reference images, got %d", maxVideoReferenceImages, refs)}
-	case refs > 0 && (imageCount > 0 || req.LastFrame != nil):
-		// Vertex documents the inputs as exclusive (live 2026-10-15, the
-		// Gemini API Veo answered 400 "Unsupported video generation request").
-		return &ValidationError{Field: "reference_images", Message: "cannot be combined with a first or last frame"}
+	case len(req.ReferenceImageURLs) > 0 && !cfg.AcceptsReferenceImageURL:
+		return &ValidationError{Field: "reference_image_urls", Message: providerName + " video does not take reference images by URL"}
+	case model != nil && model.MaxReferenceImages > 0 && refs > model.MaxReferenceImages:
+		return &ValidationError{Field: "reference_images", Message: fmt.Sprintf("%s takes at most %d reference images, got %d", model.ModelID, model.MaxReferenceImages, refs)}
 	case req.LastFrame != nil && imageCount == 0:
 		return &ValidationError{Field: "last_frame", Message: "requires a first frame"}
 	}
@@ -1308,7 +1341,7 @@ func videoHint(model *internalproviders.VideoModelDef, imageCount int, req video
 	if req.LastFrame != nil && model.SupportsLastFrame == SupportNo {
 		facts = append(facts, "no last frame")
 	}
-	if len(req.ReferenceImages) > 0 && model.SupportsReferenceImages == SupportNo {
+	if videoReferenceCount(req) > 0 && model.SupportsReferenceImages == SupportNo {
 		facts = append(facts, "no reference images")
 	}
 	if model.MaxDurationSeconds > 0 && req.DurationSeconds > model.MaxDurationSeconds {
@@ -1368,8 +1401,6 @@ func videoShapeSendsAudio(shape string) bool {
 //     drop it silently. The first set option is named, in the order duration,
 //     aspect_ratio, resolution, generate_audio.
 //  2. A negative duration.
-//  3. A duration other than 8 with reference images: Veo forces 8 seconds
-//     (ai.google.dev/gemini-api/docs/veo, read 2026-10-19; HANDOFF-100).
 //
 // A model's maximum duration, resolutions and aspect ratios are hints, not
 // blocks (ADR-102 MPT-006 G5): the provider answers an off-list value.
@@ -1391,11 +1422,8 @@ func validateVideoOptions(providerName string, vgCfg *internalproviders.VideoGen
 	if !sendsOptions {
 		return nil
 	}
-	switch {
-	case req.DurationSeconds < 0:
+	if req.DurationSeconds < 0 {
 		return &ValidationError{Field: "duration", Message: "must be positive"}
-	case req.DurationSeconds > 0 && len(req.ReferenceImages) > 0 && req.DurationSeconds != 8:
-		return &ValidationError{Field: "duration", Message: fmt.Sprintf("reference images take 8 seconds, got %d", req.DurationSeconds)}
 	}
 	return nil
 }
@@ -1422,22 +1450,31 @@ func validateGeminiOmniInputs(vgCfg *internalproviders.VideoGenDef, parts []Part
 		return &ValidationError{Field: "parts", Message: "Gemini Omni video sends text only, not a seed frame"}
 	case req.LastFrame != nil:
 		return &ValidationError{Field: "last_frame", Message: "Gemini Omni video sends text only, not a last frame"}
-	case len(req.ReferenceImages) > 0:
+	case videoReferenceCount(req) > 0:
 		return &ValidationError{Field: "reference_images", Message: "Gemini Omni video sends text only, not reference images"}
 	}
 	return nil
 }
 
-// videoCarries is the request's carried inputs (ADR-096): reference images,
-// a seed frame with an optional last frame, or text only.
+// videoCarries is every input the request carries (ADR-096, ADR-108
+// VIN-004), in the order reference images, seed frame, last frame; text only
+// when it carries none. Variant selection rejects a combination the config
+// has no request for, so Vertex refuses reference images with a frame.
 func videoCarries(imageCount int, req videoRequest) []string {
-	switch {
-	case len(req.ReferenceImages) > 0:
-		return []string{internalproviders.WithReferenceImages}
-	case imageCount > 0 && req.LastFrame != nil:
-		return []string{internalproviders.WithSeedFrame, internalproviders.WithLastFrame}
+	var carries []string
+	if videoReferenceCount(req) > 0 {
+		carries = append(carries, internalproviders.WithReferenceImages)
 	}
-	return partsCarry(imageCount, internalproviders.WithSeedFrame)
+	if imageCount > 0 {
+		carries = append(carries, internalproviders.WithSeedFrame)
+	}
+	if req.LastFrame != nil {
+		carries = append(carries, internalproviders.WithLastFrame)
+	}
+	if len(carries) == 0 {
+		return []string{internalproviders.TextOnly}
+	}
+	return carries
 }
 
 // videoSeedMime is the seed frame's MIME, defaulting to image/png.
