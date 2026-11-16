@@ -257,6 +257,14 @@ func ImageGenConfig(provider string) *ImageGenDef {
 					SupportsImageInput: SupportYes,
 				},
 				{
+					ModelID:            "google/gemini-nano-banana-2.1",
+					Label:              "Nano Banana 2.1",
+					AspectRatios:       []string{},
+					ImageSizes:         []string{},
+					MaxInputImages:     0,
+					SupportsImageInput: SupportYes,
+				},
+				{
 					ModelID:            "meta/muse-image",
 					Label:              "Muse Image",
 					AspectRatios:       []string{},
