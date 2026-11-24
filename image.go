@@ -851,7 +851,9 @@ func parseImageResponse(imgCfg *internalproviders.ImageGenDef, provider string, 
 	case "DataArrayB64Json":
 		// OpenAI/xAI/Recraft data[].b64_json shape. SVG bytes (Recraft vector
 		// models) are sniffed to image/svg+xml inside parseImageResponseDataArray.
-		return parseImageResponseDataArray(raw, imgCfg.UsageInputPath, imgCfg.UsageOutputPath, imgCfg.UsageReasoningPath), nil
+		resp := parseImageResponseDataArray(raw)
+		resp.Usage = imageUsage(raw, imgCfg, provider)
+		return resp, nil
 	case "GoogleParts":
 	default:
 		return ImageResponse{}, fmt.Errorf("image: unsupported response shape %q", imgCfg.ResponseShape)
@@ -861,16 +863,24 @@ func parseImageResponse(imgCfg *internalproviders.ImageGenDef, provider string, 
 	images, text := extractGoogleImageParts(raw)
 	finishReason, finishMessage := extractFinishSignal(raw, provider)
 	return ImageResponse{
-		Images: images,
-		Text:   text,
-		Usage: Usage{
-			Input:     optIntPath(raw, imgCfg.UsageInputPath),
-			Output:    optIntPath(raw, imgCfg.UsageOutputPath),
-			Reasoning: optIntPath(raw, imgCfg.UsageReasoningPath),
-		},
+		Images:               images,
+		Text:                 text,
+		Usage:                imageUsage(raw, imgCfg, provider),
 		ProviderFinishReason: finishReason,
 		FinishMessage:        finishMessage,
 	}, nil
+}
+
+// imageUsage reads the usage of an image reply at the paths the image config
+// declares. An empty path leaves that dimension unreported: xAI declares no
+// token paths and a cost path, usage.cost_in_usd_ticks.
+func imageUsage(raw map[string]any, imgCfg *internalproviders.ImageGenDef, provider string) Usage {
+	return Usage{
+		Input:     optIntPath(raw, imgCfg.UsageInputPath),
+		Output:    optIntPath(raw, imgCfg.UsageOutputPath),
+		Reasoning: optIntPath(raw, imgCfg.UsageReasoningPath),
+		Cost:      decodeCost(raw, imgCfg.UsageCostPath, provider),
+	}
 }
 
 // parseImageResponseDataArray walks the data[] array shape used by both
@@ -881,10 +891,9 @@ func parseImageResponse(imgCfg *internalproviders.ImageGenDef, provider string, 
 //     otherwise defaults to image/png.
 //   - data[i].revised_prompt strings are concatenated into Text so callers
 //     can audit prompt revisions without parsing the raw response.
-//   - inputPath / outputPath are the dotted paths to extract from `usage`.
-//     Pass empty strings when the provider doesn't report token counts
-//     (xAI reports usage.cost_in_usd_ticks instead).
-func parseImageResponseDataArray(raw map[string]any, inputPath, outputPath, reasoningPath string) ImageResponse {
+//
+// Usage is the caller's to fill (imageUsage).
+func parseImageResponseDataArray(raw map[string]any) ImageResponse {
 	data, _ := raw["data"].([]any)
 	var images []ImageData
 	var revised []string
@@ -914,15 +923,9 @@ func parseImageResponseDataArray(raw map[string]any, inputPath, outputPath, reas
 			revised = append(revised, rp)
 		}
 	}
-	tokens := Usage{
-		Input:     optIntPath(raw, inputPath),
-		Output:    optIntPath(raw, outputPath),
-		Reasoning: optIntPath(raw, reasoningPath),
-	}
 	return ImageResponse{
 		Images: images,
 		Text:   strings.Join(revised, "\n"),
-		Usage:  tokens,
 	}
 }
 

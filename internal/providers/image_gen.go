@@ -62,6 +62,7 @@ type ImageGenDef struct {
 	UsageInputPath     string // dotted-from-root usage-token path; empty when unreported
 	UsageOutputPath    string
 	UsageReasoningPath string // thinking-token path; empty when not reported separately
+	UsageCostPath      string // provider-reported cost, in the unit UsageCostScale converts; empty when unreported
 	Variants           []RequestVariant
 	// IgnoresUnsupported lists the options ("Image") this provider silently
 	// ignores when the model lacks them; only for these does a model's
@@ -81,6 +82,7 @@ func ImageGenConfig(provider string) *ImageGenDef {
 			UsageInputPath:     "usageMetadata.promptTokenCount",
 			UsageOutputPath:    "usageMetadata.candidatesTokenCount",
 			UsageReasoningPath: "usageMetadata.thoughtsTokenCount",
+			UsageCostPath:      "",
 			Variants: []RequestVariant{
 				{Carries: []string{"TextOnly"}, Shape: "InlineParts", Endpoint: ""},
 				{Carries: []string{"WithReferenceImages"}, Shape: "InlineParts", Endpoint: ""},
@@ -111,6 +113,7 @@ func ImageGenConfig(provider string) *ImageGenDef {
 			UsageInputPath:     "",
 			UsageOutputPath:    "",
 			UsageReasoningPath: "",
+			UsageCostPath:      "usage.cost_in_usd_ticks",
 			Variants: []RequestVariant{
 				{Carries: []string{"TextOnly"}, Shape: "JSONInlineRefs", Endpoint: "/v1/images/generations"},
 				{Carries: []string{"WithReferenceImages"}, Shape: "JSONInlineRefs", Endpoint: "/v1/images/edits"},
@@ -141,6 +144,7 @@ func ImageGenConfig(provider string) *ImageGenDef {
 			UsageInputPath:     "usage.input_tokens",
 			UsageOutputPath:    "usage.output_tokens",
 			UsageReasoningPath: "",
+			UsageCostPath:      "",
 			Variants: []RequestVariant{
 				{Carries: []string{"TextOnly"}, Shape: "JSONGenerationsOpenAI", Endpoint: "/v1/images/generations"},
 				{Carries: []string{"WithReferenceImages"}, Shape: "MultipartForm", Endpoint: "/v1/images/edits"},
@@ -203,6 +207,7 @@ func ImageGenConfig(provider string) *ImageGenDef {
 			UsageInputPath:     "usage.prompt_tokens",
 			UsageOutputPath:    "usage.completion_tokens",
 			UsageReasoningPath: "",
+			UsageCostPath:      "usage.cost",
 			Variants: []RequestVariant{
 				{Carries: []string{"TextOnly"}, Shape: "JSONGenerations", Endpoint: "/v1/images"},
 				{Carries: []string{"WithReferenceImages"}, Shape: "JSONGenerationsInputRefs", Endpoint: "/v1/images"},
@@ -329,6 +334,7 @@ func ImageGenConfig(provider string) *ImageGenDef {
 			UsageInputPath:     "",
 			UsageOutputPath:    "",
 			UsageReasoningPath: "",
+			UsageCostPath:      "",
 			Variants: []RequestVariant{
 				{Carries: []string{"TextOnly"}, Shape: "JSONGenerations", Endpoint: "/v1/images/generations"},
 			},

@@ -1158,11 +1158,16 @@ func decodeUsage(raw map[string]any, provider string) Usage {
 		CacheWrite: cacheWrite,
 		CacheRead:  cacheRead,
 		Reasoning:  extractReasoningUsage(raw, provider),
-		Cost: scaleCost(
-			optFloatPath(raw, internalproviders.UsageCostPath(provider)),
-			internalproviders.UsageCostScale(provider),
-		),
+		Cost:       decodeCost(raw, internalproviders.UsageCostPath(provider), provider),
 	}
+}
+
+// decodeCost reads the provider-reported cost at path and converts it to USD
+// with the provider's scale. The chat, image and video parsers all read the
+// cost here; each passes the path its own config declares. An empty path, or
+// a reply without the field, leaves the cost unreported.
+func decodeCost(raw map[string]any, path, provider string) *float64 {
+	return scaleCost(optFloatPath(raw, path), internalproviders.UsageCostScale(provider))
 }
 
 // EncodeResponse is DecodeResponse's inverse: it renders a canonical Response
