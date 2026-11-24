@@ -611,7 +611,7 @@ func (h VideoHandle) Wait(ctx context.Context, opts ...VideoOption) (VideoRespon
 			return VideoResponse{}, fmt.Errorf("video poll: %w", err)
 		}
 
-		resp, done, err := parseVideoPoll(vgCfg, respBody)
+		resp, done, err := parseVideoPoll(vgCfg, p.Name, respBody)
 		if err != nil {
 			return VideoResponse{}, err
 		}
@@ -762,7 +762,7 @@ func newVideoTraceID() string {
 //
 //   - VideoOpenRouter: {"status": "completed"|"failed"|"cancelled"|"expired"|
 //     "pending"|"in_progress", "unsigned_urls": [url], "error": "..."}.
-func parseVideoPoll(vgCfg *internalproviders.VideoGenDef, body []byte) (VideoResponse, bool, error) {
+func parseVideoPoll(vgCfg *internalproviders.VideoGenDef, provider string, body []byte) (VideoResponse, bool, error) {
 	var raw map[string]any
 	if err := json.Unmarshal(body, &raw); err != nil {
 		return VideoResponse{}, false, fmt.Errorf("unmarshal video poll response: %w", err)
@@ -774,6 +774,7 @@ func parseVideoPoll(vgCfg *internalproviders.VideoGenDef, body []byte) (VideoRes
 			Input:     optIntPath(raw, vgCfg.UsageInputPath),
 			Output:    optIntPath(raw, vgCfg.UsageOutputPath),
 			Reasoning: optIntPath(raw, vgCfg.UsageReasoningPath),
+			Cost:      decodeCost(raw, vgCfg.UsageCostPath, provider),
 		}
 	}
 	return resp, done, err

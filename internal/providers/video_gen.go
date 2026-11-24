@@ -75,6 +75,8 @@ type VideoGenDef struct {
 	UsageInputPath     string
 	UsageOutputPath    string
 	UsageReasoningPath string
+	// UsageCostPath is the provider-reported cost, in the unit UsageCostScale converts.
+	UsageCostPath string
 	// IgnoresUnsupported lists the options ("Image", "LastFrame",
 	// "AddReferenceImage") this provider silently ignores when the model
 	// lacks them; only for these does a model's SupportNo reject the request.
@@ -103,6 +105,7 @@ func VideoGenConfig(provider string) *VideoGenDef {
 			UsageInputPath:     "",
 			UsageOutputPath:    "",
 			UsageReasoningPath: "",
+			UsageCostPath:      "",
 			Models: []VideoModelDef{
 				{
 					ModelID:                 "amazon.nova-reel-v1:0",
@@ -135,6 +138,7 @@ func VideoGenConfig(provider string) *VideoGenDef {
 			UsageInputPath:     "usage.total_input_tokens",
 			UsageOutputPath:    "usage.total_output_tokens",
 			UsageReasoningPath: "usage.total_thought_tokens",
+			UsageCostPath:      "",
 			Models: []VideoModelDef{
 				{
 					ModelID:                 "gemini-omni-1.1-flash",
@@ -180,6 +184,7 @@ func VideoGenConfig(provider string) *VideoGenDef {
 			UsageInputPath:     "",
 			UsageOutputPath:    "",
 			UsageReasoningPath: "",
+			UsageCostPath:      "usage.cost_in_usd_ticks",
 			Models: []VideoModelDef{
 				{
 					ModelID:                 "grok-imagine-video",
@@ -236,6 +241,7 @@ func VideoGenConfig(provider string) *VideoGenDef {
 			UsageInputPath:     "",
 			UsageOutputPath:    "",
 			UsageReasoningPath: "",
+			UsageCostPath:      "",
 			Models: []VideoModelDef{
 				{
 					ModelID:                 "MiniMax-Hailuo-2.3",
@@ -272,6 +278,7 @@ func VideoGenConfig(provider string) *VideoGenDef {
 			UsageInputPath:           "",
 			UsageOutputPath:          "",
 			UsageReasoningPath:       "",
+			UsageCostPath:            "usage.cost",
 			Models: []VideoModelDef{
 				{
 					ModelID:                 "alibaba/wan-3.0",
@@ -424,6 +431,7 @@ func VideoGenConfig(provider string) *VideoGenDef {
 			UsageInputPath:     "",
 			UsageOutputPath:    "",
 			UsageReasoningPath: "",
+			UsageCostPath:      "",
 			Models: []VideoModelDef{
 				{
 					ModelID:                 "v4.5",
@@ -480,6 +488,7 @@ func VideoGenConfig(provider string) *VideoGenDef {
 			UsageInputPath:     "",
 			UsageOutputPath:    "",
 			UsageReasoningPath: "",
+			UsageCostPath:      "",
 			Models: []VideoModelDef{
 				{
 					ModelID:                 "wan2.2-t2v-plus",
@@ -512,6 +521,7 @@ func VideoGenConfig(provider string) *VideoGenDef {
 			UsageInputPath:     "",
 			UsageOutputPath:    "",
 			UsageReasoningPath: "",
+			UsageCostPath:      "",
 			Models: []VideoModelDef{
 				{
 					ModelID:                 "minimax/video-01-director",
@@ -547,6 +557,7 @@ func VideoGenConfig(provider string) *VideoGenDef {
 			UsageInputPath:     "",
 			UsageOutputPath:    "",
 			UsageReasoningPath: "",
+			UsageCostPath:      "",
 			Models: []VideoModelDef{
 				{
 					ModelID:                 "veo-3.1-fast-generate-001",
@@ -618,6 +629,7 @@ func VideoGenConfig(provider string) *VideoGenDef {
 			UsageInputPath:     "",
 			UsageOutputPath:    "",
 			UsageReasoningPath: "",
+			UsageCostPath:      "",
 			Models: []VideoModelDef{
 				{
 					ModelID:                 "viduq1",
@@ -674,6 +686,7 @@ func VideoGenConfig(provider string) *VideoGenDef {
 			UsageInputPath:     "",
 			UsageOutputPath:    "",
 			UsageReasoningPath: "",
+			UsageCostPath:      "",
 			Models: []VideoModelDef{
 				{
 					ModelID:                 "cogvideox-3",
