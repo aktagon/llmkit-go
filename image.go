@@ -1,6 +1,7 @@
 package llmkit
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -717,6 +718,27 @@ func looksLikeSVG(data []byte) bool {
 	return strings.HasPrefix(s, "<?xml") || strings.HasPrefix(s, "<svg")
 }
 
+// imageMimeFromBytes names the type of an image the provider's reply did not
+// label, from its first bytes: the PNG, JPEG, GIF and WebP signatures, then
+// SVG text (Recraft's vector models). Bytes that match none are reported as
+// application/octet-stream; the parser does not guess image/png (BUG-124).
+func imageMimeFromBytes(data []byte) string {
+	switch {
+	case bytes.HasPrefix(data, []byte("\x89PNG\r\n\x1a\n")):
+		return "image/png"
+	case bytes.HasPrefix(data, []byte("\xff\xd8\xff")):
+		return "image/jpeg"
+	case bytes.HasPrefix(data, []byte("GIF87a")), bytes.HasPrefix(data, []byte("GIF89a")):
+		return "image/gif"
+	case len(data) >= 12 && string(data[0:4]) == "RIFF" && string(data[8:12]) == "WEBP":
+		return "image/webp"
+	case looksLikeSVG(data):
+		return "image/svg+xml"
+	default:
+		return "application/octet-stream"
+	}
+}
+
 func extFromMime(mime string) string {
 	switch mime {
 	case "image/png":
@@ -850,8 +872,8 @@ func parseImageResponse(imgCfg *internalproviders.ImageGenDef, provider string, 
 	switch imgCfg.ResponseShape {
 	case "DataArrayB64Json":
 		// OpenAI/xAI/Recraft data[].b64_json shape. SVG bytes (Recraft vector
-		// models) are sniffed to image/svg+xml inside parseImageResponseDataArray.
-		resp := parseImageResponseDataArray(raw)
+		// models) are typed from their bytes inside parseImageResponseDataArray.
+		resp := parseImageResponseDataArray(raw, imgCfg.MimeTypeField)
 		resp.Usage = imageUsage(raw, imgCfg, provider)
 		return resp, nil
 	case "GoogleParts":
@@ -883,17 +905,18 @@ func imageUsage(raw map[string]any, imgCfg *internalproviders.ImageGenDef, provi
 	}
 }
 
-// parseImageResponseDataArray walks the data[] array shape used by both
-// OpenAI's and xAI's image APIs:
+// parseImageResponseDataArray walks the data[] array shape used by the
+// OpenAI, xAI, OpenRouter and Recraft image APIs:
 //
-//   - data[i].b64_json → ImageData.Bytes (decoded). MimeType honors
-//     data[i].mime_type when echoed back (xAI does so; OpenAI does not),
-//     otherwise defaults to image/png.
+//   - data[i].b64_json → ImageData.Bytes (decoded). MimeType is the value at
+//     data[i][mimeTypeField] when the provider's config names that key and the
+//     entry holds it (xAI mime_type, OpenRouter media_type). Otherwise the
+//     type comes from the image's first bytes (imageMimeFromBytes).
 //   - data[i].revised_prompt strings are concatenated into Text so callers
 //     can audit prompt revisions without parsing the raw response.
 //
 // Usage is the caller's to fill (imageUsage).
-func parseImageResponseDataArray(raw map[string]any) ImageResponse {
+func parseImageResponseDataArray(raw map[string]any, mimeTypeField string) ImageResponse {
 	data, _ := raw["data"].([]any)
 	var images []ImageData
 	var revised []string
@@ -903,18 +926,13 @@ func parseImageResponseDataArray(raw map[string]any) ImageResponse {
 			continue
 		}
 		if b64, ok := entry["b64_json"].(string); ok && b64 != "" {
-			mime := "image/png"
-			if echoed, ok := entry["mime_type"].(string); ok && echoed != "" {
-				mime = echoed
-			}
 			if decoded, err := base64.StdEncoding.DecodeString(b64); err == nil {
-				// Vector providers (Recraft recraftv3_vector) return SVG bytes
-				// in the same b64_json slot without echoing a mime_type. Sniff
-				// the leading bytes so SVG is labeled image/svg+xml rather than
-				// the image/png default. Raster bytes (PNG/JPEG/WebP) never
-				// start with '<', so the sniff is a no-op for them.
-				if mime == "image/png" && looksLikeSVG(decoded) {
-					mime = "image/svg+xml"
+				mime := ""
+				if mimeTypeField != "" {
+					mime, _ = entry[mimeTypeField].(string)
+				}
+				if mime == "" {
+					mime = imageMimeFromBytes(decoded)
 				}
 				images = append(images, ImageData{MimeType: mime, Bytes: decoded})
 			}
