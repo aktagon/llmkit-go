@@ -2,9 +2,9 @@ class Llmkit < Formula
   desc "Command-line toolkit for working with Large Language Models"
   homepage "https://github.com/aktagon/llmkit-go"
   # The url, version, and sha256 change with each release.
-  url "https://github.com/aktagon/llmkit-go/archive/refs/tags/go-v4.0.0.tar.gz"
-  version "go-v4.0.0"
-  sha256 "40435cbc9f67210a72a944ee5f9be8a59028819e29505d325cfb4c04e5432de6"
+  url "https://github.com/aktagon/llmkit-go/archive/refs/tags/go-v4.1.0.tar.gz"
+  version "go-v4.1.0"
+  sha256 "fa66681c285513db7a97c487a519f0e38e18b287dfe604f637891ddff4a5934a"
   license "MIT"
 
   depends_on "go" => :build
