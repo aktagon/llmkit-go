@@ -1,7 +1,6 @@
 package llmkit
 
 import (
-	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -285,6 +284,18 @@ func planImage(p Provider, req imageRequest, opts []imageOption) (imagePlan, err
 	if err := validateImageShapeOptions(p.Name, variant.Shape, o); err != nil {
 		return imagePlan{}, err
 	}
+	// The last check: every image the request carries has a type from here
+	// on, so no request builder falls back to one (HANDOFF-127).
+	if parts, err = typedImageParts(parts); err != nil {
+		return imagePlan{}, err
+	}
+	if o.mask != nil {
+		mask, err := typedImage(*o.mask, "mask")
+		if err != nil {
+			return imagePlan{}, err
+		}
+		o.mask = &mask
+	}
 	return imagePlan{o: o, cfg: cfg, imgCfg: imgCfg, model: model, listed: listed, Parts: parts, imageCount: imageCount, variant: variant}, nil
 }
 
@@ -545,9 +556,6 @@ func buildOpenAIEditMultipart(parts []Part, model string, o *imageOptions) ([]mu
 			continue
 		}
 		mime := part.Image.MimeType
-		if mime == "" {
-			mime = "image/png"
-		}
 		files = append(files, multipartFile{
 			fieldName: "image[]",
 			filename:  fmt.Sprintf("image-%d%s", idx, extFromMime(mime)),
@@ -558,9 +566,6 @@ func buildOpenAIEditMultipart(parts []Part, model string, o *imageOptions) ([]mu
 	}
 	if o.mask != nil {
 		mime := o.mask.MimeType
-		if mime == "" {
-			mime = "image/png"
-		}
 		files = append(files, multipartFile{
 			fieldName: "mask",
 			filename:  "mask" + extFromMime(mime),
@@ -627,11 +632,7 @@ func buildXAIBody(parts []Part, model string, o *imageOptions) map[string]any {
 		if part.Image == nil {
 			continue
 		}
-		mime := part.Image.MimeType
-		if mime == "" {
-			mime = "image/png"
-		}
-		dataURL := "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(part.Image.Bytes)
+		dataURL := "data:" + part.Image.MimeType + ";base64," + base64.StdEncoding.EncodeToString(part.Image.Bytes)
 		refs = append(refs, map[string]any{"url": dataURL})
 	}
 	switch len(refs) {
@@ -689,13 +690,9 @@ func imageURLContentParts(parts []Part) []map[string]any {
 
 // imageURLContentPart is one OpenRouter ContentPartImage for img.
 func imageURLContentPart(img *MediaRef) map[string]any {
-	mime := img.MimeType
-	if mime == "" {
-		mime = "image/png"
-	}
 	return map[string]any{
 		"type":      "image_url",
-		"image_url": map[string]any{"url": "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(img.Bytes)},
+		"image_url": map[string]any{"url": "data:" + img.MimeType + ";base64," + base64.StdEncoding.EncodeToString(img.Bytes)},
 	}
 }
 
@@ -718,38 +715,90 @@ func looksLikeSVG(data []byte) bool {
 	return strings.HasPrefix(s, "<?xml") || strings.HasPrefix(s, "<svg")
 }
 
-// imageMimeFromBytes names the type of an image the provider's reply did not
-// label, from its first bytes: the PNG, JPEG, GIF and WebP signatures, then
-// SVG text (Recraft's vector models). Bytes that match none are reported as
-// application/octet-stream; the parser does not guess image/png (BUG-124).
-func imageMimeFromBytes(data []byte) string {
-	switch {
-	case bytes.HasPrefix(data, []byte("\x89PNG\r\n\x1a\n")):
-		return "image/png"
-	case bytes.HasPrefix(data, []byte("\xff\xd8\xff")):
-		return "image/jpeg"
-	case bytes.HasPrefix(data, []byte("GIF87a")), bytes.HasPrefix(data, []byte("GIF89a")):
-		return "image/gif"
-	case len(data) >= 12 && string(data[0:4]) == "RIFF" && string(data[8:12]) == "WEBP":
-		return "image/webp"
-	case looksLikeSVG(data):
-		return "image/svg+xml"
-	default:
-		return "application/octet-stream"
+// imageTypeFromBytes names an image's media type from its first bytes, by
+// the generated image format table: a format matches when every part of any
+// one of its signatures matches. SVG has no signature and is matched as text
+// after the table. It returns "" when no format matches.
+func imageTypeFromBytes(data []byte) string {
+	for _, format := range internalproviders.ImageFormats {
+		for _, signature := range format.Signatures {
+			if matchesImageSignature(data, signature) {
+				return format.MediaType
+			}
+		}
 	}
+	if looksLikeSVG(data) {
+		return "image/svg+xml"
+	}
+	return ""
 }
 
-func extFromMime(mime string) string {
-	switch mime {
-	case "image/png":
-		return ".png"
-	case "image/jpeg", "image/jpg":
-		return ".jpg"
-	case "image/webp":
-		return ".webp"
-	default:
-		return ".bin"
+func matchesImageSignature(data []byte, signature []internalproviders.ImageSignaturePart) bool {
+	for _, part := range signature {
+		end := part.Offset + len(part.Bytes)
+		if len(data) < end || string(data[part.Offset:end]) != part.Bytes {
+			return false
+		}
 	}
+	return true
+}
+
+// imageMimeFromBytes names the type of an image the provider's reply did not
+// label, from its first bytes. Bytes that match no format are reported as
+// application/octet-stream; the parser does not guess image/png (BUG-124).
+func imageMimeFromBytes(data []byte) string {
+	if mime := imageTypeFromBytes(data); mime != "" {
+		return mime
+	}
+	return "application/octet-stream"
+}
+
+// extFromMime is the file extension of an image type, by the generated image
+// format table; ".bin" for a type no format lists.
+func extFromMime(mime string) string {
+	for _, format := range internalproviders.ImageFormats {
+		if format.MediaType == mime || slices.Contains(format.Aliases, mime) {
+			return format.Extension
+		}
+	}
+	return ".bin"
+}
+
+// untypedImageMessage is the validation error for an image that states no
+// type and whose bytes match no image format. The same text in every SDK.
+const untypedImageMessage = "the image states no MIME type and its bytes match no known image format; set the image's MIME type"
+
+// typedImage returns img with its type set. A stated type always wins; an
+// image that states none is typed from its bytes. When no format matches,
+// the request stops here with a validation error naming field.
+func typedImage(img MediaRef, field string) (MediaRef, error) {
+	if img.MimeType != "" {
+		return img, nil
+	}
+	mime := imageTypeFromBytes(img.Bytes)
+	if mime == "" {
+		return img, &ValidationError{Field: field, Message: untypedImageMessage}
+	}
+	img.MimeType = mime
+	return img, nil
+}
+
+// typedImageParts returns parts with every image part typed (typedImage).
+// The caller's slice is not changed.
+func typedImageParts(parts []Part) ([]Part, error) {
+	out := make([]Part, len(parts))
+	copy(out, parts)
+	for i, part := range out {
+		if part.Image == nil {
+			continue
+		}
+		img, err := typedImage(*part.Image, fmt.Sprintf("parts[%d]", i))
+		if err != nil {
+			return nil, err
+		}
+		out[i].Image = &img
+	}
+	return out, nil
 }
 
 // normalizeImageParts enforces the XOR rule and produces the canonical
