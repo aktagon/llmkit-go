@@ -3,6 +3,7 @@ package llmkit
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"slices"
@@ -292,9 +293,17 @@ func buildBatchBody(ctx context.Context, reqs []chatRequest, o *options, p Provi
 // With no items, the model is p's, as before.
 func encodeBatch(p Provider, cfg providerSpec, reqs []Request) ([]chatRequest, string, error) {
 	out := make([]chatRequest, 0, len(reqs))
-	for _, req := range reqs {
+	for i, req := range reqs {
 		chat, err := encodeChat(p, cfg, req)
 		if err != nil {
+			// One request that cannot be sent stops the whole batch. An
+			// error about a request's messages names the request; an
+			// option error holds for every request and keeps its field
+			// (owner, 2026-11-26).
+			var ve *ValidationError
+			if errors.As(err, &ve) && strings.HasPrefix(ve.Field, "messages[") {
+				return nil, "", &ValidationError{Field: fmt.Sprintf("requests[%d].%s", i, ve.Field), Message: ve.Message}
+			}
 			return nil, "", err
 		}
 		out = append(out, chat)

@@ -131,7 +131,16 @@ func toInternal(messages []Message) ([]msg, error) {
 			err.(*ValidationError).Field = fmt.Sprintf("messages[%d].%s", i, err.(*ValidationError).Field)
 			return nil, err
 		}
-		projected := msgParts{Role: m.Role, Parts: m.Parts}
+		// The last check of a turn: every image part has a type from here
+		// on, so no chat encoder writes an empty one (BUG-125).
+		parts, err := typedImageParts(m.Parts)
+		if err != nil {
+			if ve, ok := err.(*ValidationError); ok {
+				ve.Field = fmt.Sprintf("messages[%d].%s", i, ve.Field)
+			}
+			return nil, err
+		}
+		projected := msgParts{Role: m.Role, Parts: parts}
 		// ProviderTurn is the same turn in the provider's own serialization.
 		// When present it supersedes the parts on the wire while the parts
 		// stay what consumers read.
