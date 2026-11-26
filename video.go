@@ -145,7 +145,7 @@ func submitVideo(ctx context.Context, p Provider, req videoRequest, opts ...Vide
 	if err != nil {
 		return VideoHandle{}, err
 	}
-	o, cfg, vgCfg, model, listed, parts, imageCount, variant := plan.o, plan.cfg, plan.vgCfg, plan.model, plan.listed, plan.Parts, plan.imageCount, plan.variant
+	req, o, cfg, vgCfg, model, listed, parts, imageCount, variant := plan.req, plan.o, plan.cfg, plan.vgCfg, plan.model, plan.listed, plan.Parts, plan.imageCount, plan.variant
 
 	baseEvent := Event{
 		Op:            OpVideoGeneration,
@@ -175,6 +175,8 @@ func submitVideo(ctx context.Context, p Provider, req videoRequest, opts ...Vide
 
 // videoPlan is what submitVideo's validation resolves before the send.
 type videoPlan struct {
+	// req is the request with its last frame and reference images typed.
+	req        videoRequest
 	o          *videoOptions
 	cfg        providerSpec
 	vgCfg      *internalproviders.VideoGenDef
@@ -255,7 +257,15 @@ func planVideo(p Provider, req videoRequest, opts []VideoOption) (videoPlan, err
 	if vgCfg.RequiresOutputURI && req.OutputURI == "" {
 		return videoPlan{}, &ValidationError{Field: "output_uri", Message: p.Name + " requires a caller output S3 URI; set OutputURI on the request"}
 	}
-	return videoPlan{o: o, cfg: cfg, vgCfg: vgCfg, model: model, listed: listed, Parts: parts, imageCount: imageCount, variant: variant}, nil
+	// The last check: every image the request carries has a type from here
+	// on, so no request builder falls back to one (HANDOFF-127).
+	if parts, err = typedImageParts(parts); err != nil {
+		return videoPlan{}, err
+	}
+	if req, err = typedVideoImages(req); err != nil {
+		return videoPlan{}, err
+	}
+	return videoPlan{req: req, o: o, cfg: cfg, vgCfg: vgCfg, model: model, listed: listed, Parts: parts, imageCount: imageCount, variant: variant}, nil
 }
 
 // previewVideo returns the body submitVideo would send (ADR-106).
@@ -264,7 +274,7 @@ func previewVideo(p Provider, req videoRequest, opts ...VideoOption) ([]byte, er
 	if err != nil {
 		return nil, err
 	}
-	body, _, err := buildVideoSubmit(plan.vgCfg, req, plan.Parts, nil)
+	body, _, err := buildVideoSubmit(plan.vgCfg, plan.req, plan.Parts, nil)
 	return body, err
 }
 
@@ -1290,7 +1300,7 @@ func videoReferenceCount(req videoRequest) int {
 func veoImage(img *MediaRef) map[string]any {
 	return map[string]any{
 		"bytesBase64Encoded": base64.StdEncoding.EncodeToString(img.Bytes),
-		"mimeType":           videoSeedMime(img),
+		"mimeType":           img.MimeType,
 	}
 }
 
@@ -1478,12 +1488,28 @@ func videoCarries(imageCount int, req videoRequest) []string {
 	return carries
 }
 
-// videoSeedMime is the seed frame's MIME, defaulting to image/png.
-func videoSeedMime(seed *MediaRef) string {
-	if seed.MimeType == "" {
-		return "image/png"
+// typedVideoImages returns req with its last frame and reference images typed
+// (typedImage). The caller's request is not changed.
+func typedVideoImages(req videoRequest) (videoRequest, error) {
+	if req.LastFrame != nil {
+		frame, err := typedImage(*req.LastFrame, "last_frame")
+		if err != nil {
+			return req, err
+		}
+		req.LastFrame = &frame
 	}
-	return seed.MimeType
+	if len(req.ReferenceImages) > 0 {
+		refs := make([]MediaRef, len(req.ReferenceImages))
+		for i, ref := range req.ReferenceImages {
+			typed, err := typedImage(ref, fmt.Sprintf("reference_images[%d]", i))
+			if err != nil {
+				return req, err
+			}
+			refs[i] = typed
+		}
+		req.ReferenceImages = refs
+	}
+	return req, nil
 }
 
 // videoSeedImageURL builds the Grok image-to-video seed-frame data URL
@@ -1495,7 +1521,7 @@ func videoSeedImageURL(parts []Part) (string, error) {
 	if err != nil || seed == nil {
 		return "", err
 	}
-	return "data:" + videoSeedMime(seed) + ";base64," + base64.StdEncoding.EncodeToString(seed.Bytes), nil
+	return "data:" + seed.MimeType + ";base64," + base64.StdEncoding.EncodeToString(seed.Bytes), nil
 }
 
 // videoFallbackMime returns the first model's output MIME, used when the
